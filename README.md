@@ -5,6 +5,8 @@
 [![Go 1.21+](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
+
 I built TinyObs because I was tired of treating observability systems like magic boxes. Prometheus has 300k+ lines of code. Datadog is a black box. I wanted something I could read in an afternoon and actually understand.
 
 TinyObs is a complete observability platform in ~2,600 lines of Go. It's small enough to read all the code, but sophisticated enough to actually use for local development. You get metrics collection, time-series storage, downsampling, a polished dashboard, and a clean SDK—all without Docker or vendor lock-in.
@@ -45,8 +47,51 @@ open http://localhost:8080/dashboard.html
 
 You should see charts populating with fake API traffic. The example app simulates a web service with random latencies and occasional errors. Press `T` to toggle between light and dark themes, or `?` to see all keyboard shortcuts.
 
+## Screenshots
+
+### Dashboard View
+The main dashboard automatically groups metrics by service and displays time-series charts with auto-downsampling.
+
+<table>
+  <tr>
+    <td width="50%">
+      <b>Dark Theme</b><br/>
+      <img src="screenshots/dashboard-dark-theme-view.png" alt="Dashboard - Dark Theme"/>
+    </td>
+    <td width="50%">
+      <b>Light Theme</b><br/>
+      <img src="screenshots/dashboard-light-theme-view.png" alt="Dashboard - Light Theme"/>
+    </td>
+  </tr>
+</table>
+
+### Explore View
+Select and overlay multiple metrics on a single chart for comparison. Search, filter, and compare any combination of time series.
+
+<table>
+  <tr>
+    <td width="50%">
+      <b>Metric Selection</b><br/>
+      <img src="screenshots/explore-dark-view.png" alt="Explore View - Metric Selection"/>
+    </td>
+    <td width="50%">
+      <b>Multi-Metric Overlay</b><br/>
+      <img src="screenshots/explore-light-view-with-graph.png" alt="Explore View - Multi-Metric Chart"/>
+    </td>
+  </tr>
+</table>
+
+### Key Features Shown
+- 🎨 **Light/Dark Theme Toggle** - Seamless theme switching with localStorage persistence
+- 📊 **Time Comparison** - Compare current metrics with 24h ago (dashed lines)
+- 🔍 **Smart Filtering** - Filter by service, endpoint, or metric name
+- ⌨️ **Keyboard Shortcuts** - Navigate fast with shortcuts (D, E, R, T, /, ESC, 1-4)
+- 💾 **Export/Import** - Save and restore dashboard configurations as JSON
+- 📈 **Multi-Metric Overlays** - Compare multiple time series on one chart
+
 ## Dashboard Features
 
+### Keyboard Shortcuts
 The dashboard includes powerful keyboard shortcuts for fast navigation:
 
 | Key | Action |
@@ -59,7 +104,11 @@ The dashboard includes powerful keyboard shortcuts for fast navigation:
 | `ESC` | Clear selection or unfocus input |
 | `1-4` | Quick time range selection (1h, 6h, 24h, 7d) |
 
-**Theme toggle:** Click the ☀️/🌙 icon in the header or press `T` to switch between light and dark modes. Your preference is saved automatically.
+### Visual Features
+- **Theme Toggle** - Click ☀️/🌙 in the header or press `T` to switch themes. Preference saved automatically.
+- **Export/Import Configs** - Use ⬇️ button to export dashboard state (filters, theme, time range) as JSON. Use ⬆️ to restore.
+- **Time Comparison** - Click "📊 Compare 24h" to overlay metrics from 24 hours ago (shown as dashed lines) for trend analysis.
+- **Auto-Downsampling** - Charts automatically select the best resolution (raw/5m/1h) based on time range for optimal performance.
 
 ## Using the SDK
 
