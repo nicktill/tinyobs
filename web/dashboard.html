@@ -234,6 +234,32 @@
             font-weight: 600;
         }
 
+        .compare-toggle {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .compare-toggle:hover {
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+        }
+
+        .compare-toggle.active {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+            color: #ffffff;
+            font-weight: 600;
+        }
+
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -524,6 +550,28 @@
             background: var(--bg-secondary);
         }
 
+        .config-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .config-btn:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
         .help-btn {
             background: var(--bg-tertiary);
             border: 1px solid var(--border-color);
@@ -634,6 +682,13 @@
                     <div class="stat-value" id="storageSize">-</div>
                 </div>
                 <div class="header-controls">
+                    <button class="config-btn" onclick="exportConfig()" title="Export dashboard config">
+                        ⬇️
+                    </button>
+                    <button class="config-btn" onclick="document.getElementById('configFileInput').click()" title="Import dashboard config">
+                        ⬆️
+                    </button>
+                    <input type="file" id="configFileInput" accept=".json" style="display: none;" onchange="importConfig(event)">
                     <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme (T)" id="themeToggle">
                         ☀️
                     </button>
@@ -680,6 +735,9 @@
                         <button class="time-btn" data-range="6h" onclick="setTimeRange('6h')">6h</button>
                         <button class="time-btn active" data-range="24h" onclick="setTimeRange('24h')">24h</button>
                         <button class="time-btn" data-range="7d" onclick="setTimeRange('7d')">7d</button>
+                        <button class="compare-toggle" id="compareToggle" onclick="toggleComparison()" title="Compare with 24h ago">
+                            <span>📊</span> Compare 24h
+                        </button>
                     </div>
                 </div>
                 <div class="toolbar-right">
@@ -741,6 +799,7 @@
         let charts = {};
         let exploreChart = null;
         let currentView = 'dashboard';
+        let comparisonMode = false;
 
         // Initialize theme from localStorage
         const savedTheme = localStorage.getItem('tinyobs-theme') || 'dark';
@@ -808,6 +867,120 @@
                 refreshDashboard();
             } else if (selectedMetrics.size > 0) {
                 renderExploreChart();
+            }
+        }
+
+        // Export dashboard configuration
+        function exportConfig() {
+            const config = {
+                version: '2.2.0',
+                exportedAt: new Date().toISOString(),
+                view: currentView,
+                timeRange: currentRange,
+                theme: document.documentElement.getAttribute('data-theme'),
+                comparisonMode: comparisonMode,
+                filters: {
+                    service: document.getElementById('serviceFilter').value,
+                    endpoint: document.getElementById('endpointFilter').value,
+                    metricName: document.getElementById('metricNameFilter').value
+                },
+                selectedMetrics: Array.from(selectedMetrics)
+            };
+
+            // Create downloadable JSON file
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tinyobs-config-' + new Date().toISOString().split('T')[0] + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('Dashboard configuration exported');
+        }
+
+        // Import dashboard configuration
+        function importConfig(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const config = JSON.parse(e.target.result);
+
+                    // Validate config structure
+                    if (!config.version || !config.view) {
+                        alert('Invalid configuration file');
+                        return;
+                    }
+
+                    // Restore theme
+                    if (config.theme) {
+                        document.documentElement.setAttribute('data-theme', config.theme);
+                        localStorage.setItem('tinyobs-theme', config.theme);
+                        const toggle = document.getElementById('themeToggle');
+                        toggle.textContent = config.theme === 'dark' ? '☀️' : '🌙';
+                        updateChartDefaults();
+                    }
+
+                    // Restore time range
+                    if (config.timeRange) {
+                        currentRange = config.timeRange;
+                        document.querySelectorAll('.time-btn').forEach(btn => {
+                            btn.classList.toggle('active', btn.getAttribute('data-range') === config.timeRange);
+                        });
+                    }
+
+                    // Restore filters
+                    if (config.filters) {
+                        if (config.filters.service) document.getElementById('serviceFilter').value = config.filters.service;
+                        if (config.filters.endpoint) document.getElementById('endpointFilter').value = config.filters.endpoint;
+                        if (config.filters.metricName) document.getElementById('metricNameFilter').value = config.filters.metricName;
+                    }
+
+                    // Restore comparison mode
+                    if (config.hasOwnProperty('comparisonMode')) {
+                        comparisonMode = config.comparisonMode;
+                        const toggleBtn = document.getElementById('compareToggle');
+                        if (toggleBtn) {
+                            toggleBtn.classList.toggle('active', comparisonMode);
+                        }
+                    }
+
+                    // Restore selected metrics
+                    if (config.selectedMetrics) {
+                        selectedMetrics = new Set(config.selectedMetrics);
+                    }
+
+                    // Switch to saved view and refresh
+                    if (config.view) {
+                        switchView(config.view);
+                    }
+
+                    console.log('Dashboard configuration imported successfully');
+                } catch (error) {
+                    alert('Failed to import configuration: ' + error.message);
+                    console.error('Import error:', error);
+                }
+            };
+            reader.readAsText(file);
+
+            // Reset file input so same file can be imported again
+            event.target.value = '';
+        }
+
+        // Toggle comparison mode
+        function toggleComparison() {
+            comparisonMode = !comparisonMode;
+            const toggleBtn = document.getElementById('compareToggle');
+            toggleBtn.classList.toggle('active', comparisonMode);
+
+            // Refresh dashboard to show/hide comparison
+            if (currentView === 'dashboard') {
+                refreshDashboard();
             }
         }
 
@@ -1061,6 +1234,7 @@
                 const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
                 const end = new Date(now).toISOString();
 
+                // Fetch current data
                 const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=200`);
                 if (!response.ok) return;
 
@@ -1077,20 +1251,66 @@
 
                 if (filteredSeries.length === 0) return;
 
+                // Create datasets for current data
                 const datasets = filteredSeries.slice(0, 5).map((series) => {
                     const color = getStableColor(series.metric, series.labels);
                     return {
-                        label: series.labels && Object.keys(series.labels).length > 0
+                        label: (series.labels && Object.keys(series.labels).length > 0
                             ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
-                            : metricName,
+                            : metricName) + (comparisonMode ? ' (now)' : ''),
                         data: series.points.map(p => ({ x: p.t, y: p.v })),
                         borderColor: color,
                         backgroundColor: color + '20',
                         borderWidth: 2,
                         pointRadius: 0,
-                        tension: 0.1
+                        tension: 0.1,
+                        borderDash: []
                     };
                 });
+
+                // If comparison mode is enabled, fetch 24h ago data
+                if (comparisonMode) {
+                    const compareStart = new Date(now - (hours + 24) * 60 * 60 * 1000).toISOString();
+                    const compareEnd = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+
+                    const compareResponse = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${compareStart}&end=${compareEnd}&maxPoints=200`);
+                    if (compareResponse.ok) {
+                        const compareResult = await compareResponse.json();
+                        if (compareResult.data && compareResult.data.length > 0) {
+                            let compareFilteredSeries = compareResult.data;
+                            if (selectedEndpoint !== 'all') {
+                                compareFilteredSeries = compareFilteredSeries.filter(series =>
+                                    series.labels?.endpoint === selectedEndpoint || series.labels?.path === selectedEndpoint
+                                );
+                            }
+
+                            // Add comparison datasets with dashed lines
+                            compareFilteredSeries.slice(0, 5).forEach((series, idx) => {
+                                if (idx < datasets.length) {
+                                    const color = getStableColor(series.metric, series.labels);
+                                    // Shift timestamps forward by 24h to align with current data
+                                    const shiftedPoints = series.points.map(p => ({
+                                        x: p.t + (24 * 60 * 60 * 1000),
+                                        y: p.v
+                                    }));
+
+                                    datasets.push({
+                                        label: (series.labels && Object.keys(series.labels).length > 0
+                                            ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
+                                            : metricName) + ' (24h ago)',
+                                        data: shiftedPoints,
+                                        borderColor: color,
+                                        backgroundColor: color + '10',
+                                        borderWidth: 2,
+                                        pointRadius: 0,
+                                        tension: 0.1,
+                                        borderDash: [5, 5] // Dashed line for comparison
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
 
                 if (charts[canvasId]) charts[canvasId].destroy();
 
@@ -1102,7 +1322,16 @@
                         maintainAspectRatio: false,
                         interaction: { mode: 'index', intersect: false },
                         plugins: {
-                            legend: { display: false },
+                            legend: {
+                                display: comparisonMode,
+                                position: 'top',
+                                labels: {
+                                    color: 'var(--text-secondary)',
+                                    font: { size: 11 },
+                                    boxWidth: 12,
+                                    usePointStyle: true
+                                }
+                            },
                             tooltip: {
                                 backgroundColor: '#161b22',
                                 borderColor: '#30363d',
