@@ -140,9 +140,16 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	// Parse max points (default: 1000 for performance)
 	maxPoints := defaultMaxPoints
 	if mp := query.Get("maxPoints"); mp != "" {
-		if parsed, err := strconv.Atoi(mp); err == nil && parsed > 0 && parsed <= maxPointsLimit {
-			maxPoints = parsed
+		parsed, err := strconv.Atoi(mp)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid maxPoints: %q is not an integer", mp), http.StatusBadRequest)
+			return
 		}
+		if parsed <= 0 || parsed > maxPointsLimit {
+			http.Error(w, fmt.Sprintf("maxPoints must be between 1 and %d", maxPointsLimit), http.StatusBadRequest)
+			return
+		}
+		maxPoints = parsed
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
