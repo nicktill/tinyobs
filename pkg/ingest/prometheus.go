@@ -130,8 +130,8 @@ func formatPrometheusLabels(labels map[string]string) string {
 // escapePrometheusValue escapes special characters in Prometheus label values
 // Per spec: backslash, double-quote, and line feed must be escaped
 func escapePrometheusValue(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)   // Backslash
-	s = strings.ReplaceAll(s, `"`, `\"`)   // Double quote
-	s = strings.ReplaceAll(s, "\n", `\n`)  // Line feed
+	s = strings.ReplaceAll(s, `\`, `\\`)  // Backslash
+	s = strings.ReplaceAll(s, `"`, `\"`)  // Double quote
+	s = strings.ReplaceAll(s, "\n", `\n`) // Line feed
 	return s
 }

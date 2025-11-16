@@ -26,7 +26,7 @@ func NewHistogram(name string, client ClientInterface) *Histogram {
 // Observe records a value in the histogram
 func (h *Histogram) Observe(value float64, labels ...string) {
 	key := h.makeKey(labels...)
-	
+
 	h.mu.Lock()
 	h.values[key] = append(h.values[key], value)
 	h.mu.Unlock()
@@ -44,7 +44,7 @@ func (h *Histogram) Observe(value float64, labels ...string) {
 // GetStats returns basic statistics for the histogram
 func (h *Histogram) GetStats(labels ...string) (count int, sum, min, max, avg float64) {
 	key := h.makeKey(labels...)
-	
+
 	h.mu.RLock()
 	values := make([]float64, len(h.values[key]))
 	copy(values, h.values[key])
@@ -76,7 +76,7 @@ func (h *Histogram) GetStats(labels ...string) (count int, sum, min, max, avg fl
 // GetPercentile returns the value at the given percentile
 func (h *Histogram) GetPercentile(percentile float64, labels ...string) float64 {
 	key := h.makeKey(labels...)
-	
+
 	h.mu.RLock()
 	values := make([]float64, len(h.values[key]))
 	copy(values, h.values[key])
@@ -99,7 +99,7 @@ func (h *Histogram) makeKey(labels ...string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	
+
 	key := ""
 	for i, label := range labels {
 		if i > 0 {
@@ -115,7 +115,7 @@ func (h *Histogram) makeLabels(labels ...string) map[string]string {
 	if len(labels)%2 != 0 {
 		return nil
 	}
-	
+
 	result := make(map[string]string)
 	for i := 0; i < len(labels); i += 2 {
 		if i+1 < len(labels) {
