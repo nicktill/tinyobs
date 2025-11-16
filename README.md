@@ -11,8 +11,9 @@ TinyObs is a metrics collection system built in Go. It's designed to be small en
 - Collects metrics (counters, gauges, histograms) from your apps
 - Stores them persistently with BadgerDB (LSM tree with compression)
 - Multi-resolution storage: raw data → 5-minute → 1-hour aggregates (240x compression)
-- Time-series dashboard with Chart.js for visualizing trends
+- Smart dashboard with multi-metric overlays, templates, and label filtering
 - Query API with time-range filtering and auto-downsampling
+- Prometheus-compatible `/metrics` endpoint for Grafana integration
 - Provides a clean SDK for instrumenting Go applications
 
 **What it's good for:**
@@ -246,13 +247,14 @@ This bug is now driving the roadmap. The next version will have data retention p
 
 ## Known Issues & Limitations
 
-**Data retention cleanup disabled:** Compaction creates aggregates, but deletion is currently disabled. The server will accumulate data until manually restarted. This will be fixed in the next release.
+**No query language:** You can only query one metric at a time. A PromQL-like query language is planned for V4.0.
 
-**No query language:** You can only query one metric at a time. A PromQL-like query language is planned.
+**No alerting:** There's no way to get notified when metrics cross thresholds. Basic alerting is planned for V3.0.
 
-**No alerting:** There's no way to get notified when metrics cross thresholds.
+**30-second refresh:** Dashboard polls every 30 seconds instead of live streaming. WebSocket support planned for V3.0.
 
 **Must run from project directory:** The server looks for `./web/` and `./data/` relative to where you run it. Deploy with proper working directory.
+
 
 ## Roadmap
 
@@ -263,29 +265,40 @@ This bug is now driving the roadmap. The next version will have data retention p
 - [x] Downsampling (raw → 5m → 1h aggregates, 240x compression)
 - [x] Production-quality dashboard with auto-downsampling
 
-### 🚧 V2.1 - Polish (In Progress)
-- [ ] Resolution-aware data retention (enable cleanup)
-- [ ] Cardinality protection (prevent label explosion)
-- [ ] Prometheus `/metrics` endpoint (Grafana compatibility)
-- [ ] Comprehensive test coverage for edge cases
+### ✅ V2.1 - Polish (Completed)
+- [x] Resolution-aware data retention (enable cleanup)
+- [x] Cardinality protection (prevent label explosion)
+- [x] Prometheus `/metrics` endpoint (Grafana compatibility)
+- [x] Enhanced .gitignore for build artifacts
 
-### 📅 V3.0 - Query Language (Next 2-4 weeks)
+### 🚧 V2.2 - Smart Dashboard (In Progress)
+- [x] Multi-metric overlay charts (compare metrics on same chart)
+- [x] Dashboard templates (Go Runtime, HTTP API, Database presets)
+- [x] Label-based filtering UI with auto-discovery
+- [x] Modern gradient UI with improved UX
+- [ ] Export/import dashboard configurations (JSON)
+- [ ] Time comparison view (compare to 24h ago)
+
+### 📅 V3.0 - Real-time & Anomaly Detection (Next 2-4 weeks)
+- [ ] WebSocket live updates (replace 30s polling)
+- [ ] Statistical anomaly detection (2σ from moving average)
+- [ ] Visual anomaly indicators on charts (red zones)
+- [ ] Simple threshold alerts (email/webhook)
+- [ ] Alert history view
+
+### 🎯 V4.0 - Query Language & Advanced Features (2-3 months)
 - [ ] Simple PromQL-like query language
 - [ ] Functions: `avg()`, `sum()`, `rate()`, `count()`
 - [ ] Label matching: `{service="api"}`
 - [ ] Time ranges: `[5m]`, `[1h]`
 - [ ] Query builder UI in dashboard
-
-### 🎯 V4.0 - Alerting & Production Features (2-3 months)
-- [ ] Alerting system with webhooks
 - [ ] Performance benchmarks
-- [ ] Better example app with multiple services
-- [ ] Authentication & API keys
-- [ ] Multi-tenancy support
 
-### 🚀 V5.0+ - Advanced Features (4-6+ months)
+### 🚀 V5.0+ - Production & Scale (4-6+ months)
 - [ ] High availability and clustering
 - [ ] Cloud storage backends (S3, GCS, MinIO)
+- [ ] Authentication & API keys
+- [ ] Multi-tenancy support
 - [ ] Distributed tracing support (OpenTelemetry)
 - [ ] Service topology visualization
 
