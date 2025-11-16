@@ -206,16 +206,14 @@ func (c *Compactor) CompactAndCleanup(ctx context.Context) error {
 		return fmt.Errorf("5m compaction failed: %w", err)
 	}
 
-	// Step 2: Delete raw data older than retention period
-	// TODO: Currently Delete removes ALL metrics, including aggregates
-	// Need to implement resolution-aware deletion to only remove raw data
-	// Skipping for now to avoid deleting newly created aggregates
-	// See: https://github.com/yourusername/tinyobs/issues/XX
-	/*
-	if err := c.storage.Delete(ctx, now.Add(-rawDataRetention)); err != nil {
+	// Step 2: Delete raw data older than retention period (keep aggregates)
+	rawRes := storage.ResolutionRaw
+	if err := c.storage.Delete(ctx, storage.DeleteOptions{
+		Before:     now.Add(-rawDataRetention),
+		Resolution: &rawRes,
+	}); err != nil {
 		return fmt.Errorf("failed to delete old raw data: %w", err)
 	}
-	*/
 
 	// Step 3: Compact 5m aggregates from 2-7 days ago into 1h aggregates
 	compact1hStart := now.Add(-compact1hLookback)
@@ -225,14 +223,14 @@ func (c *Compactor) CompactAndCleanup(ctx context.Context) error {
 		return fmt.Errorf("1h compaction failed: %w", err)
 	}
 
-	// Step 4: Delete 5m aggregates older than retention period
-	// TODO: Same issue as Step 2 - need resolution-aware deletion
-	// Skipping for now to avoid deleting newly created 1h aggregates
-	/*
-	if err := c.storage.Delete(ctx, now.Add(-fiveMinRetention)); err != nil {
+	// Step 4: Delete 5m aggregates older than retention period (keep 1h aggregates)
+	fiveMinRes := storage.Resolution5m
+	if err := c.storage.Delete(ctx, storage.DeleteOptions{
+		Before:     now.Add(-fiveMinRetention),
+		Resolution: &fiveMinRes,
+	}); err != nil {
 		return fmt.Errorf("failed to delete old 5m aggregates: %w", err)
 	}
-	*/
 
 	return nil
 }
