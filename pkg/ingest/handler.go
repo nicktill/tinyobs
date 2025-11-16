@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -98,7 +99,9 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("❌ Failed to encode ingest response: %v", err)
+	}
 }
 
 // HandleQuery handles the /v1/query endpoint
@@ -138,10 +141,12 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"metrics": results,
 		"count":   len(results),
-	})
+	}); err != nil {
+		log.Printf("❌ Failed to encode query response: %v", err)
+	}
 }
 
 // HandleStats handles the /v1/stats endpoint
@@ -156,7 +161,9 @@ func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("❌ Failed to encode stats response: %v", err)
+	}
 }
 
 // HandleCardinalityStats handles the /v1/cardinality endpoint
@@ -165,7 +172,9 @@ func (h *Handler) HandleCardinalityStats(w http.ResponseWriter, r *http.Request)
 	stats := h.cardinality.Stats()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("❌ Failed to encode cardinality stats response: %v", err)
+	}
 }
 
 // parseTimeParam parses a time parameter or returns default

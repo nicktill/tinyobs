@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"tinyobs/pkg/sdk/metrics"
@@ -132,14 +133,8 @@ func seriesKey(name string, labels map[string]string) string {
 		keys = append(keys, k)
 	}
 
-	// Simple bubble sort (fine for small arrays)
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[i] > keys[j] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
+	// Sort keys using standard library
+	sort.Strings(keys)
 
 	for _, k := range keys {
 		key += fmt.Sprintf(",%s=%s", k, labels[k])
