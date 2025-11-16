@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyObs Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #3498db;
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .stat-unit {
+            font-size: 0.9rem;
+            color: #666;
+            margin-left: 0.5rem;
+        }
+
+        .metrics-section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .metrics-section h2 {
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metric-item:last-child {
+            border-bottom: none;
+        }
+
+        .metric-name {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .metric-value {
+            font-family: 'Monaco', 'Menlo', monospace;
+            color: #27ae60;
+            font-weight: 600;
+        }
+
+        .metric-labels {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+
+        .refresh-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .refresh-btn:hover {
+            background: #2980b9;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .auto-refresh input[type="checkbox"] {
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 TinyObs Dashboard</h1>
+    </div>
+
+    <div class="container">
+        <div class="auto-refresh">
+            <input type="checkbox" id="autoRefresh" checked>
+            <label for="autoRefresh">Auto-refresh (5s)</label>
+            <button class="refresh-btn" onclick="loadMetrics()">Refresh Now</button>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3>Total Metrics</h3>
+                <div class="stat-value" id="totalMetrics">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Services</h3>
+                <div class="stat-value" id="totalServices">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>HTTP Requests</h3>
+                <div class="stat-value" id="httpRequests">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Response Time</h3>
+                <div class="stat-value" id="avgResponseTime">-<span class="stat-unit">ms</span></div>
+            </div>
+        </div>
+
+        <div class="metrics-section">
+            <h2>Recent Metrics</h2>
+            <div id="metricsList" class="loading">Loading metrics...</div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval;
+        let metrics = [];
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function formatValue(value, type) {
+            if (type === 'histogram' || type === 'gauge') {
+                if (value >= 1000000) {
+                    return (value / 1000000).toFixed(1) + 'M';
+                } else if (value >= 1000) {
+                    return (value / 1000).toFixed(1) + 'K';
+                }
+            }
+            return value.toFixed(2);
+        }
+
+        function formatLabels(labels) {
+            if (!labels || Object.keys(labels).length === 0) {
+                return '';
+            }
+            return Object.entries(labels)
+                .map(([key, value]) => `${key}=${value}`)
+                .join(', ');
+        }
+
+        function updateStats() {
+            const totalMetrics = metrics.length;
+            const services = new Set(metrics.map(m => m.labels?.service).filter(Boolean));
+            const httpRequests = metrics.filter(m => m.name === 'http_requests_total').length;
+            
+            // Calculate average response time from histogram
+            const responseTimes = metrics.filter(m => m.name === 'http_request_duration_seconds');
+            const avgResponseTime = responseTimes.length > 0 
+                ? responseTimes.reduce((sum, m) => sum + m.value, 0) / responseTimes.length * 1000
+                : 0;
+
+            document.getElementById('totalMetrics').textContent = totalMetrics;
+            document.getElementById('totalServices').textContent = services.size;
+            document.getElementById('httpRequests').textContent = httpRequests;
+            document.getElementById('avgResponseTime').textContent = avgResponseTime.toFixed(1);
+        }
+
+        function updateMetricsList() {
+            const container = document.getElementById('metricsList');
+            
+            if (metrics.length === 0) {
+                container.innerHTML = '<div class="loading">No metrics available</div>';
+                return;
+            }
+
+            // Group metrics by name and show recent ones
+            const grouped = {};
+            metrics.forEach(metric => {
+                if (!grouped[metric.name]) {
+                    grouped[metric.name] = [];
+                }
+                grouped[metric.name].push(metric);
+            });
+
+            // Sort by timestamp (most recent first)
+            Object.keys(grouped).forEach(name => {
+                grouped[name].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            });
+
+            const html = Object.entries(grouped)
+                .slice(0, 20) // Show top 20 metric types
+                .map(([name, metricList]) => {
+                    const latest = metricList[0];
+                    const count = metricList.length;
+                    return `
+                        <div class="metric-item">
+                            <div>
+                                <div class="metric-name">${name}</div>
+                                <div class="metric-labels">${formatLabels(latest.labels)}</div>
+                            </div>
+                            <div class="metric-value">
+                                ${formatValue(latest.value, latest.type)}
+                                ${count > 1 ? ` (${count} samples)` : ''}
+                            </div>
+                        </div>
+                    `;
+                })
+                .join('');
+
+            container.innerHTML = html;
+        }
+
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/v1/metrics');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                metrics = data.metrics || [];
+                
+                updateStats();
+                updateMetricsList();
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+                showError(`Failed to load metrics: ${error.message}`);
+            }
+        }
+
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+            
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(loadMetrics, 5000);
+            } else {
+                clearInterval(autoRefreshInterval);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('autoRefresh').addEventListener('change', setupAutoRefresh);
+
+        // Initial load
+        loadMetrics();
+        setupAutoRefresh();
+    </script>
+</body>
+</html>
+
+
