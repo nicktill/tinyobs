@@ -4,7 +4,6 @@ import (
 	"context"
 	"sort"
 	"sync"
-	"time"
 
 	"tinyobs/pkg/sdk/metrics"
 	"tinyobs/pkg/storage"
@@ -85,17 +84,34 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 	return results, nil
 }
 
-// Delete removes metrics older than the given time
-func (s *Storage) Delete(ctx context.Context, before time.Time) error {
+// Delete removes metrics matching the deletion criteria
+func (s *Storage) Delete(ctx context.Context, opts storage.DeleteOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Filter out old metrics
+	// Filter out metrics that should be deleted
 	filtered := make([]metrics.Metric, 0, len(s.metrics))
 	for _, m := range s.metrics {
-		if m.Timestamp.After(before) {
+		// Keep if timestamp is after cutoff
+		if !m.Timestamp.Before(opts.Before) {
 			filtered = append(filtered, m)
+			continue
 		}
+
+		// If resolution filter is specified, only delete matching resolution
+		if opts.Resolution != nil {
+			resolution := "" // Default for raw metrics
+			if m.Labels != nil {
+				resolution = m.Labels["__resolution__"]
+			}
+
+			// Keep if resolution doesn't match filter
+			if resolution != string(*opts.Resolution) {
+				filtered = append(filtered, m)
+			}
+			// Otherwise delete (don't append)
+		}
+		// If no resolution filter, delete all old metrics (don't append)
 	}
 
 	s.metrics = filtered

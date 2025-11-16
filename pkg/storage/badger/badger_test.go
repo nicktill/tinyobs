@@ -140,7 +140,9 @@ func TestBadgerStorage_Delete(t *testing.T) {
 	}
 
 	// Delete metrics older than 1 hour
-	err = store.Delete(ctx, now.Add(-1*time.Hour))
+	err = store.Delete(ctx, storage.DeleteOptions{
+		Before: now.Add(-1 * time.Hour),
+	})
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
