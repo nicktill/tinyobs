@@ -1,70 +1,45 @@
-# TinyObs 🔍
+# TinyObs
 
-> A lightweight, production-minded observability platform for developers who want to understand how monitoring systems actually work.
+A simple observability platform for learning how monitoring systems work.
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
+[![Go 1.21+](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**TinyObs** is a metrics collection and visualization platform built entirely in Go. It's small enough to understand completely, yet designed with production patterns from systems like Prometheus, VictoriaMetrics, and Datadog.
+TinyObs is a metrics collection system built in Go. It's designed to be small enough to understand completely, but useful enough for real local development. Think of it as a teaching-focused alternative to Prometheus—you can actually read all the code and understand how it works.
 
-Perfect for:
-- 🎓 **Learning** how time-series databases work under the hood
-- 🔧 **Local development** monitoring without Docker or external services
-- 📊 **Experimenting** with observability patterns before committing to vendor lock-in
-- 💼 **Demonstrating** production-grade Go engineering skills
+**What it does:**
+- Collects metrics (counters, gauges, histograms) from your apps
+- Stores them in memory (persistent storage coming soon)
+- Shows real-time data on a web dashboard
+- Provides a clean SDK for instrumenting Go applications
 
----
+**What it's good for:**
+- Learning how time-series databases work
+- Local development monitoring without Docker
+- Understanding observability patterns before committing to vendor lock-in
+- Building a portfolio project that demonstrates real engineering skills
 
-## ✨ Features
-
-### Metrics SDK
-- **Three metric types:** Counter, Gauge, Histogram
-- **Automatic batching** for efficient network transmission
-- **HTTP middleware** for zero-config request tracking
-- **Runtime metrics** collection (heap, goroutines, GC stats)
-- **Label support** for high-cardinality queries
-
-### Ingest Server
-- **REST API** for metric ingestion and querying
-- **Real-time dashboard** with auto-refresh
-- **In-memory storage** (persistent storage coming soon)
-- **Service isolation** via automatic labeling
-- **Zero dependencies** - single binary deployment
-
-### Developer Experience
-- **5 lines of code** to get started
-- **No configuration files** required
-- **Works offline** - no external services
-- **Clean, readable code** designed for learning
-
----
-
-## 🚀 Quick Start
-
-### 1. Install and Run
+## Quick Start
 
 ```bash
-# Clone the repository
+# Clone and run
 git clone https://github.com/nicktill/tinyobs.git
 cd tinyobs
 
-# Start the server (Terminal 1)
+# Terminal 1: Start the server
 go run cmd/server/main.go
-# Server running on http://localhost:8080
 
-# Start the example app (Terminal 2)
+# Terminal 2: Start the example app (generates metrics)
 go run cmd/example/main.go
-# Generating metrics on http://localhost:3001
+
+# Browser: Open http://localhost:8080
 ```
 
-### 2. View the Dashboard
+You should see metrics appearing in real-time.
 
-Open your browser to **http://localhost:8080**
+## Using the SDK
 
-You should see metrics appearing in real-time! 🎉
-
-### 3. Instrument Your Own App
+Here's how to add TinyObs to your own Go app:
 
 ```go
 package main
@@ -77,114 +52,73 @@ import (
 )
 
 func main() {
-    // Initialize TinyObs client
+    // Create a TinyObs client
     client, _ := sdk.New(sdk.ClientConfig{
-        Service:  "my-service",
+        Service:  "my-app",
         Endpoint: "http://localhost:8080/v1/ingest",
     })
 
-    // Start collecting metrics
     client.Start(context.Background())
     defer client.Stop()
 
-    // Add HTTP middleware for automatic instrumentation
+    // Wrap your HTTP handlers to get automatic metrics
     mux := http.NewServeMux()
     mux.HandleFunc("/", homeHandler)
 
-    // Wrap with TinyObs middleware
     handler := httpx.Middleware(client)(mux)
-
-    // Your app now tracks requests, latency, and errors automatically
     http.ListenAndServe(":8080", handler)
 }
 ```
 
-That's it! Your app now tracks:
-- Request count by endpoint, method, and status code
+This automatically tracks:
+- Request counts by endpoint, method, and status
 - Request duration histograms
-- Go runtime metrics (memory, goroutines, GC)
+- Go runtime metrics (memory, goroutines, GC stats)
 
----
+### Creating Custom Metrics
 
-## 📊 Architecture
+```go
+// Counter - for things that only go up
+requests := client.Counter("http_requests_total")
+requests.Inc("endpoint", "/api/users", "method", "GET")
+
+// Gauge - for values that go up and down
+connections := client.Gauge("active_connections")
+connections.Inc()  // connection opened
+connections.Dec()  // connection closed
+
+// Histogram - for measuring distributions
+duration := client.Histogram("request_duration_seconds")
+duration.Observe(0.234, "endpoint", "/api/users")
+```
+
+## Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Your App      │    │   TinyObs SDK   │    │  Ingest Server  │
 │                 │    │                 │    │                 │
 │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │   Metrics   │─┼────┼─│   Batcher   │─┼────┼─│  In-Memory  │ │
+│ │  Metrics    │─┼────┼─│   Batcher   │─┼────┼─│  In-Memory  │ │
 │ │  Counter    │ │    │ │ (5s flush)  │ │    │ │   Storage   │ │
 │ │  Gauge      │ │    │ └─────────────┘ │    │ └─────────────┘ │
 │ │  Histogram  │ │    │                 │    │                 │
 │ └─────────────┘ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
 │                 │    │ │HTTP Transport│─┼────┼─│   REST API  │ │
 │ ┌─────────────┐ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ │  Middleware │ │    │                 │    │                 │
-│ │Auto-tracking│ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │ Middleware  │ │    │                 │    │                 │
+│ │Auto-metrics │ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
 │ └─────────────┘ │    │ │Runtime Stats│ │    │ │  Dashboard  │ │
 │                 │    │ └─────────────┘ │    │ │  (Web UI)   │ │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-**How it works:**
+The SDK batches metrics and sends them every 5 seconds. The server stores everything in memory and serves a web dashboard that polls for updates.
 
-1. **Your app** creates metrics using the SDK (Counter, Gauge, Histogram)
-2. **SDK batches** metric samples every 5 seconds
-3. **HTTP transport** sends batches to the ingest server
-4. **Server stores** metrics in memory and serves them via REST API
-5. **Dashboard** polls the API and displays real-time updates
-
----
-
-## 📖 Usage Examples
-
-### Counter - Track Events
-
-```go
-// Track HTTP requests
-requestCounter := client.Counter("http_requests_total")
-requestCounter.Inc("endpoint", "/api/users", "method", "GET")
-
-// Track errors
-errorCounter := client.Counter("errors_total")
-errorCounter.Inc("type", "database_timeout")
-```
-
-### Gauge - Measure Current State
-
-```go
-// Track active connections
-activeConnections := client.Gauge("active_connections")
-activeConnections.Inc()  // Connection opened
-activeConnections.Dec()  // Connection closed
-
-// Track queue depth
-queueDepth := client.Gauge("queue_depth")
-queueDepth.Set(42)
-```
-
-### Histogram - Measure Distributions
-
-```go
-// Track request duration
-duration := client.Histogram("request_duration_seconds")
-duration.Observe(0.234, "endpoint", "/api/users")
-
-// Track response sizes
-responseSize := client.Histogram("response_size_bytes")
-responseSize.Observe(1024)
-```
-
----
-
-## 🔌 API Reference
+## API
 
 ### POST /v1/ingest
 
-Send metrics to TinyObs.
-
-**Request:**
 ```json
 {
   "metrics": [
@@ -203,305 +137,129 @@ Send metrics to TinyObs.
 }
 ```
 
-**Response:**
-```json
-{
-  "status": "success",
-  "count": 1
-}
-```
-
 ### GET /v1/metrics
 
-Query all stored metrics.
+Returns all stored metrics as JSON.
 
-**Response:**
-```json
-{
-  "metrics": [...],
-  "count": 1234
-}
-```
-
----
-
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 tinyobs/
 ├── cmd/
-│   ├── server/              # Ingest server binary
-│   │   └── main.go
-│   └── example/             # Example app with metrics
-│       └── main.go
+│   ├── server/          # Ingest server
+│   └── example/         # Example app
 ├── pkg/
 │   ├── sdk/
-│   │   ├── client.go        # Main SDK client
-│   │   ├── batch/           # Metric batching logic
-│   │   ├── metrics/         # Counter, Gauge, Histogram
-│   │   ├── httpx/           # HTTP middleware
-│   │   ├── runtime/         # Go runtime metrics
-│   │   └── transport/       # HTTP transport layer
+│   │   ├── client.go    # Main SDK client
+│   │   ├── batch/       # Batching logic
+│   │   ├── metrics/     # Counter, Gauge, Histogram
+│   │   ├── httpx/       # HTTP middleware
+│   │   ├── runtime/     # Runtime metrics collector
+│   │   └── transport/   # HTTP transport
 │   └── ingest/
-│       └── handler.go       # Ingest server HTTP handlers
+│       └── handler.go   # Server handlers
 └── web/
-    └── index.html           # Real-time dashboard
+    └── index.html       # Dashboard
 ```
 
----
+## The 53-Day Bug
 
-## 🐛 The 53-Day Bug: A Production Learning Story
+During development, I accidentally left the server running for 53 days straight. When I finally noticed, it had collected 2.9 million metrics and was using 4.5 GB of RAM.
 
-During initial development, the ingest server was accidentally left running for **53 days straight** (September 24 - November 16, 2025). When discovered, it had accumulated **2,905,632 metrics** and consumed **4.5 GB of RAM**.
+Turns out, closing your laptop doesn't kill background processes on macOS. The example app kept running through sleep/wake cycles, sending metrics every 2 seconds for almost two months.
 
-### What Happened
+**What I learned:**
+- In-memory storage without retention policies = unbounded growth
+- Memory leaks are silent—systems slow down gradually but don't crash
+- Even simple projects need production patterns
+- macOS is really good at keeping processes alive
 
-The example app was started on September 24th and kept running continuously, sending metrics every 2 seconds. The process survived:
-- Daily laptop sleep/wake cycles
-- macOS system updates
-- 53 days of continuous operation
+This bug is now driving the roadmap. The next version will have data retention policies, persistent storage, and cardinality limits to prevent this kind of thing.
 
-### What We Learned
+## Known Issues
 
-1. **macOS doesn't kill background processes** when you close your laptop
-2. **In-memory storage without retention = unbounded growth**
-3. **Memory leaks are silent killers** - the system gradually slowed but never crashed
-4. **Even toy projects need production patterns** - retention policies aren't optional
-5. **Monitoring the monitor matters** - observability systems need self-observation
+**Memory grows forever:** The server keeps all metrics in memory with no cleanup. You need to restart it periodically.
 
-### The Fix
+**No persistence:** Restarting loses all data.
 
-This real-world discovery is driving the current roadmap:
-- ✅ Add data retention policies (prevent unbounded growth)
-- ✅ Implement persistent storage (survive restarts)
-- ✅ Add cardinality limits (prevent label explosion)
-- ✅ Build self-monitoring dashboard (track system health)
+**Basic dashboard:** Just shows counts, no time-series graphs yet.
 
-**This bug became the best teacher.** It revealed exactly what production observability systems must handle.
+**Must run from project directory:** The server looks for `./web/` relative to where you run it.
 
----
+## Roadmap
 
-## 🗺️ Roadmap
+### Phase 1: Production Foundations (next 2-3 weeks)
+- [ ] Data retention policies (fix the memory leak)
+- [ ] Time-series charts with Chart.js
+- [ ] Prometheus `/metrics` endpoint (Grafana compatibility)
+- [ ] Better example app with multiple endpoints
 
-TinyObs is evolving from a teaching tool into a production-capable platform. Here's the plan:
+### Phase 2: Persistent Storage (3-5 weeks)
+- [ ] BadgerDB integration (LSM-based storage)
+- [ ] Cardinality protection (prevent label explosion)
+- [ ] Query API with time-range filtering
+- [ ] Downsampling (store raw data → 5m aggregates → 1h aggregates)
 
-### ✅ Current (MVP - Shipped)
-- [x] Metrics SDK (Counter, Gauge, Histogram)
-- [x] HTTP middleware for auto-instrumentation
-- [x] Batching and efficient transport
-- [x] REST API for ingestion
-- [x] Real-time web dashboard
-- [x] Runtime metrics collection
+### Phase 3: Advanced Features (2-3 months)
+- [ ] Alerting system with webhooks
+- [ ] PromQL query language (subset)
+- [ ] Performance benchmarks
+- [ ] Distributed tracing support
 
-### 🚧 Phase 1: Production Foundation (Next 2-3 weeks)
-- [ ] **Data retention policies** - Fix the 53-day bug (in-memory cleanup)
-- [ ] **Time-series charts** - Replace static counts with Chart.js line graphs
-- [ ] **Prometheus `/metrics` endpoint** - Grafana/Prometheus compatibility
-- [ ] **Multi-endpoint example app** - Realistic traffic simulation
+### Phase 4: Production-Ready (4-6 months)
+- [ ] Multi-tenancy
+- [ ] High availability and clustering
+- [ ] Cloud storage backends (S3, GCS, MinIO)
+- [ ] Service topology visualization
 
-**Goal:** Make it visually compelling and ecosystem-compatible
+See [ROADMAP.md](ROADMAP.md) for detailed plans.
 
-### 🔨 Phase 2: Persistent Storage (3-5 weeks)
-- [ ] **BadgerDB integration** - LSM-based time-series storage
-- [ ] **Cardinality protection** - Prevent label explosion attacks
-- [ ] **Query API** - Time-range filtering and label-based queries
-- [ ] **Downsampling** - Multi-resolution data (raw → 5m → 1h)
+## Why TinyObs?
 
-**Goal:** Production-grade data management
+Most observability systems are impossible to learn from:
+- **Prometheus** has 300k+ lines of code with complex TSDB internals
+- **Datadog** is closed source
+- **VictoriaMetrics** is production-focused, not teaching-focused
 
-### 🎯 Phase 3: Advanced Features (2-3 months)
-- [ ] **Alerting system** - Threshold-based alerts with webhooks
-- [ ] **PromQL subset** - Industry-standard query language
-- [ ] **Performance benchmarks** - Prove scalability claims
-- [ ] **Distributed tracing** - OpenTelemetry integration
+TinyObs is different. It's about 1,500 lines of readable Go code. Every design decision is documented. The code comments explain *why*, not just *what*.
 
-**Goal:** Feature parity with commercial systems
+If you want to understand how monitoring systems work, read the source. If you want to build something for your portfolio that shows real engineering depth, fork it and add features.
 
-### 🚀 Phase 4: Enterprise-Ready (4-6 months)
-- [ ] **Multi-tenancy** - Tenant isolation and quotas
-- [ ] **High availability** - Replication and clustering
-- [ ] **Cloud storage** - S3/GCS/MinIO backends for cold storage
-- [ ] **Advanced visualization** - Service topology, heatmaps
-
-**Goal:** Production deployments at scale
-
-See detailed implementation plans in [ROADMAP.md](ROADMAP.md)
-
----
-
-## 🎓 Why TinyObs?
-
-### For Learners
-
-Most observability systems are black boxes:
-- **Prometheus** - 300k+ lines of code, complex TSDB internals
-- **Datadog** - Closed source, impossible to learn from
-- **VictoriaMetrics** - Production-focused, not teaching-focused
-
-**TinyObs is different:**
-- ~1,500 lines of readable Go code
-- Every design decision is documented
-- Code comments explain *why*, not just *what*
-- Real production patterns, explained simply
-
-### For Practitioners
-
-TinyObs demonstrates production-grade Go engineering:
-- **LSM-based storage** (like Prometheus, VictoriaMetrics)
-- **Cardinality management** (prevent DoS via label explosion)
-- **Efficient batching** (reduce network overhead)
-- **Lock-free patterns** (high-throughput ingestion)
-- **Worker pools** (parallel processing)
-
-Perfect for interviews and portfolio projects.
-
-### For Projects
-
-TinyObs is genuinely useful:
-- **Zero config** - works out of the box
-- **No dependencies** - single binary deployment
-- **Prometheus compatible** - easy migration path
-- **Self-contained** - no external services required
-
-Great for local development, testing, and small-scale production.
-
----
-
-## 🔧 Development
-
-### Running from Source
+## Development
 
 ```bash
-# Terminal 1: Run server
+# Run from source
 go run cmd/server/main.go
 
-# Terminal 2: Run example app
-go run cmd/example/main.go
-
-# Terminal 3: Make a test request
-curl http://localhost:3001/api/users
-```
-
-### Running Tests
-
-```bash
+# Run tests
 make test
+go test ./... -v
 
-# With coverage
-go test ./... -cover -v
-
-# Specific package
-go test ./pkg/sdk/... -v
-```
-
-### Building Binaries
-
-```bash
-# Build all binaries
+# Build binaries
 make build
-
-# Build just the server
-go build -o bin/server cmd/server/main.go
-
-# Cross-compile for Linux
-GOOS=linux GOARCH=amd64 go build -o bin/server-linux cmd/server/main.go
 ```
 
-### Make Commands
+## Contributing
 
-```bash
-make server    # Run ingest server
-make example   # Run example app
-make build     # Build all binaries
-make test      # Run tests
-make clean     # Remove build artifacts
-make help      # Show all commands
-```
+This is a learning project, so contributions are welcome—especially from beginners. If you're new to Go or observability, this is a good place to start.
 
----
+Look for issues labeled:
+- `good first issue` - Easy tasks for beginners
+- `help wanted` - Community input needed
+- `documentation` - Improve the docs
 
-## 🤝 Contributing
+Fork, make changes, write tests, open a PR. I'm happy to review and help.
 
-Contributions are welcome! TinyObs is a learning project, so beginner-friendly issues are encouraged.
+## Resources
 
-### How to Contribute
+- [Prometheus TSDB Design](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/README.md) - Time-series internals
+- [Gorilla Paper](http://www.vldb.org/pvldb/vol8/p1816-teller.pdf) - Compression algorithm
+- [Systems Performance](http://www.brendangregg.com/systems-performance-2nd-edition-book.html) - Observability fundamentals
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with tests
-4. Run `go fmt` and `make test`
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+## License
 
-### Good First Issues
-
-New to the project? Look for:
-- [`good first issue`](https://github.com/nicktill/tinyobs/labels/good%20first%20issue) - Beginner-friendly tasks
-- [`help wanted`](https://github.com/nicktill/tinyobs/labels/help%20wanted) - Community input needed
-- [`documentation`](https://github.com/nicktill/tinyobs/labels/documentation) - Improve docs
-
-### Development Guidelines
-
-- **Write tests** for new features
-- **Keep PRs focused** - one feature per PR
-- **Update documentation** when changing APIs
-- **Follow Go conventions** - use `go fmt`, handle errors
-- **Add comments** for complex logic
+MIT - see [LICENSE](LICENSE)
 
 ---
 
-## 📚 Resources
-
-### Learning Materials
-
-- [Prometheus TSDB Design](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/README.md) - Time-series database internals
-- [Gorilla Paper](http://www.vldb.org/pvldb/vol8/p1816-teller.pdf) - Time-series compression algorithm
-- [Systems Performance](http://www.brendangregg.com/systems-performance-2nd-edition-book.html) - Observability best practices
-
-### Related Projects
-
-- [Prometheus](https://prometheus.io/) - Industry-standard monitoring
-- [VictoriaMetrics](https://victoriametrics.com/) - High-performance TSDB
-- [Grafana](https://grafana.com/) - Visualization platform
-- [OpenTelemetry](https://opentelemetry.io/) - Observability framework
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-TinyObs is inspired by and learns from:
-- **Prometheus** - for pioneering modern metrics collection
-- **VictoriaMetrics** - for showing how to optimize time-series storage
-- **Brendan Gregg** - for teaching observability fundamentals
-- **The Go community** - for building amazing libraries
-
-Special thanks to everyone who contributes, opens issues, or simply stars the project. Your support makes this better.
-
----
-
-## 📧 Contact
-
-**Nick Tillmann**
-GitHub: [@nicktill](https://github.com/nicktill)
-Project: [github.com/nicktill/tinyobs](https://github.com/nicktill/tinyobs)
-
----
-
-## ⭐ Star History
-
-If you find TinyObs useful for learning or building, please consider starring the project!
-
-[![Star History Chart](https://api.star-history.com/svg?repos=nicktill/tinyobs&type=Date)](https://star-history.com/#nicktill/tinyobs&Date)
-
----
-
-**Built with ❤️ by developers who believe observability should be understandable.**
-
-*Last updated: November 2025*
+Built by [@nicktill](https://github.com/nicktill)
