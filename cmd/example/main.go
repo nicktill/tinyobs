@@ -480,6 +480,68 @@ var statsPageTemplate = `<!DOCTYPE html>
             color: var(--text-primary);
         }
 
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem 1.5rem;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .toast.success {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .toast.error {
+            border-left: 3px solid var(--accent-red);
+        }
+
+        .toast-icon {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .toast-message {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -500,6 +562,8 @@ var statsPageTemplate = `<!DOCTYPE html>
     </style>
 </head>
 <body>
+    <div class="toast-container" id="toastContainer"></div>
+
     <div class="header">
         <div class="header-content">
             <div class="logo">
@@ -546,28 +610,28 @@ var statsPageTemplate = `<!DOCTYPE html>
                         <span class="endpoint-method">GET</span>
                         <span class="endpoint-path">/api/users</span>
                     </div>
-                    <a href="/api/users" class="btn" target="_blank">Test</a>
+                    <button class="btn" onclick="testEndpoint('/api/users')">Test</button>
                 </div>
                 <div class="endpoint">
                     <div class="endpoint-info">
                         <span class="endpoint-method">GET</span>
                         <span class="endpoint-path">/api/orders</span>
                     </div>
-                    <a href="/api/orders" class="btn" target="_blank">Test</a>
+                    <button class="btn" onclick="testEndpoint('/api/orders')">Test</button>
                 </div>
                 <div class="endpoint">
                     <div class="endpoint-info">
                         <span class="endpoint-method">GET</span>
                         <span class="endpoint-path">/api/products</span>
                     </div>
-                    <a href="/api/products" class="btn" target="_blank">Test</a>
+                    <button class="btn" onclick="testEndpoint('/api/products')">Test</button>
                 </div>
                 <div class="endpoint">
                     <div class="endpoint-info">
                         <span class="endpoint-method">GET</span>
                         <span class="endpoint-path">/health</span>
                     </div>
-                    <a href="/health" class="btn" target="_blank">Test</a>
+                    <button class="btn" onclick="testEndpoint('/health')">Test</button>
                 </div>
             </div>
             <div class="dashboard-link">
@@ -589,6 +653,50 @@ var statsPageTemplate = `<!DOCTYPE html>
     <script>
         const logs = [];
         const maxLogs = 20;
+
+        function showToast(type, title, message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icon = type === 'success' ? '✅' : '❌';
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function testEndpoint(path) {
+            const startTime = Date.now();
+            try {
+                const response = await fetch(path);
+                const duration = Date.now() - startTime;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showToast('success', `${path} - ${response.status}`, `Response time: ${duration}ms`);
+                    addLog(`✅ ${path} - 200 OK (${duration}ms)`);
+                } else {
+                    showToast('error', `${path} - ${response.status}`, `Request failed`);
+                    addLog(`❌ ${path} - ${response.status} (${duration}ms)`);
+                }
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                showToast('error', `${path} - Error`, error.message);
+                addLog(`❌ ${path} - ${error.message} (${duration}ms)`);
+            }
+        }
 
         function addLog(message) {
             const time = new Date().toLocaleTimeString();
