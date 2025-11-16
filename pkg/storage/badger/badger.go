@@ -119,13 +119,14 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 	return results, err
 }
 
-// Delete removes metrics older than the given time
-func (s *Storage) Delete(ctx context.Context, before time.Time) error {
+// Delete removes metrics matching the deletion criteria
+func (s *Storage) Delete(ctx context.Context, opts storage.DeleteOptions) error {
 	return s.db.Update(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // We only need keys
+		iterOpts := badger.DefaultIteratorOptions
+		// Need values if filtering by resolution
+		iterOpts.PrefetchValues = opts.Resolution != nil
 
-		it := txn.NewIterator(opts)
+		it := txn.NewIterator(iterOpts)
 		defer it.Close()
 
 		var keysToDelete [][]byte
@@ -135,11 +136,34 @@ func (s *Storage) Delete(ctx context.Context, before time.Time) error {
 
 			// Extract timestamp from key
 			_, ts := parseKey(item.Key())
-			if ts.Before(before) {
-				// Copy key (can't delete during iteration)
-				key := item.KeyCopy(nil)
-				keysToDelete = append(keysToDelete, key)
+			if !ts.Before(opts.Before) {
+				continue // Keep metrics after cutoff
 			}
+
+			// If resolution filter is specified, check the metric's resolution
+			if opts.Resolution != nil {
+				var m metrics.Metric
+				if err := item.Value(func(val []byte) error {
+					return json.Unmarshal(val, &m)
+				}); err != nil {
+					return fmt.Errorf("failed to unmarshal metric: %w", err)
+				}
+
+				// Get resolution from labels
+				resolution := "" // Default for raw metrics
+				if m.Labels != nil {
+					resolution = m.Labels["__resolution__"]
+				}
+
+				// Skip if resolution doesn't match filter
+				if resolution != string(*opts.Resolution) {
+					continue
+				}
+			}
+
+			// Mark for deletion
+			key := item.KeyCopy(nil)
+			keysToDelete = append(keysToDelete, key)
 		}
 
 		// Delete collected keys
