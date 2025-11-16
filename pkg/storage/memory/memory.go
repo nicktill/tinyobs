@@ -120,24 +120,28 @@ func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
 		return stats, nil
 	}
 
-	// Count unique series (metric name + label combination)
+	// Count unique series and find min/max timestamps in single pass
 	seriesMap := make(map[string]bool)
+	oldest := s.metrics[0].Timestamp
+	newest := s.metrics[0].Timestamp
+
 	for _, m := range s.metrics {
-		// Create series key from name + labels
+		// Track unique series
 		key := seriesKey(m.Name, m.Labels)
 		seriesMap[key] = true
+
+		// Track min/max timestamps
+		if m.Timestamp.Before(oldest) {
+			oldest = m.Timestamp
+		}
+		if m.Timestamp.After(newest) {
+			newest = m.Timestamp
+		}
 	}
+
 	stats.TotalSeries = uint64(len(seriesMap))
-
-	// Find oldest and newest timestamps
-	sorted := make([]metrics.Metric, len(s.metrics))
-	copy(sorted, s.metrics)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Timestamp.Before(sorted[j].Timestamp)
-	})
-
-	stats.OldestMetric = sorted[0].Timestamp
-	stats.NewestMetric = sorted[len(sorted)-1].Timestamp
+	stats.OldestMetric = oldest
+	stats.NewestMetric = newest
 
 	// Rough size estimate (each metric ~100 bytes)
 	stats.SizeBytes = uint64(len(s.metrics)) * 100

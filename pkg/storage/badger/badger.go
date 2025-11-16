@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
 	"tinyobs/pkg/sdk/metrics"
@@ -208,9 +209,8 @@ func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
 // makeKey creates a sortable key: series_hash + timestamp
 // Format: [series_hash (8 bytes)][timestamp (8 bytes)]
 func makeKey(name string, labels map[string]string, ts time.Time) []byte {
-	// Simple hash for now (in production, use xxhash)
 	seriesKey := seriesKeyString(name, labels)
-	hash := simpleHash(seriesKey)
+	hash := xxhash.Sum64String(seriesKey)
 
 	key := make([]byte, 16)
 	binary.BigEndian.PutUint64(key[0:8], hash)
@@ -294,14 +294,4 @@ func seriesKeyString(name string, labels map[string]string) string {
 		key += "," + k + "=" + labels[k]
 	}
 	return key
-}
-
-// simpleHash is a placeholder hash function
-// In production, use xxhash or similar
-func simpleHash(s string) uint64 {
-	var hash uint64 = 5381
-	for i := 0; i < len(s); i++ {
-		hash = ((hash << 5) + hash) + uint64(s[i])
-	}
-	return hash
 }

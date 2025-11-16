@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,10 +48,11 @@ func main() {
 	// Create compactor
 	compactor := compaction.New(store)
 
-	// Start background compaction (runs every hour)
+	// Start background compaction with cleanup tracking
+	var wg sync.WaitGroup
 	stopCompaction := make(chan bool)
-	go runCompaction(compactor, stopCompaction)
-	defer close(stopCompaction)
+	wg.Add(1)
+	go runCompaction(compactor, stopCompaction, &wg)
 
 	// Create router
 	router := mux.NewRouter()
@@ -89,6 +91,9 @@ func main() {
 
 	log.Println("Shutting down server...")
 
+	// Stop background tasks first
+	close(stopCompaction)
+
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
@@ -97,15 +102,21 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
+	// Wait for background goroutines to finish
+	log.Println("Waiting for background tasks to complete...")
+	wg.Wait()
+
 	log.Println("Server exited")
 }
 
 // runCompaction runs the compaction job periodically
-func runCompaction(compactor *compaction.Compactor, stop chan bool) {
+func runCompaction(compactor *compaction.Compactor, stop chan bool, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	ticker := time.NewTicker(compactionInterval)
 	defer ticker.Stop()
 
-	// Run once on startup (non-blocking)
+	// Run once on startup (non-blocking, tracked by parent WaitGroup)
 	go func() {
 		log.Println("Running initial compaction...")
 		ctx := context.Background()
