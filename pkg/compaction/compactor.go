@@ -11,6 +11,16 @@ import (
 	"tinyobs/pkg/storage"
 )
 
+const (
+	// Compaction timing windows
+	compact5mDelay     = 6 * time.Hour  // Wait before compacting raw data
+	compact5mLookback  = 12 * time.Hour // How far back to compact
+	compact1hDelay     = 2 * 24 * time.Hour  // Wait before compacting 5m aggregates
+	compact1hLookback  = 7 * 24 * time.Hour  // How far back to compact 5m->1h
+	rawDataRetention   = 6 * time.Hour  // Keep raw data for 6 hours
+	fiveMinRetention   = 7 * 24 * time.Hour  // Keep 5m aggregates for 7 days
+)
+
 // Compactor handles downsampling of metrics
 type Compactor struct {
 	storage storage.Storage
@@ -47,17 +57,27 @@ func (c *Compactor) Compact5m(ctx context.Context, start, end time.Time) error {
 	buckets := make(map[string]*Aggregate)
 
 	for _, m := range rawMetrics {
+		// Skip existing aggregates - only compact raw metrics
+		if m.Labels != nil && m.Labels["__resolution__"] != "" {
+			continue
+		}
+
 		// Round timestamp to 5-minute bucket
 		bucketTime := roundTo5Minutes(m.Timestamp)
 
 		// Create unique key for this series + bucket
-		key := aggregateKey(m.Name, m.Labels, bucketTime)
+		// Make defensive copy of labels to avoid mutation bugs
+		labelsCopy := make(map[string]string, len(m.Labels))
+		for k, v := range m.Labels {
+			labelsCopy[k] = v
+		}
+		key := aggregateKey(m.Name, labelsCopy, bucketTime)
 
 		agg, exists := buckets[key]
 		if !exists {
 			agg = &Aggregate{
 				Name:       m.Name,
-				Labels:     m.Labels,
+				Labels:     labelsCopy,
 				Timestamp:  bucketTime,
 				Resolution: Resolution5m,
 				Min:        m.Value,
@@ -168,38 +188,38 @@ func (c *Compactor) CompactAndCleanup(ctx context.Context) error {
 	now := time.Now()
 
 	// Step 1: Compact raw data from 6-12 hours ago into 5m aggregates
-	// (Wait 6h to ensure all data has arrived)
-	compact5mStart := now.Add(-12 * time.Hour)
-	compact5mEnd := now.Add(-6 * time.Hour)
+	// (Wait to ensure all data has arrived)
+	compact5mStart := now.Add(-compact5mLookback)
+	compact5mEnd := now.Add(-compact5mDelay)
 
 	if err := c.Compact5m(ctx, compact5mStart, compact5mEnd); err != nil {
 		return fmt.Errorf("5m compaction failed: %w", err)
 	}
 
-	// Step 2: Delete raw data older than 6 hours
+	// Step 2: Delete raw data older than retention period
 	// TODO: Currently Delete removes ALL metrics, including aggregates
 	// Need to implement resolution-aware deletion to only remove raw data
 	// Skipping for now to avoid deleting newly created aggregates
 	// See: https://github.com/yourusername/tinyobs/issues/XX
 	/*
-	if err := c.storage.Delete(ctx, now.Add(-6*time.Hour)); err != nil {
+	if err := c.storage.Delete(ctx, now.Add(-rawDataRetention)); err != nil {
 		return fmt.Errorf("failed to delete old raw data: %w", err)
 	}
 	*/
 
 	// Step 3: Compact 5m aggregates from 2-7 days ago into 1h aggregates
-	compact1hStart := now.Add(-7 * 24 * time.Hour)
-	compact1hEnd := now.Add(-2 * 24 * time.Hour)
+	compact1hStart := now.Add(-compact1hLookback)
+	compact1hEnd := now.Add(-compact1hDelay)
 
 	if err := c.Compact1h(ctx, compact1hStart, compact1hEnd); err != nil {
 		return fmt.Errorf("1h compaction failed: %w", err)
 	}
 
-	// Step 4: Delete 5m aggregates older than 7 days
+	// Step 4: Delete 5m aggregates older than retention period
 	// TODO: Same issue as Step 2 - need resolution-aware deletion
 	// Skipping for now to avoid deleting newly created 1h aggregates
 	/*
-	if err := c.storage.Delete(ctx, now.Add(-7*24*time.Hour)); err != nil {
+	if err := c.storage.Delete(ctx, now.Add(-fiveMinRetention)); err != nil {
 		return fmt.Errorf("failed to delete old 5m aggregates: %w", err)
 	}
 	*/
