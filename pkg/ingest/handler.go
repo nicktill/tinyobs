@@ -13,13 +13,15 @@ import (
 
 // Handler handles metric ingestion
 type Handler struct {
-	storage storage.Storage
+	storage     storage.Storage
+	cardinality *CardinalityTracker
 }
 
 // NewHandler creates a new ingest handler
 func NewHandler(store storage.Storage) *Handler {
 	return &Handler{
-		storage: store,
+		storage:     store,
+		cardinality: NewCardinalityTracker(),
 	}
 }
 
@@ -48,11 +50,30 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate and set timestamps
+	// Check request size limit
+	if len(req.Metrics) > MaxMetricsPerRequest {
+		http.Error(w, ErrTooManyMetrics.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate metrics and check cardinality
 	now := time.Now()
 	for i := range req.Metrics {
+		// Set timestamp if not provided
 		if req.Metrics[i].Timestamp.IsZero() {
 			req.Metrics[i].Timestamp = now
+		}
+
+		// Validate metric format
+		if err := ValidateMetric(req.Metrics[i]); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid metric at index %d: %v", i, err), http.StatusBadRequest)
+			return
+		}
+
+		// Check cardinality limits
+		if err := h.cardinality.Check(req.Metrics[i]); err != nil {
+			http.Error(w, fmt.Sprintf("Cardinality limit exceeded for metric %q: %v", req.Metrics[i].Name, err), http.StatusTooManyRequests)
+			return
 		}
 	}
 
@@ -63,6 +84,11 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	if err := h.storage.Write(ctx, req.Metrics); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to store metrics: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Record successfully written metrics for cardinality tracking
+	for _, m := range req.Metrics {
+		h.cardinality.Record(m)
 	}
 
 	// Respond
@@ -128,6 +154,15 @@ func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to get stats: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// HandleCardinalityStats handles the /v1/cardinality endpoint
+// Returns cardinality usage statistics for monitoring
+func (h *Handler) HandleCardinalityStats(w http.ResponseWriter, r *http.Request) {
+	stats := h.cardinality.Stats()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)

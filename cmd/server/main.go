@@ -64,6 +64,7 @@ func main() {
 	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
+	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
 
 	// Serve static files
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
