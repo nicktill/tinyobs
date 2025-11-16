@@ -39,7 +39,7 @@ func (c *Counter) Add(value float64, labels ...string) {
 	}
 
 	key := c.makeKey(labels...)
-	
+
 	c.mu.Lock()
 	c.values[key] += value
 	c.mu.Unlock()
@@ -59,7 +59,7 @@ func (c *Counter) makeKey(labels ...string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	
+
 	key := ""
 	for i, label := range labels {
 		if i > 0 {
@@ -75,7 +75,7 @@ func (c *Counter) makeLabels(labels ...string) map[string]string {
 	if len(labels)%2 != 0 {
 		return nil
 	}
-	
+
 	result := make(map[string]string)
 	for i := 0; i < len(labels); i += 2 {
 		if i+1 < len(labels) {

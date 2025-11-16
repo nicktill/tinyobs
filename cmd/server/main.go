@@ -14,6 +14,7 @@ import (
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
 	"github.com/nicktill/tinyobs/pkg/ingest"
+	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 
 	"github.com/gorilla/mux"
@@ -21,11 +22,11 @@ import (
 
 const (
 	// Server configuration
-	serverReadTimeout     = 10 * time.Second
-	serverWriteTimeout    = 10 * time.Second
-	shutdownTimeout       = 30 * time.Second
-	compactionInterval    = 1 * time.Hour
-	maxStorageBytes       = 10 * 1024 * 1024 * 1024 // 10 GB default
+	serverReadTimeout  = 10 * time.Second
+	serverWriteTimeout = 10 * time.Second
+	shutdownTimeout    = 30 * time.Second
+	compactionInterval = 1 * time.Hour
+	maxStorageBytes    = 10 * 1024 * 1024 * 1024 // 10 GB default
 )
 
 // StorageUsage represents current storage usage stats
@@ -123,12 +124,33 @@ func main() {
 	handler := ingest.NewHandler(store)
 	log.Println("📊 Ingest handler created with cardinality protection")
 
+	// Create WebSocket hub for real-time updates
+	hub := ingest.NewMetricsHub()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hub.Run(ctx)
+	}()
+	log.Println("📡 WebSocket hub started for real-time metrics streaming")
+
+	// Start metrics broadcaster
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		broadcastMetrics(ctx, store, hub)
+	}()
+	log.Println("📤 Metrics broadcaster started (updates every 5s)")
+
 	// Create compactor
 	compactor := compaction.New(store)
 	log.Printf("⚙️  Compaction engine ready (runs every %v)", compactionInterval)
 
 	// Start background compaction with cleanup tracking
-	var wg sync.WaitGroup
 	stopCompaction := make(chan bool)
 	wg.Add(1)
 	go runCompaction(compactor, stopCompaction, &wg)
@@ -160,6 +182,7 @@ func main() {
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
 	api.HandleFunc("/health", handleHealth).Methods("GET")
+	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
@@ -205,11 +228,11 @@ func main() {
 	close(stopCompaction)
 
 	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
 
 	log.Println("🔄 Gracefully shutting down server...")
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("❌ Server forced to shutdown: %v", err)
 	}
 
@@ -253,6 +276,50 @@ func runCompaction(compactor *compaction.Compactor, stop chan bool, wg *sync.Wai
 		case <-stop:
 			log.Println("🛑 Stopping compaction scheduler")
 			return
+		}
+	}
+}
+
+// broadcastMetrics periodically fetches and broadcasts metrics to WebSocket clients
+func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.MetricsHub) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Skip querying if no clients connected - saves resources
+			if !hub.HasClients() {
+				continue
+			}
+
+			// Query recent metrics (last 1 minute) for live updates
+			results, err := store.Query(ctx, storage.QueryRequest{
+				Start: time.Now().Add(-1 * time.Minute),
+				End:   time.Now(),
+				Limit: 1000, // Limit to prevent overwhelming clients
+			})
+			if err != nil {
+				log.Printf("❌ Failed to query metrics for broadcast: %v", err)
+				continue
+			}
+
+			// Only broadcast if we have data
+			if len(results) > 0 {
+				// Broadcast metrics update to all connected WebSocket clients
+				update := map[string]interface{}{
+					"type":      "metrics_update",
+					"timestamp": time.Now().Unix(),
+					"metrics":   results,
+					"count":     len(results),
+				}
+
+				if err := hub.Broadcast(update); err != nil {
+					log.Printf("❌ Failed to broadcast metrics: %v", err)
+				}
+			}
 		}
 	}
 }

@@ -127,10 +127,10 @@ func TestCompact5m_AcrossBuckets(t *testing.T) {
 
 	// Metrics spanning two 5-minute buckets
 	rawMetrics := []metrics.Metric{
-		{Name: "metric", Value: 10, Timestamp: baseTime},                       // 12:00-12:05 bucket
-		{Name: "metric", Value: 20, Timestamp: baseTime.Add(3 * time.Minute)},  // 12:00-12:05 bucket
-		{Name: "metric", Value: 30, Timestamp: baseTime.Add(6 * time.Minute)},  // 12:05-12:10 bucket
-		{Name: "metric", Value: 40, Timestamp: baseTime.Add(8 * time.Minute)},  // 12:05-12:10 bucket
+		{Name: "metric", Value: 10, Timestamp: baseTime},                      // 12:00-12:05 bucket
+		{Name: "metric", Value: 20, Timestamp: baseTime.Add(3 * time.Minute)}, // 12:00-12:05 bucket
+		{Name: "metric", Value: 30, Timestamp: baseTime.Add(6 * time.Minute)}, // 12:05-12:10 bucket
+		{Name: "metric", Value: 40, Timestamp: baseTime.Add(8 * time.Minute)}, // 12:05-12:10 bucket
 	}
 
 	store.Write(ctx, rawMetrics)

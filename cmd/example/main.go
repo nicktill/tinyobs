@@ -64,17 +64,18 @@ func main() {
 	// Stats page with live dashboard
 	mux.HandleFunc("/", serveStatsPage)
 
-	// Example endpoints
+	// Example endpoints with predictable latencies for demo
 	mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&activeRequests, 1)
 		defer atomic.AddInt64(&activeRequests, -1)
 
 		start := time.Now()
-		latency := time.Duration(rand.Intn(200)) * time.Millisecond
+		// Consistent latency: 50-100ms
+		latency := time.Duration(50+rand.Intn(50)) * time.Millisecond
 		time.Sleep(latency)
 
-		// Randomly simulate errors
-		if rand.Float32() < 0.1 { // 10% error rate
+		// Very rare errors (2%) for demo clarity
+		if rand.Float32() < 0.02 {
 			atomic.AddInt64(&errorCount, 1)
 			errorCounter.Inc("type", "api_error", "endpoint", "/api/users")
 			log.Printf("⚠️  ERROR: /api/users request failed (latency: %v)", latency)
@@ -83,8 +84,8 @@ func main() {
 		}
 
 		atomic.AddInt64(&requestCount, 1)
-		requestCounter.Inc("endpoint", "/api/users", "method", r.Method)
-		requestDuration.Observe(time.Since(start).Seconds())
+		requestCounter.Inc("endpoint", "/api/users", "method", r.Method, "status", "200")
+		requestDuration.Observe(time.Since(start).Seconds(), "endpoint", "/api/users")
 
 		log.Printf("✅ /api/users - 200 OK (latency: %v)", latency)
 
@@ -97,12 +98,13 @@ func main() {
 		defer atomic.AddInt64(&activeRequests, -1)
 
 		start := time.Now()
-		latency := time.Duration(rand.Intn(300)) * time.Millisecond
+		// Consistent latency: 80-120ms
+		latency := time.Duration(80+rand.Intn(40)) * time.Millisecond
 		time.Sleep(latency)
 
 		atomic.AddInt64(&requestCount, 1)
-		requestCounter.Inc("endpoint", "/api/orders", "method", r.Method)
-		requestDuration.Observe(time.Since(start).Seconds())
+		requestCounter.Inc("endpoint", "/api/orders", "method", r.Method, "status", "200")
+		requestDuration.Observe(time.Since(start).Seconds(), "endpoint", "/api/orders")
 
 		log.Printf("✅ /api/orders - 200 OK (latency: %v)", latency)
 
@@ -115,12 +117,13 @@ func main() {
 		defer atomic.AddInt64(&activeRequests, -1)
 
 		start := time.Now()
-		latency := time.Duration(rand.Intn(150)) * time.Millisecond
+		// Consistent latency: 30-60ms (fastest endpoint)
+		latency := time.Duration(30+rand.Intn(30)) * time.Millisecond
 		time.Sleep(latency)
 
 		atomic.AddInt64(&requestCount, 1)
-		requestCounter.Inc("endpoint", "/api/products", "method", r.Method)
-		requestDuration.Observe(time.Since(start).Seconds())
+		requestCounter.Inc("endpoint", "/api/products", "method", r.Method, "status", "200")
+		requestDuration.Observe(time.Since(start).Seconds(), "endpoint", "/api/products")
 
 		log.Printf("✅ /api/products - 200 OK (latency: %v)", latency)
 
@@ -163,41 +166,30 @@ func main() {
 		}
 	}()
 
-	// Simulate background activity
+	// Simulate steady, predictable traffic for demo
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-
-		log.Println("⚙️  Background job started (runs every 2s)")
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				latency := rand.Float64() * 0.5
-				requestCounter.Inc("type", "background_job")
-				requestDuration.Observe(latency)
-				activeUsers.Set(float64(rand.Intn(10) + 1))
-				log.Printf("🔄 Background job executed (latency: %.3fs, active_users: %d)", latency, int(rand.Intn(10)+1))
-			}
-		}
-	}()
-
-	// Simulate periodic traffic
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 
 		endpoints := []string{"/api/users", "/api/orders", "/api/products"}
-		log.Println("🚦 Traffic simulator started (requests every 5s)")
+		log.Println("🚦 Traffic simulator started (steady pattern)")
 
+		reqCount := 0
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				endpoint := endpoints[rand.Intn(len(endpoints))]
+				reqCount++
+
+				// Cycle through endpoints in order for predictability
+				endpoint := endpoints[reqCount%len(endpoints)]
+
+				// Simulate steady increasing active users (1-20 range)
+				activeUserCount := (reqCount % 20) + 1
+				activeUsers.Set(float64(activeUserCount))
+
+				// Make request to generate metrics
 				go func(ep string) {
 					resp, err := http.Get("http://localhost:3001" + ep)
 					if err != nil {
@@ -205,7 +197,7 @@ func main() {
 						return
 					}
 					defer resp.Body.Close()
-					log.Printf("🔵 Simulated request to %s - %d %s", ep, resp.StatusCode, resp.Status)
+					log.Printf("🔵 Request to %s - %d %s (active_users: %d)", ep, resp.StatusCode, resp.Status, activeUserCount)
 				}(endpoint)
 			}
 		}
@@ -569,7 +561,7 @@ var statsPageTemplate = `<!DOCTYPE html>
             <div class="logo">
                 <span>●</span> TinyObs Example App
             </div>
-            <div class="status-badge">● Traffic Simulator Running</div>
+            <div class="status-badge">● Demo Mode (Predictable Traffic)</div>
         </div>
     </div>
 
@@ -723,25 +715,17 @@ var statsPageTemplate = `<!DOCTYPE html>
 
         // Initial load
         updateStats();
-        addLog('🚀 App started - monitoring metrics');
+        addLog('🚀 App started in demo mode');
         addLog('📊 Sending metrics to TinyObs every 5s');
-        addLog('🔄 Background jobs running every 2s');
-        addLog('🚦 Simulated traffic running every 5s');
+        addLog('🚦 Predictable traffic: 3s intervals, cycling through endpoints');
 
         // Update every second
         setInterval(updateStats, 1000);
 
-        // Add activity log every 3 seconds
+        // Add activity log every 5 seconds (matching batch flush interval)
         setInterval(() => {
-            const activities = [
-                '✅ Metrics batch sent to TinyObs',
-                '🔄 Background job completed',
-                '📈 Active users gauge updated',
-                '⚡ Request processed successfully',
-                '🎯 Counter metrics incremented'
-            ];
-            addLog(activities[Math.floor(Math.random() * activities.length)]);
-        }, 3000);
+            addLog('📤 Metrics batch flushed to TinyObs');
+        }, 5000);
     </script>
 </body>
 </html>

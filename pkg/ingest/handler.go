@@ -194,6 +194,6 @@ func parseTimeParam(param string, defaultTime time.Time) time.Time {
 	}
 
 	// Log warning about invalid format
-	fmt.Printf("Warning: invalid time format '%s', using default. Expected RFC3339 or 2006-01-02T15:04:05\n", param)
+	log.Printf("⚠️  Invalid time format %q, using default. Expected RFC3339 or 2006-01-02T15:04:05", param)
 	return defaultTime
 }

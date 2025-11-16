@@ -13,12 +13,12 @@ import (
 
 const (
 	// Compaction timing windows
-	compact5mDelay     = 6 * time.Hour  // Wait before compacting raw data
-	compact5mLookback  = 12 * time.Hour // How far back to compact
-	compact1hDelay     = 2 * 24 * time.Hour  // Wait before compacting 5m aggregates
-	compact1hLookback  = 7 * 24 * time.Hour  // How far back to compact 5m->1h
-	rawDataRetention   = 6 * time.Hour  // Keep raw data for 6 hours
-	fiveMinRetention   = 7 * 24 * time.Hour  // Keep 5m aggregates for 7 days
+	compact5mDelay    = 6 * time.Hour      // Wait before compacting raw data
+	compact5mLookback = 12 * time.Hour     // How far back to compact
+	compact1hDelay    = 2 * 24 * time.Hour // Wait before compacting 5m aggregates
+	compact1hLookback = 7 * 24 * time.Hour // How far back to compact 5m->1h
+	rawDataRetention  = 6 * time.Hour      // Keep raw data for 6 hours
+	fiveMinRetention  = 7 * 24 * time.Hour // Keep 5m aggregates for 7 days
 )
 
 // Compactor handles downsampling of metrics

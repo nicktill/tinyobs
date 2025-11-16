@@ -11,9 +11,9 @@ import (
 type Resolution string
 
 const (
-	ResolutionRaw Resolution = "raw"   // Original samples
-	Resolution5m  Resolution = "5m"    // 5-minute aggregates
-	Resolution1h  Resolution = "1h"    // 1-hour aggregates
+	ResolutionRaw Resolution = "raw" // Original samples
+	Resolution5m  Resolution = "5m"  // 5-minute aggregates
+	Resolution1h  Resolution = "1h"  // 1-hour aggregates
 )
 
 // Aggregate stores aggregated metrics for a time bucket

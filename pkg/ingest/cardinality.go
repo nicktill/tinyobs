@@ -91,25 +91,25 @@ func (c *CardinalityTracker) Stats() CardinalityStats {
 	}
 
 	return CardinalityStats{
-		TotalSeries:      c.totalSeries,
-		UniqueMetrics:    len(c.seriesCount),
-		MaxSeriesMetric:  maxMetric,
-		MaxSeriesCount:   maxCount,
-		SeriesLimit:      MaxUniqueSeries,
-		PerMetricLimit:   MaxSeriesPerMetric,
-		UtilizationPct:   float64(c.totalSeries) / float64(MaxUniqueSeries) * 100,
+		TotalSeries:     c.totalSeries,
+		UniqueMetrics:   len(c.seriesCount),
+		MaxSeriesMetric: maxMetric,
+		MaxSeriesCount:  maxCount,
+		SeriesLimit:     MaxUniqueSeries,
+		PerMetricLimit:  MaxSeriesPerMetric,
+		UtilizationPct:  float64(c.totalSeries) / float64(MaxUniqueSeries) * 100,
 	}
 }
 
 // CardinalityStats provides cardinality usage information
 type CardinalityStats struct {
-	TotalSeries      int     `json:"total_series"`
-	UniqueMetrics    int     `json:"unique_metrics"`
-	MaxSeriesMetric  string  `json:"max_series_metric"`
-	MaxSeriesCount   int     `json:"max_series_count"`
-	SeriesLimit      int     `json:"series_limit"`
-	PerMetricLimit   int     `json:"per_metric_limit"`
-	UtilizationPct   float64 `json:"utilization_percent"`
+	TotalSeries     int     `json:"total_series"`
+	UniqueMetrics   int     `json:"unique_metrics"`
+	MaxSeriesMetric string  `json:"max_series_metric"`
+	MaxSeriesCount  int     `json:"max_series_count"`
+	SeriesLimit     int     `json:"series_limit"`
+	PerMetricLimit  int     `json:"per_metric_limit"`
+	UtilizationPct  float64 `json:"utilization_percent"`
 }
 
 // seriesKey creates a unique key for a time series (metric name + labels)
