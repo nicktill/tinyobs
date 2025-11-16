@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyObs Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .header {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 1rem 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .controls {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid #334155;
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        select, button {
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        select:hover, button:hover {
+            background: #475569;
+        }
+
+        button.primary {
+            background: #3b82f6;
+            border-color: #2563eb;
+        }
+
+        button.primary:hover {
+            background: #2563eb;
+        }
+
+        .time-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .time-buttons button {
+            padding: 0.5rem 0.75rem;
+        }
+
+        .time-buttons button.active {
+            background: #3b82f6;
+            border-color: #2563eb;
+        }
+
+        .chart-container {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .chart-subtitle {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+
+        .error {
+            background: #7f1d1d;
+            color: #fecaca;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            border: 1px solid #991b1b;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #64748b;
+        }
+
+        .empty-state-title {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TinyObs Dashboard</h1>
+    </div>
+
+    <div class="container">
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">Total Metrics</div>
+                <div class="stat-value" id="totalMetrics">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Unique Series</div>
+                <div class="stat-value" id="totalSeries">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Storage Size</div>
+                <div class="stat-value" id="storageSize">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Metrics</div>
+                <div class="stat-value" id="activeMetrics">-</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label>Metric</label>
+                    <select id="metricSelector">
+                        <option value="">Select a metric...</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Time Range</label>
+                    <div class="time-buttons">
+                        <button data-range="1h">1h</button>
+                        <button data-range="6h">6h</button>
+                        <button data-range="24h" class="active">24h</button>
+                        <button data-range="7d">7d</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button class="primary" onclick="refreshChart()">Refresh</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="chartContainer"></div>
+
+        <div id="emptyState" class="empty-state">
+            <div class="empty-state-title">No Data Yet</div>
+            <p>Start sending metrics to see them visualized here.</p>
+        </div>
+    </div>
+
+    <script>
+        let currentChart = null;
+        let selectedMetric = '';
+        let selectedRange = '24h';
+        let refreshInterval = null;
+
+        // Chart.js defaults for dark theme
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = '#334155';
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function getRangeMs(range) {
+            const multipliers = {
+                '1h': 1 * 60 * 60 * 1000,
+                '6h': 6 * 60 * 60 * 1000,
+                '24h': 24 * 60 * 60 * 1000,
+                '7d': 7 * 24 * 60 * 60 * 1000
+            };
+            return multipliers[range] || multipliers['24h'];
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/v1/stats');
+                if (!response.ok) throw new Error('Failed to load stats');
+
+                const stats = await response.json();
+
+                document.getElementById('totalMetrics').textContent = stats.TotalMetrics?.toLocaleString() || '0';
+                document.getElementById('totalSeries').textContent = stats.TotalSeries?.toLocaleString() || '0';
+                document.getElementById('storageSize').textContent = formatBytes(stats.SizeBytes || 0);
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function loadMetricsList() {
+            try {
+                const response = await fetch('/v1/metrics/list');
+                if (!response.ok) throw new Error('Failed to load metrics list');
+
+                const data = await response.json();
+                const selector = document.getElementById('metricSelector');
+
+                // Clear existing options except first
+                selector.innerHTML = '<option value="">Select a metric...</option>';
+
+                data.metrics.forEach(metric => {
+                    const option = document.createElement('option');
+                    option.value = metric;
+                    option.textContent = metric;
+                    selector.appendChild(option);
+                });
+
+                document.getElementById('activeMetrics').textContent = data.count;
+
+                // Auto-select first metric if available
+                if (data.metrics.length > 0 && !selectedMetric) {
+                    selector.value = data.metrics[0];
+                    selectedMetric = data.metrics[0];
+                    refreshChart();
+                }
+            } catch (error) {
+                console.error('Failed to load metrics list:', error);
+                showError('Failed to load metrics list');
+            }
+        }
+
+        async function refreshChart() {
+            if (!selectedMetric) {
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('chartContainer').innerHTML = '';
+                return;
+            }
+
+            document.getElementById('emptyState').style.display = 'none';
+
+            const now = Date.now();
+            const rangeMs = getRangeMs(selectedRange);
+            const start = new Date(now - rangeMs).toISOString();
+            const end = new Date(now).toISOString();
+
+            try {
+                const response = await fetch(
+                    `/v1/query/range?metric=${encodeURIComponent(selectedMetric)}&start=${start}&end=${end}&maxPoints=500`
+                );
+
+                if (!response.ok) throw new Error('Query failed');
+
+                const data = await response.json();
+
+                if (!data.data || data.data.length === 0) {
+                    document.getElementById('chartContainer').innerHTML = '<div class="loading">No data available for this time range</div>';
+                    return;
+                }
+
+                renderChart(data.data);
+            } catch (error) {
+                console.error('Failed to query metrics:', error);
+                showError('Failed to load chart data');
+            }
+        }
+
+        function renderChart(seriesData) {
+            // Destroy existing chart
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            // Create chart container
+            const container = document.getElementById('chartContainer');
+            container.innerHTML = `
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">${selectedMetric}</div>
+                            <div class="chart-subtitle">${selectedRange} | ${seriesData.length} series</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+            `;
+
+            const ctx = document.getElementById('mainChart').getContext('2d');
+
+            // Prepare datasets
+            const datasets = seriesData.map((series, index) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                const color = colors[index % colors.length];
+
+                const labelParts = [series.metric];
+                if (series.labels && Object.keys(series.labels).length > 0) {
+                    labelParts.push(
+                        Object.entries(series.labels)
+                            .map(([k, v]) => `${k}=${v}`)
+                            .join(', ')
+                    );
+                }
+
+                return {
+                    label: labelParts.join(' '),
+                    data: series.points.map(p => ({ x: p.t, y: p.v })),
+                    borderColor: color,
+                    backgroundColor: color + '20',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    tension: 0.4
+                };
+            });
+
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            display: datasets.length > 1,
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                padding: 12,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            borderColor: '#475569',
+                            borderWidth: 1,
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#e2e8f0',
+                            padding: 12
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM d'
+                                }
+                            },
+                            grid: {
+                                color: '#334155',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#334155',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Event listeners
+        document.getElementById('metricSelector').addEventListener('change', (e) => {
+            selectedMetric = e.target.value;
+            refreshChart();
+        });
+
+        document.querySelectorAll('.time-buttons button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.time-buttons button').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                selectedRange = e.target.dataset.range;
+                refreshChart();
+            });
+        });
+
+        // Initial load
+        loadStats();
+        loadMetricsList();
+
+        // Auto-refresh every 30 seconds
+        refreshInterval = setInterval(() => {
+            loadStats();
+            if (selectedMetric) {
+                refreshChart();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
