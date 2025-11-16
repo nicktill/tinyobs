@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -92,10 +93,12 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(metrics)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(MetricsListResponse{
+	if err := json.NewEncoder(w).Encode(MetricsListResponse{
 		Metrics: metrics,
 		Count:   len(metrics),
-	})
+	}); err != nil {
+		log.Printf("❌ Failed to encode metrics list response: %v", err)
+	}
 }
 
 // HandleRangeQuery returns time-series data with smart downsampling
@@ -233,7 +236,9 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("❌ Failed to encode range query response: %v", err)
+	}
 }
 
 // makeSeriesKey creates a unique key for a series
