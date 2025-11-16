@@ -5,9 +5,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4/options"
 	"tinyobs/pkg/sdk/metrics"
 	"tinyobs/pkg/storage"
 )
@@ -36,8 +38,8 @@ func New(cfg Config) (*Storage, error) {
 
 	// Optimize for time-series workload
 	opts = opts.
-		WithCompression(badger.ZSTD). // Better compression for metrics
-		WithNumVersionsToKeep(1)       // We don't need versioning
+		WithCompression(options.ZSTD). // Better compression for metrics
+		WithNumVersionsToKeep(1)        // We don't need versioning
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -277,8 +279,16 @@ func matchesQuery(m metrics.Metric, req storage.QueryRequest) bool {
 func seriesKeyString(name string, labels map[string]string) string {
 	// Simple string concatenation (production would use deterministic hash)
 	key := name
-	for k, v := range labels {
-		key += "," + k + "=" + v
+	if len(labels) > 0 {
+		keys := make([]string, 0, len(labels))
+		for k := range labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			key += "," + k + "=" + labels[k]
+		}
 	}
 	return key
 }
