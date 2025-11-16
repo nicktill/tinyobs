@@ -896,21 +896,34 @@
             // Render charts after DOM update
             setTimeout(() => {
                 servicesToShow.forEach(([service, metrics]) => {
+                    // Apply the same filters when rendering charts
+                    let filteredMetrics = metrics;
+
+                    if (selectedEndpoint !== 'all') {
+                        filteredMetrics = filteredMetrics.filter(m =>
+                            m.labels?.endpoint === selectedEndpoint || m.labels?.path === selectedEndpoint
+                        );
+                    }
+
+                    if (selectedMetricName !== 'all') {
+                        filteredMetrics = filteredMetrics.filter(m => m.name === selectedMetricName);
+                    }
+
                     const grouped = {};
-                    metrics.forEach(m => {
+                    filteredMetrics.forEach(m => {
                         if (!grouped[m.name]) grouped[m.name] = [];
                         grouped[m.name].push(m);
                     });
 
                     Object.entries(grouped).slice(0, 6).forEach(([name, data], idx) => {
                         const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
-                        renderServiceChart(chartId, name, data);
+                        renderServiceChart(chartId, name, data, selectedEndpoint, selectedMetricName);
                     });
                 });
             }, 100);
         }
 
-        async function renderServiceChart(canvasId, metricName, data) {
+        async function renderServiceChart(canvasId, metricName, data, selectedEndpoint, selectedMetricName) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
 
@@ -927,7 +940,17 @@
                 const result = await response.json();
                 if (!result.data || result.data.length === 0) return;
 
-                const datasets = result.data.slice(0, 5).map((series) => {
+                // Filter series based on active filters
+                let filteredSeries = result.data;
+                if (selectedEndpoint !== 'all') {
+                    filteredSeries = filteredSeries.filter(series =>
+                        series.labels?.endpoint === selectedEndpoint || series.labels?.path === selectedEndpoint
+                    );
+                }
+
+                if (filteredSeries.length === 0) return;
+
+                const datasets = filteredSeries.slice(0, 5).map((series) => {
                     const color = getStableColor(series.metric, series.labels);
                     return {
                         label: series.labels && Object.keys(series.labels).length > 0
