@@ -290,6 +290,11 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Skip querying if no clients connected - saves resources
+			if !hub.HasClients() {
+				continue
+			}
+
 			// Query recent metrics (last 1 minute) for live updates
 			results, err := store.Query(ctx, storage.QueryRequest{
 				Start: time.Now().Add(-1 * time.Minute),
@@ -301,7 +306,7 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 				continue
 			}
 
-			// Only broadcast if we have data and connected clients
+			// Only broadcast if we have data
 			if len(results) > 0 {
 				// Broadcast metrics update to all connected WebSocket clients
 				update := map[string]interface{}{

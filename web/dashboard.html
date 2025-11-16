@@ -1691,6 +1691,18 @@
         let wsConnected = false;
 
         function connectWebSocket() {
+            // Clear any existing reconnect interval to prevent multiple intervals
+            if (wsReconnectInterval) {
+                clearInterval(wsReconnectInterval);
+                wsReconnectInterval = null;
+            }
+
+            // Close existing connection if any to prevent race conditions
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/v1/ws`;
 
