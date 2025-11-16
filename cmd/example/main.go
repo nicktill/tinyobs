@@ -237,164 +237,352 @@ var statsPageTemplate = `<!DOCTYPE html>
     <title>TinyObs Example App</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-            padding: 2rem;
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #f0883e;
+            --accent-red: #f85149;
         }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .logo span {
+            color: var(--accent-blue);
+        }
+
+        .status-badge {
+            background: rgba(63, 185, 80, 0.1);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            padding: 2rem;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
+
+        .section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
         }
-        .header h1 {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
+
+        .section-header {
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
         }
-        .header p {
-            font-size: 1.25rem;
-            opacity: 0.9;
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
         }
+
+        .section-subtitle {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
         }
+
         .stat-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.25rem;
+            transition: border-color 0.2s;
         }
+
+        .stat-card:hover {
+            border-color: var(--accent-blue);
+        }
+
         .stat-label {
-            font-size: 0.875rem;
-            opacity: 0.8;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             margin-bottom: 0.5rem;
+            font-weight: 500;
         }
+
         .stat-value {
-            font-size: 3rem;
-            font-weight: bold;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
         }
-        .endpoints {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+
+        .stat-value.uptime {
+            font-size: 1.75rem;
         }
+
+        .endpoints-list {
+            display: grid;
+            gap: 0.75rem;
+        }
+
         .endpoint {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             padding: 1rem;
-            margin: 0.5rem 0;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            transition: all 0.2s;
         }
+
         .endpoint:hover {
-            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--accent-blue);
+            background: rgba(88, 166, 255, 0.05);
         }
+
+        .endpoint-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .endpoint-method {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent-green);
+            background: rgba(63, 185, 80, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            min-width: 40px;
+            text-align: center;
+        }
+
         .endpoint-path {
-            font-family: 'Monaco', monospace;
-            font-weight: 600;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.9375rem;
+            color: var(--accent-blue);
+            font-weight: 500;
         }
+
         .btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
             padding: 0.5rem 1rem;
             border-radius: 6px;
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
             transition: all 0.2s;
-        }
-        .btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        .log-container {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-top: 2rem;
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: 'Monaco', monospace;
             font-size: 0.875rem;
+            font-weight: 500;
         }
+
+        .btn:hover {
+            background: var(--border-color);
+        }
+
+        .btn.primary {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #000;
+        }
+
+        .btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        .dashboard-link {
+            text-align: center;
+            padding: 1.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-top: 1rem;
+        }
+
+        .log-container {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 1rem;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
         .log-entry {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.8125rem;
             padding: 0.5rem 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 1rem;
         }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
         .log-time {
-            opacity: 0.6;
-            margin-right: 1rem;
+            color: var(--text-secondary);
+            min-width: 80px;
+            flex-shrink: 0;
+        }
+
+        .log-message {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .endpoint-info {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span>●</span> TinyObs Example App
+            </div>
+            <div class="status-badge">● Traffic Simulator Running</div>
+        </div>
+    </div>
+
     <div class="container">
-        <div class="header">
-            <h1>🚀 TinyObs Example App</h1>
-            <p>Simulated traffic generator with live metrics</p>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">Live Application Metrics</div>
+                <div class="section-subtitle">Real-time statistics from example application</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Requests</div>
+                    <div class="stat-value" id="requests">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Errors</div>
+                    <div class="stat-value" id="errors">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Requests</div>
+                    <div class="stat-value" id="active">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Uptime</div>
+                    <div class="stat-value uptime" id="uptime">0s</div>
+                </div>
+            </div>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total Requests</div>
-                <div class="stat-value" id="requests">0</div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">API Endpoints</div>
+                <div class="section-subtitle">Available REST endpoints for testing</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Errors</div>
-                <div class="stat-value" id="errors">0</div>
+            <div class="endpoints-list">
+                <div class="endpoint">
+                    <div class="endpoint-info">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-path">/api/users</span>
+                    </div>
+                    <a href="/api/users" class="btn" target="_blank">Test</a>
+                </div>
+                <div class="endpoint">
+                    <div class="endpoint-info">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-path">/api/orders</span>
+                    </div>
+                    <a href="/api/orders" class="btn" target="_blank">Test</a>
+                </div>
+                <div class="endpoint">
+                    <div class="endpoint-info">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-path">/api/products</span>
+                    </div>
+                    <a href="/api/products" class="btn" target="_blank">Test</a>
+                </div>
+                <div class="endpoint">
+                    <div class="endpoint-info">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-path">/health</span>
+                    </div>
+                    <a href="/health" class="btn" target="_blank">Test</a>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Active Requests</div>
-                <div class="stat-value" id="active">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Uptime</div>
-                <div class="stat-value" id="uptime" style="font-size: 2rem;">0s</div>
-            </div>
-        </div>
-
-        <div class="endpoints">
-            <h2 style="margin-bottom: 1.5rem;">📡 Available Endpoints</h2>
-            <div class="endpoint">
-                <span class="endpoint-path">GET /api/users</span>
-                <a href="/api/users" class="btn" target="_blank">Test</a>
-            </div>
-            <div class="endpoint">
-                <span class="endpoint-path">GET /api/orders</span>
-                <a href="/api/orders" class="btn" target="_blank">Test</a>
-            </div>
-            <div class="endpoint">
-                <span class="endpoint-path">GET /api/products</span>
-                <a href="/api/products" class="btn" target="_blank">Test</a>
-            </div>
-            <div class="endpoint">
-                <span class="endpoint-path">GET /health</span>
-                <a href="/health" class="btn" target="_blank">Test</a>
-            </div>
-            <div style="margin-top: 1.5rem; text-align: center;">
-                <a href="http://localhost:8080/dashboard.html" class="btn" style="padding: 1rem 2rem; font-size: 1.125rem;">
-                    📊 Open TinyObs Dashboard
+            <div class="dashboard-link">
+                <a href="http://localhost:8080/dashboard.html" class="btn primary" style="padding: 1rem 2rem; font-size: 1rem;">
+                    Open TinyObs Dashboard →
                 </a>
             </div>
         </div>
 
-        <div class="log-container">
-            <h3 style="margin-bottom: 1rem;">📋 Recent Activity</h3>
-            <div id="logs"></div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">Activity Log</div>
+                <div class="section-subtitle">Recent application events</div>
+            </div>
+            <div class="log-container" id="logs"></div>
         </div>
     </div>
 
@@ -409,7 +597,7 @@ var statsPageTemplate = `<!DOCTYPE html>
 
             const container = document.getElementById('logs');
             container.innerHTML = logs.map(log =>
-                '<div class="log-entry"><span class="log-time">' + log.time + '</span>' + log.message + '</div>'
+                '<div class="log-entry"><span class="log-time">' + log.time + '</span><span class="log-message">' + log.message + '</span></div>'
             ).join('');
         }
 

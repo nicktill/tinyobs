@@ -130,6 +130,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            position: relative;
         }
 
         input, select, button {
@@ -166,14 +167,34 @@
             opacity: 0.9;
         }
 
-        button.danger {
-            background: var(--accent-red);
-            border-color: var(--accent-red);
-            color: #fff;
+        .autocomplete {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
         }
 
-        button.danger:hover {
-            opacity: 0.9;
+        .autocomplete.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.8125rem;
+        }
+
+        .autocomplete-item:hover {
+            background: var(--bg-secondary);
         }
 
         .time-range-selector {
@@ -335,16 +356,6 @@
             opacity: 0.5;
         }
 
-        .help-text {
-            background: rgba(88, 166, 255, 0.1);
-            border: 1px solid var(--accent-blue);
-            border-radius: 6px;
-            padding: 0.75rem 1rem;
-            margin-bottom: 1rem;
-            font-size: 0.875rem;
-            color: var(--accent-blue);
-        }
-
         .error {
             background: rgba(248, 81, 73, 0.1);
             border: 1px solid var(--accent-red);
@@ -438,7 +449,8 @@
                 </div>
                 <div class="controls">
                     <div class="input-group">
-                        <input type="text" id="searchBox" placeholder="Search metrics..." style="width: 300px;">
+                        <input type="text" id="searchBox" placeholder="Search metrics..." style="width: 300px;" autocomplete="off">
+                        <div id="autocomplete" class="autocomplete"></div>
                     </div>
                     <div class="time-range-selector">
                         <button class="time-btn" data-range="1h">1h</button>
@@ -484,7 +496,8 @@
         let currentRange = '24h';
         let chart = null;
         let searchTerm = '';
-        let chartData = [];
+        let allMetricNames = new Set();
+        let metricRowIndex = 0; // For unique IDs
 
         Chart.defaults.color = '#8b949e';
         Chart.defaults.borderColor = '#30363d';
@@ -539,6 +552,10 @@
                 const data = await response.json();
                 metricsData = data.metrics || [];
 
+                // Build metric names set for autocomplete
+                allMetricNames.clear();
+                metricsData.forEach(m => allMetricNames.add(m.name));
+
                 renderMetricsBrowser();
             } catch (error) {
                 console.error('Load metrics error:', error);
@@ -556,17 +573,23 @@
                 return;
             }
 
-            // Group by metric name
+            // Group by metric name + labels
             const grouped = {};
             metricsData.forEach(m => {
-                const key = m.name;
-                if (!grouped[key]) grouped[key] = [];
-                grouped[key].push(m);
+                const key = seriesKey(m);
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        name: m.name,
+                        labels: m.labels || {},
+                        values: []
+                    };
+                }
+                grouped[key].values.push(m);
             });
 
             // Filter by search
-            const filtered = Object.entries(grouped).filter(([name]) =>
-                name.toLowerCase().includes(searchTerm.toLowerCase())
+            const filtered = Object.entries(grouped).filter(([key, data]) =>
+                data.name.toLowerCase().includes(searchTerm.toLowerCase())
             );
 
             if (filtered.length === 0) {
@@ -574,31 +597,41 @@
                 return;
             }
 
-            browser.innerHTML = filtered.map(([name, metrics]) => {
-                const latest = metrics[metrics.length - 1];
-                const metricKey = seriesKey(latest);
-                const isSelected = selectedMetrics.has(metricKey);
+            browser.innerHTML = filtered.map(([key, data]) => {
+                const latest = data.values[data.values.length - 1];
+                const isSelected = selectedMetrics.has(key);
+                const rowId = `metric-row-${metricRowIndex++}`;
 
-                const labelsHtml = latest.labels && Object.keys(latest.labels).length > 0
-                    ? Object.entries(latest.labels)
+                const labelsHtml = Object.keys(data.labels).length > 0
+                    ? Object.entries(data.labels)
                         .filter(([k]) => !k.startsWith('__'))
                         .map(([k, v]) => `<div class="label"><span class="label-key">${k}</span>=<span class="label-value">"${v}"</span></div>`)
                         .join('')
                     : '<div class="label">no labels</div>';
 
+                // Escape quotes in key for HTML attribute
+                const escapedKey = key.replace(/"/g, '&quot;');
+
                 return `
-                    <div class="metric-row ${isSelected ? 'selected' : ''}" onclick="toggleMetric(this, '${metricKey}')">
+                    <div id="${rowId}" class="metric-row ${isSelected ? 'selected' : ''}" data-key="${escapedKey}">
                         <div class="metric-content">
-                            <div class="metric-name">${name}</div>
+                            <div class="metric-name">${data.name}</div>
                             <div class="metric-labels">${labelsHtml}</div>
                             <div class="metric-value">
                                 <div><span class="value-label">Latest:</span>${formatValue(latest.value)}</div>
-                                <div><span class="value-label">Samples:</span>${metrics.length}</div>
+                                <div><span class="value-label">Samples:</span>${data.values.length}</div>
                             </div>
                         </div>
                     </div>
                 `;
             }).join('');
+
+            // Add click listeners after rendering
+            document.querySelectorAll('.metric-row').forEach(row => {
+                row.addEventListener('click', function() {
+                    toggleMetric(this, this.dataset.key);
+                });
+            });
         }
 
         function seriesKey(metric) {
@@ -607,6 +640,8 @@
         }
 
         function toggleMetric(element, key) {
+            console.log('Toggling metric:', key);
+
             if (selectedMetrics.has(key)) {
                 selectedMetrics.delete(key);
                 element.classList.remove('selected');
@@ -619,7 +654,9 @@
             if (selectedMetrics.size > 0) {
                 renderChart();
                 // Scroll to chart
-                document.getElementById('chartSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                setTimeout(() => {
+                    document.getElementById('chartSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 100);
             } else {
                 document.getElementById('chartSection').style.display = 'none';
             }
@@ -651,6 +688,7 @@
         async function renderChart() {
             if (selectedMetrics.size === 0) return;
 
+            console.log('Rendering chart for metrics:', Array.from(selectedMetrics));
             document.getElementById('chartSection').style.display = 'block';
 
             const now = Date.now();
@@ -668,6 +706,8 @@
                 }
             });
 
+            console.log('Querying metrics:', Array.from(metricNames));
+
             try {
                 const promises = Array.from(metricNames).map(async name => {
                     const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(name)}&start=${start}&end=${end}&maxPoints=500`);
@@ -676,6 +716,7 @@
                 });
 
                 const results = await Promise.all(promises);
+                console.log('Query results:', results);
 
                 const colors = ['#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff', '#ff7b72', '#79c0ff', '#56d364'];
                 let colorIndex = 0;
@@ -715,6 +756,13 @@
                         });
                     });
                 });
+
+                console.log('Datasets:', datasets);
+
+                if (datasets.length === 0) {
+                    showError('No data found for selected metrics');
+                    return;
+                }
 
                 // Render stats
                 renderChartStats(allStats);
@@ -766,7 +814,7 @@
                     }
                 });
 
-                chartData = datasets;
+                console.log('Chart rendered successfully');
             } catch (error) {
                 console.error('Chart render error:', error);
                 showError('Failed to render chart: ' + error.message);
@@ -802,10 +850,60 @@
             updateSelectedCount();
         }
 
+        // Autocomplete functionality
+        function updateAutocomplete(value) {
+            const autocomplete = document.getElementById('autocomplete');
+
+            if (!value) {
+                autocomplete.classList.remove('show');
+                return;
+            }
+
+            const matches = Array.from(allMetricNames).filter(name =>
+                name.toLowerCase().includes(value.toLowerCase())
+            ).slice(0, 10);
+
+            if (matches.length === 0) {
+                autocomplete.classList.remove('show');
+                return;
+            }
+
+            autocomplete.innerHTML = matches.map(name =>
+                `<div class="autocomplete-item" data-name="${name}">${name}</div>`
+            ).join('');
+
+            autocomplete.classList.add('show');
+
+            // Add click listeners
+            autocomplete.querySelectorAll('.autocomplete-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    document.getElementById('searchBox').value = this.dataset.name;
+                    searchTerm = this.dataset.name;
+                    autocomplete.classList.remove('show');
+                    renderMetricsBrowser();
+                });
+            });
+        }
+
         // Event listeners
-        document.getElementById('searchBox').addEventListener('input', (e) => {
+        const searchBox = document.getElementById('searchBox');
+        searchBox.addEventListener('input', (e) => {
             searchTerm = e.target.value;
+            updateAutocomplete(searchTerm);
             renderMetricsBrowser();
+        });
+
+        searchBox.addEventListener('focus', (e) => {
+            if (e.target.value) {
+                updateAutocomplete(e.target.value);
+            }
+        });
+
+        // Close autocomplete when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.input-group')) {
+                document.getElementById('autocomplete').classList.remove('show');
+            }
         });
 
         document.querySelectorAll('.time-btn').forEach(btn => {
