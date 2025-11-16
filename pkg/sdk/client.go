@@ -14,9 +14,9 @@ import (
 
 // ClientConfig holds configuration for the TinyObs client
 type ClientConfig struct {
-	Service   string        `json:"service"`
-	APIKey    string        `json:"api_key"`
-	Endpoint  string        `json:"endpoint"`
+	Service    string        `json:"service"`
+	APIKey     string        `json:"api_key"`
+	Endpoint   string        `json:"endpoint"`
 	FlushEvery time.Duration `json:"flush_every"`
 }
 
@@ -26,13 +26,13 @@ type Client struct {
 	transport  transport.Transport
 	batcher    *batch.Batcher
 	collectors []metrics.MetricCollector
-	
+
 	// Metric storage
 	counters   map[string]*metrics.Counter
 	gauges     map[string]*metrics.Gauge
 	histograms map[string]*metrics.Histogram
 	mu         sync.RWMutex
-	
+
 	// Runtime tracking
 	started bool
 	ctx     context.Context
