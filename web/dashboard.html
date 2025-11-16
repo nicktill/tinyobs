@@ -25,6 +25,26 @@
             --accent-orange: #f0883e;
             --accent-red: #f85149;
             --accent-purple: #bc8cff;
+            --chart-grid: #30363d;
+            --chart-text: #8b949e;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-tertiary: #ffffff;
+            --border-color: #d0d7de;
+            --text-primary: #24292f;
+            --text-secondary: #57606a;
+            --accent-blue: #0969da;
+            --accent-green: #1a7f37;
+            --accent-orange: #bc4c00;
+            --accent-red: #cf222e;
+            --accent-purple: #8250df;
+            --chart-grid: #d0d7de;
+            --chart-text: #57606a;
+            --shadow: rgba(31, 35, 40, 0.12);
         }
 
         body {
@@ -217,8 +237,15 @@
         .chart-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 1.5rem;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .chart-card:hover {
+            box-shadow: 0 4px 12px var(--shadow);
+            border-color: var(--accent-blue);
         }
 
         .chart-header {
@@ -272,11 +299,12 @@
         }
 
         .metric-row {
-            background: var(--bg-tertiary);
+            background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px var(--shadow);
             cursor: pointer;
             position: relative;
         }
@@ -405,9 +433,15 @@
         .service-section {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .service-section:hover {
+            box-shadow: 0 4px 16px var(--shadow);
         }
 
         .service-header {
@@ -416,6 +450,13 @@
             align-items: center;
             margin-bottom: 1rem;
             cursor: pointer;
+            padding: 0.75rem;
+            border-radius: 6px;
+            transition: background 0.2s ease;
+        }
+
+        .service-header:hover {
+            background: var(--bg-tertiary);
         }
 
         .service-header h3 {
@@ -449,20 +490,50 @@
             margin-top: 1rem;
         }
 
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .theme-toggle:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
         .help-btn {
             background: var(--bg-tertiary);
             border: 1px solid var(--border-color);
             color: var(--text-secondary);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
             cursor: help;
             font-size: 0.875rem;
             position: relative;
+            transition: all 0.2s;
         }
 
         .help-btn:hover {
             color: var(--accent-blue);
             border-color: var(--accent-blue);
+            background: var(--bg-secondary);
         }
 
         .help-tooltip {
@@ -475,9 +546,9 @@
             border: 1px solid var(--accent-blue);
             border-radius: 6px;
             padding: 1rem;
-            min-width: 250px;
+            min-width: 280px;
             z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 24px var(--shadow);
         }
 
         .help-btn:hover .help-tooltip {
@@ -556,22 +627,31 @@
                     <div class="stat-label">Storage</div>
                     <div class="stat-value" id="storageSize">-</div>
                 </div>
-                <div class="help-btn">
-                    ?
-                    <div class="help-tooltip">
-                        <h4>Keyboard Shortcuts</h4>
-                        <ul>
-                            <li><kbd>R</kbd> Refresh current view</li>
-                            <li><kbd>/</kbd> Focus search (Explore)</li>
-                            <li><kbd>ESC</kbd> Clear selection (Explore)</li>
-                        </ul>
+                <div class="header-controls">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme (T)" id="themeToggle">
+                        ☀️
+                    </button>
+                    <div class="help-btn">
+                        ?
+                        <div class="help-tooltip">
+                            <h4>Keyboard Shortcuts</h4>
+                            <ul>
+                                <li><kbd>D</kbd> Dashboard view</li>
+                                <li><kbd>E</kbd> Explore view</li>
+                                <li><kbd>R</kbd> Refresh current view</li>
+                                <li><kbd>T</kbd> Toggle theme</li>
+                                <li><kbd>/</kbd> Focus search (Explore)</li>
+                                <li><kbd>ESC</kbd> Clear selection (Explore)</li>
+                                <li><kbd>1</kbd>-<kbd>4</kbd> Quick time ranges</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <nav class="nav-tabs">
-            <button class="nav-tab active" onclick="switchView('dashboard')">Dashboard</button>
-            <button class="nav-tab" onclick="switchView('explore')">Explore Metrics</button>
+            <button class="nav-tab active" onclick="switchView('dashboard')" id="dashboardTab">Dashboard</button>
+            <button class="nav-tab" onclick="switchView('explore')" id="exploreTab">Explore Metrics</button>
         </nav>
     </div>
 
@@ -656,8 +736,17 @@
         let exploreChart = null;
         let currentView = 'dashboard';
 
-        Chart.defaults.color = '#8b949e';
-        Chart.defaults.borderColor = '#30363d';
+        // Initialize theme from localStorage
+        const savedTheme = localStorage.getItem('tinyobs-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // Update chart defaults based on theme
+        function updateChartDefaults() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            Chart.defaults.color = theme === 'light' ? '#57606a' : '#8b949e';
+            Chart.defaults.borderColor = theme === 'light' ? '#d0d7de' : '#30363d';
+        }
+        updateChartDefaults();
 
         // Color palette for consistent chart colors
         const COLOR_PALETTE = [
@@ -684,6 +773,26 @@
             return COLOR_PALETTE[hash % COLOR_PALETTE.length];
         }
 
+        // Theme Toggle
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('tinyobs-theme', newTheme);
+
+            // Update theme toggle button
+            const toggle = document.getElementById('themeToggle');
+            toggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+
+            // Update chart defaults and re-render all charts
+            updateChartDefaults();
+            if (currentView === 'dashboard') {
+                refreshDashboard();
+            } else if (selectedMetrics.size > 0) {
+                renderExploreChart();
+            }
+        }
+
         // View Switching
         function switchView(view) {
             currentView = view;
@@ -691,7 +800,7 @@
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
 
             document.getElementById(`${view}-view`).classList.add('active');
-            event.target.classList.add('active');
+            document.getElementById(`${view}Tab`).classList.add('active');
 
             if (view === 'dashboard') {
                 loadDashboard();
@@ -1256,24 +1365,68 @@
             const searchBox = document.getElementById('searchBox');
             searchBox.addEventListener('input', filterMetrics);
 
-            // Keyboard shortcuts
+            // Initialize theme toggle button icon
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const themeToggleBtn = document.getElementById('themeToggle');
+            themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+
+            // Enhanced Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
-                // ESC to clear selection in Explore view
-                if (e.key === 'Escape' && currentView === 'explore') {
-                    clearSelection();
+                // Don't trigger shortcuts if user is typing in an input
+                if (e.target.tagName === 'INPUT' && e.key !== 'Escape') return;
+
+                // ESC to clear selection in Explore view or blur input
+                if (e.key === 'Escape') {
+                    if (currentView === 'explore') {
+                        clearSelection();
+                    }
+                    // Blur any focused input
+                    if (document.activeElement.tagName === 'INPUT') {
+                        document.activeElement.blur();
+                    }
                 }
+
+                // D for Dashboard view
+                if ((e.key === 'd' || e.key === 'D') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    switchView('dashboard');
+                }
+
+                // E for Explore view
+                if ((e.key === 'e' || e.key === 'E') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    switchView('explore');
+                }
+
                 // R to refresh current view
-                if (e.key === 'r' || e.key === 'R') {
+                if ((e.key === 'r' || e.key === 'R') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
                     if (currentView === 'dashboard') {
                         refreshDashboard();
                     } else {
                         refreshMetrics();
                     }
                 }
+
+                // T to toggle theme
+                if ((e.key === 't' || e.key === 'T') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    toggleTheme();
+                }
+
                 // / to focus search (if in explore view)
                 if (e.key === '/' && currentView === 'explore' && !e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
                     searchBox.focus();
+                }
+
+                // 1-4 for quick time range selection (Dashboard only)
+                if (currentView === 'dashboard' && e.target.tagName !== 'INPUT') {
+                    const timeRanges = { '1': '1h', '2': '6h', '3': '24h', '4': '7d' };
+                    if (timeRanges[e.key]) {
+                        e.preventDefault();
+                        setTimeRange(timeRanges[e.key]);
+                    }
                 }
             });
 
