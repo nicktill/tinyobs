@@ -1731,13 +1731,12 @@
                             // Real-time metrics update received
                             console.log(`📊 Received ${data.count} metrics updates`);
 
-                            // Refresh stats
+                            // Update header stats only (don't re-render entire dashboard)
                             loadStats();
 
-                            // Refresh current view
-                            if (currentView === 'dashboard') {
-                                refreshDashboard();
-                            }
+                            // Note: We don't auto-refresh the dashboard view to avoid
+                            // disrupting the user's interaction with charts/filters.
+                            // Stats in the header will update in real-time.
                         }
                     } catch (err) {
                         console.error('Failed to parse WebSocket message:', err);
