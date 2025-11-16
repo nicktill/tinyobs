@@ -45,6 +45,8 @@ func main() {
 	api := router.PathPrefix("/v1").Subrouter()
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
+	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
+	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 
 	// Serve static files
