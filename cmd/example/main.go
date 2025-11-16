@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"tinyobs/pkg/sdk"
-	"tinyobs/pkg/sdk/httpx"
+	"github.com/nicktill/tinyobs/pkg/sdk"
+	"github.com/nicktill/tinyobs/pkg/sdk/httpx"
 )
 
 var (

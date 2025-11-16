@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/sdk/transport"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/transport"
 )
 
 // Config holds configuration for the batcher

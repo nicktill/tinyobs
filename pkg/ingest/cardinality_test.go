@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 func TestValidateMetric(t *testing.T) {

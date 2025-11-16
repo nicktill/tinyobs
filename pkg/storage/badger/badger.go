@@ -11,8 +11,8 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/storage"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
 // Storage implements storage.Storage using BadgerDB (LSM tree)
