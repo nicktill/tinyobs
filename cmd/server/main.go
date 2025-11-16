@@ -66,6 +66,9 @@ func main() {
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
 
+	// Prometheus-compatible metrics endpoint (standard /metrics path)
+	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
+
 	// Serve static files
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 
