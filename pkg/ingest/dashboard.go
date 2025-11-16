@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"tinyobs/pkg/storage"
+	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // Resolution represents the time granularity of aggregated data

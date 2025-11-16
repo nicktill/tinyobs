@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // Transport defines the interface for sending metrics

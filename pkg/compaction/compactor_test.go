@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/storage"
-	"tinyobs/pkg/storage/memory"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/storage"
+	"github.com/nicktill/tinyobs/pkg/storage/memory"
 )
 
 func TestCompact5m_BasicAggregation(t *testing.T) {

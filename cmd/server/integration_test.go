@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"tinyobs/pkg/compaction"
-	"tinyobs/pkg/ingest"
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/storage/badger"
-	"tinyobs/pkg/storage/memory"
+	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/ingest"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/storage/badger"
+	"github.com/nicktill/tinyobs/pkg/storage/memory"
 
 	"github.com/gorilla/mux"
 )

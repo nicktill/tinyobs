@@ -112,6 +112,14 @@ The dashboard includes powerful keyboard shortcuts for fast navigation:
 
 ## Using the SDK
 
+### Installation
+
+```bash
+go get github.com/nicktill/tinyobs
+```
+
+### Basic Usage
+
 Here's how to add TinyObs to your own Go app:
 
 ```go
@@ -120,8 +128,9 @@ package main
 import (
     "context"
     "net/http"
-    "tinyobs/pkg/sdk"
-    "tinyobs/pkg/sdk/httpx"
+
+    "github.com/nicktill/tinyobs/pkg/sdk"
+    "github.com/nicktill/tinyobs/pkg/sdk/httpx"
 )
 
 func main() {
