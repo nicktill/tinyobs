@@ -41,6 +41,22 @@ open http://localhost:8080/dashboard.html
 
 You should see time-series charts updating in real-time. The dashboard auto-refreshes every 30 seconds.
 
+## Dashboard Features
+
+The dashboard includes powerful keyboard shortcuts for fast navigation:
+
+| Key | Action |
+|-----|--------|
+| `D` | Switch to Dashboard view |
+| `E` | Switch to Explore view |
+| `R` | Refresh current view |
+| `T` | Toggle light/dark theme |
+| `/` | Focus search (Explore view) |
+| `ESC` | Clear selection or unfocus input |
+| `1-4` | Quick time range selection (1h, 6h, 24h, 7d) |
+
+**Theme toggle:** Click the ☀️/🌙 icon in the header or press `T` to switch between light and dark modes. Your preference is saved automatically.
+
 ## Using the SDK
 
 Here's how to add TinyObs to your own Go app:
@@ -276,6 +292,10 @@ This bug is now driving the roadmap. The next version will have data retention p
 - [x] Dashboard templates (Go Runtime, HTTP API, Database presets)
 - [x] Label-based filtering UI with auto-discovery
 - [x] Modern gradient UI with improved UX
+- [x] Light/dark theme toggle with localStorage persistence
+- [x] Enhanced keyboard shortcuts (D, E, R, T, /, ESC, 1-4)
+- [x] Stable color assignment (no more flickering charts!)
+- [x] Auto-scroll to selected metrics in Explore view
 - [ ] Export/import dashboard configurations (JSON)
 - [ ] Time comparison view (compare to 24h ago)
 
