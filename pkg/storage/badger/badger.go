@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -274,12 +275,23 @@ func matchesQuery(m metrics.Metric, req storage.QueryRequest) bool {
 	return true
 }
 
-// seriesKeyString creates a string key for a series
+// seriesKeyString creates a deterministic string key for a series
 func seriesKeyString(name string, labels map[string]string) string {
-	// Simple string concatenation (production would use deterministic hash)
+	if len(labels) == 0 {
+		return name
+	}
+
+	// Sort label keys for deterministic ordering
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Build key with sorted labels
 	key := name
-	for k, v := range labels {
-		key += "," + k + "=" + v
+	for _, k := range keys {
+		key += "," + k + "=" + labels[k]
 	}
 	return key
 }
