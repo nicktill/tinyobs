@@ -63,11 +63,13 @@ func calculateDirSize(path string) (int64, error) {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "healthy",
 		"version": "1.0.0",
 		"uptime":  time.Since(startTime).String(),
-	})
+	}); err != nil {
+		log.Printf("❌ Failed to encode health response: %v", err)
+	}
 }
 
 var startTime = time.Now()
@@ -90,7 +92,9 @@ func handleStorageUsage(dataDir string) http.HandlerFunc {
 		log.Printf("📊 Storage usage: %d bytes (%.2f MB)", usedBytes, float64(usedBytes)/(1024*1024))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(usage)
+		if err := json.NewEncoder(w).Encode(usage); err != nil {
+			log.Printf("❌ Failed to encode storage usage response: %v", err)
+		}
 	}
 }
 

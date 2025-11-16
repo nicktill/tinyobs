@@ -1,45 +1,49 @@
 # TinyObs
 
-A simple observability platform for learning how monitoring systems work.
+**A metrics platform you can actually understand.**
 
 [![Go 1.21+](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-TinyObs is a metrics collection system built in Go. It's designed to be small enough to understand completely, but useful enough for real local development. Think of it as a teaching-focused alternative to Prometheus—you can actually read all the code and understand how it works.
+I built TinyObs because I was tired of treating observability systems like magic boxes. Prometheus has 300k+ lines of code. Datadog is a black box. I wanted something I could read in an afternoon and actually understand.
 
-**What it does:**
-- Collects metrics (counters, gauges, histograms) from your apps
-- Stores them persistently with BadgerDB (LSM tree with compression)
-- Multi-resolution storage: raw data → 5-minute → 1-hour aggregates (240x compression)
-- Smart dashboard with multi-metric overlays, templates, and label filtering
-- Query API with time-range filtering and auto-downsampling
-- Prometheus-compatible `/metrics` endpoint for Grafana integration
-- Provides a clean SDK for instrumenting Go applications
+TinyObs is a complete observability platform in ~2,600 lines of Go. It's small enough to read all the code, but sophisticated enough to actually use for local development. You get metrics collection, time-series storage, downsampling, a polished dashboard, and a clean SDK—all without Docker or vendor lock-in.
 
-**What it's good for:**
-- Learning how time-series databases work
-- Local development monitoring without Docker
-- Understanding observability patterns before committing to vendor lock-in
-- Building a portfolio project that demonstrates real engineering skills
+**What you get:**
+- Metrics SDK (counters, gauges, histograms) that takes 5 minutes to integrate
+- Persistent storage with BadgerDB (LSM trees + Snappy compression)
+- Automatic downsampling: raw → 5min → 1hr aggregates (240x compression)
+- Professional dashboard with light/dark themes and keyboard shortcuts
+- Query API with smart auto-downsampling based on time range
+- Prometheus-compatible `/metrics` endpoint (works with Grafana)
+- Actually readable code with comments explaining *why*, not just *what*
+
+**Why you might want this:**
+- You want to understand how Prometheus/Datadog work under the hood
+- You need local metrics during development without spinning up containers
+- You're building a portfolio and want to show you understand real systems
+- You're learning Go and want to see a complete, production-quality codebase
 
 ## Quick Start
 
+Get it running in 30 seconds:
+
 ```bash
-# Clone and run
+# Clone the repo
 git clone https://github.com/nicktill/tinyobs.git
 cd tinyobs
 
-# Terminal 1: Start the server
+# Terminal 1: Start TinyObs server
 go run cmd/server/main.go
 
-# Terminal 2: Start the example app (generates metrics)
+# Terminal 2: Run the example app (generates fake metrics)
 go run cmd/example/main.go
 
-# Browser: Open the dashboard
+# Terminal 3: Open the dashboard
 open http://localhost:8080/dashboard.html
 ```
 
-You should see time-series charts updating in real-time. The dashboard auto-refreshes every 30 seconds.
+You should see charts populating with fake API traffic. The example app simulates a web service with random latencies and occasional errors. Press `T` to toggle between light and dark themes, or `?` to see all keyboard shortcuts.
 
 ## Dashboard Features
 
@@ -249,27 +253,31 @@ tinyobs/
 
 ## The 53-Day Bug
 
-During development, I accidentally left the server running for 53 days straight. When I finally noticed, it had collected 2.9 million metrics and was using 4.5 GB of RAM.
+Early in development, I forgot to kill the server. I left it running on my laptop for 53 days.
 
-Turns out, closing your laptop doesn't kill background processes on macOS. The example app kept running through sleep/wake cycles, sending metrics every 2 seconds for almost two months.
+When I finally noticed, TinyObs had collected 2.9 million metrics and was eating 4.5 GB of RAM. The example app had been dutifully sending fake API metrics every 2 seconds, through sleep cycles, OS updates, and countless lid closes. macOS just... kept it alive.
 
-**What I learned:**
-- In-memory storage without retention policies = unbounded growth
-- Memory leaks are silent—systems slow down gradually but don't crash
-- Even simple projects need production patterns
-- macOS is really good at keeping processes alive
+**Lessons learned the hard way:**
+- In-memory storage without retention = your RAM becomes a black hole
+- Memory leaks are silent killers. Things just get slower until you notice
+- Even side projects need production patterns (retention policies, cardinality limits)
+- macOS is *really* good at keeping background processes alive
 
-This bug is now driving the roadmap. The next version will have data retention policies, persistent storage, and cardinality limits to prevent this kind of thing.
+This bug shaped the entire V2.0 roadmap. I added BadgerDB for persistent storage, retention policies, cardinality protection, and downsampling. The 53-day bug forced me to build a real system instead of a toy.
 
-## Known Issues & Limitations
+## What's Missing (And Why)
 
-**No query language:** You can only query one metric at a time. A PromQL-like query language is planned for V4.0.
+TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnable.
 
-**No alerting:** There's no way to get notified when metrics cross thresholds. Basic alerting is planned for V3.0.
+**No query language yet:** You query one metric at a time. No `rate()` or `sum()` functions. PromQL-like queries are planned for V4.0, but honestly, I'm still figuring out the best way to implement them without making the code explode.
 
-**30-second refresh:** Dashboard polls every 30 seconds instead of live streaming. WebSocket support planned for V3.0.
+**No alerting:** You can see your metrics, but it won't email you when things break. V3.0 will add basic threshold alerts, but for now you're on your own.
 
-**Must run from project directory:** The server looks for `./web/` and `./data/` relative to where you run it. Deploy with proper working directory.
+**No live updates:** Dashboard refreshes every 30 seconds via polling. WebSockets would be cooler, but polling is way simpler to implement and understand. (Also on the V3.0 list.)
+
+**Runs locally only:** No authentication, no HTTPS, no clustering. This is a local dev tool, not a production SaaS. If you want to run this in production, you'll need to add auth yourself.
+
+**Path assumptions:** The server expects `./web/` and `./data/` to exist relative to where you run it. This is lazy, I know. Just run it from the project directory.
 
 
 ## Roadmap
@@ -322,16 +330,22 @@ This bug is now driving the roadmap. The next version will have data retention p
 - [ ] Distributed tracing support (OpenTelemetry)
 - [ ] Service topology visualization
 
-## Why TinyObs?
+## Why I Built This
 
-Most observability systems are impossible to learn from:
-- **Prometheus** has 300k+ lines of code with complex TSDB internals
-- **Datadog** is closed source
-- **VictoriaMetrics** is production-focused, not teaching-focused
+I've used Prometheus, Datadog, and New Relic professionally. They're great tools, but they're also black boxes. When something breaks or behaves weirdly, you're stuck Googling instead of actually understanding what's happening.
 
-TinyObs is different. It's ~2,600 lines of readable Go code (excluding tests). Every design decision is documented. The code comments explain *why*, not just *what*. You can read the entire codebase in an afternoon and understand how a real monitoring system works.
+**The learning problem:**
+- Prometheus: 300k+ lines of C++ and Go with gnarly TSDB internals
+- Datadog/New Relic: Closed source, can't even look
+- VictoriaMetrics: Production-focused, optimized to hell, hard to follow
 
-If you want to understand how monitoring systems work, read the source. If you want to build something for your portfolio that shows real engineering depth, fork it and add features.
+I wanted something I could actually *understand*. So I built TinyObs with three rules:
+
+1. **Small enough to read**: ~2,600 lines of Go (excluding tests). You can read it all in one sitting.
+2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, professional UI.
+3. **Honest documentation**: Comments explain *why* decisions were made, not just what the code does.
+
+This is what I wish existed when I was learning systems programming. If you're trying to understand how observability works, or you want a meaty portfolio project that shows real engineering thinking, this is for you.
 
 ## Development
 
@@ -349,14 +363,25 @@ make build
 
 ## Contributing
 
-This is a learning project, so contributions are welcome—especially from beginners. If you're new to Go or observability, this is a good place to start.
+I built this to learn, and I'd love for others to learn from it too. Contributions are welcome, especially from people who are new to Go or systems programming.
 
-Look for issues labeled:
-- `good first issue` - Easy tasks for beginners
-- `help wanted` - Community input needed
-- `documentation` - Improve the docs
+**If you're a beginner:**
+- Look for issues labeled `good first issue` - these are specifically designed to be approachable
+- Don't worry about making mistakes. I'll help you through the PR process
+- Ask questions in issues. There are no dumb questions
 
-Fork, make changes, write tests, open a PR. I'm happy to review and help.
+**If you're experienced:**
+- Look for `help wanted` issues where I could use design input
+- Feel free to suggest architectural improvements, but keep in mind the goal is readability over optimization
+- Documentation improvements are always appreciated
+
+**General guidelines:**
+- Write tests for new features
+- Add comments explaining *why*, not just *what*
+- Keep the codebase small - if a feature adds >500 lines, let's discuss first
+- Run `go test ./...` before submitting
+
+Fork it, break it, fix it, submit a PR. I'll do my best to review quickly and help you get it merged.
 
 ## Resources
 
