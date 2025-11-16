@@ -31,20 +31,20 @@
         }
 
         [data-theme="light"] {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f6f8fa;
-            --bg-tertiary: #ffffff;
-            --border-color: #d0d7de;
-            --text-primary: #24292f;
-            --text-secondary: #57606a;
-            --accent-blue: #0969da;
-            --accent-green: #1a7f37;
-            --accent-orange: #bc4c00;
-            --accent-red: #cf222e;
-            --accent-purple: #8250df;
-            --chart-grid: #d0d7de;
-            --chart-text: #57606a;
-            --shadow: rgba(31, 35, 40, 0.12);
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f1f3f5;
+            --border-color: #dee2e6;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --accent-blue: #0d6efd;
+            --accent-green: #198754;
+            --accent-orange: #fd7e14;
+            --accent-red: #dc3545;
+            --accent-purple: #6f42c1;
+            --chart-grid: #e9ecef;
+            --chart-text: #6c757d;
+            --shadow: rgba(0, 0, 0, 0.08);
         }
 
         body {
@@ -201,7 +201,7 @@
         button.primary {
             background: var(--accent-blue);
             border-color: var(--accent-blue);
-            color: #000;
+            color: #ffffff;
         }
 
         button.primary:hover {
@@ -210,6 +210,11 @@
 
         select {
             min-width: 150px;
+            cursor: pointer;
+        }
+
+        select:hover {
+            border-color: var(--accent-blue);
         }
 
         .time-range-selector {
@@ -225,7 +230,8 @@
         .time-btn.active {
             background: var(--accent-blue);
             border-color: var(--accent-blue);
-            color: #000;
+            color: #ffffff;
+            font-weight: 600;
         }
 
         .dashboard-grid {
@@ -743,17 +749,28 @@
         // Update chart defaults based on theme
         function updateChartDefaults() {
             const theme = document.documentElement.getAttribute('data-theme');
-            Chart.defaults.color = theme === 'light' ? '#57606a' : '#8b949e';
-            Chart.defaults.borderColor = theme === 'light' ? '#d0d7de' : '#30363d';
+            Chart.defaults.color = theme === 'light' ? '#6c757d' : '#8b949e';
+            Chart.defaults.borderColor = theme === 'light' ? '#dee2e6' : '#30363d';
         }
         updateChartDefaults();
 
-        // Color palette for consistent chart colors
-        const COLOR_PALETTE = [
+        // Color palette for consistent chart colors (works in both themes)
+        const COLOR_PALETTE_DARK = [
             '#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff',
             '#ff7b72', '#79c0ff', '#56d364', '#ffa657', '#f778ba',
             '#a5d6ff', '#7ee787', '#ffbc6f', '#ff9492', '#d2a8ff'
         ];
+
+        const COLOR_PALETTE_LIGHT = [
+            '#0d6efd', '#198754', '#fd7e14', '#dc3545', '#6f42c1',
+            '#0dcaf0', '#20c997', '#ffc107', '#d63384', '#6610f2',
+            '#0a58ca', '#146c43', '#bb6d00', '#a71d2a', '#59359a'
+        ];
+
+        function getColorPalette() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            return theme === 'light' ? COLOR_PALETTE_LIGHT : COLOR_PALETTE_DARK;
+        }
 
         // Hash function for stable color assignment
         function hashString(str) {
@@ -770,7 +787,8 @@
         function getStableColor(metricName, labels) {
             const key = metricName + JSON.stringify(labels || {});
             const hash = hashString(key);
-            return COLOR_PALETTE[hash % COLOR_PALETTE.length];
+            const palette = getColorPalette();
+            return palette[hash % palette.length];
         }
 
         // Theme Toggle
