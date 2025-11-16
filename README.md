@@ -9,8 +9,10 @@ TinyObs is a metrics collection system built in Go. It's designed to be small en
 
 **What it does:**
 - Collects metrics (counters, gauges, histograms) from your apps
-- Stores them in memory (persistent storage coming soon)
-- Shows real-time data on a web dashboard
+- Stores them persistently with BadgerDB (LSM tree with compression)
+- Multi-resolution storage: raw data → 5-minute → 1-hour aggregates (240x compression)
+- Time-series dashboard with Chart.js for visualizing trends
+- Query API with time-range filtering and auto-downsampling
 - Provides a clean SDK for instrumenting Go applications
 
 **What it's good for:**
@@ -32,10 +34,11 @@ go run cmd/server/main.go
 # Terminal 2: Start the example app (generates metrics)
 go run cmd/example/main.go
 
-# Browser: Open http://localhost:8080
+# Browser: Open the dashboard
+open http://localhost:8080/dashboard.html
 ```
 
-You should see metrics appearing in real-time.
+You should see time-series charts updating in real-time. The dashboard auto-refreshes every 30 seconds.
 
 ## Using the SDK
 
@@ -95,29 +98,49 @@ duration.Observe(0.234, "endpoint", "/api/users")
 ## Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Your App      │    │   TinyObs SDK   │    │  Ingest Server  │
-│                 │    │                 │    │                 │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │  Metrics    │─┼────┼─│   Batcher   │─┼────┼─│  In-Memory  │ │
-│ │  Counter    │ │    │ │ (5s flush)  │ │    │ │   Storage   │ │
-│ │  Gauge      │ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ │  Histogram  │ │    │                 │    │                 │
-│ └─────────────┘ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│                 │    │ │HTTP Transport│─┼────┼─│   REST API  │ │
-│ ┌─────────────┐ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ │ Middleware  │ │    │                 │    │                 │
-│ │Auto-metrics │ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ └─────────────┘ │    │ │Runtime Stats│ │    │ │  Dashboard  │ │
-│                 │    │ └─────────────┘ │    │ │  (Web UI)   │ │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌──────────────────────────┐
+│   Your App      │    │   TinyObs SDK   │    │    Ingest Server         │
+│                 │    │                 │    │                          │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌──────────────────────┐ │
+│ │  Metrics    │─┼────┼─│   Batcher   │─┼────┼─│     REST API         │ │
+│ │  Counter    │ │    │ │ (5s flush)  │ │    │ │  /v1/ingest          │ │
+│ │  Gauge      │ │    │ └─────────────┘ │    │ │  /v1/query/range     │ │
+│ │  Histogram  │ │    │                 │    │ └──────────────────────┘ │
+│ └─────────────┘ │    │ ┌─────────────┐ │    │                          │
+│                 │    │ │HTTP Transport│─┼────┼─│ ┌──────────────────┐ │
+│ ┌─────────────┐ │    │ └─────────────┘ │    │ │  Storage Layer    │ │
+│ │ Middleware  │ │    │                 │    │ │  ┌──────────────┐ │ │
+│ │Auto-metrics │ │    │ ┌─────────────┐ │    │ │  │ Memory       │ │ │
+│ └─────────────┘ │    │ │Runtime Stats│ │    │ │  │ BadgerDB LSM │ │ │
+│                 │    │ └─────────────┘ │    │ │  └──────────────┘ │ │
+└─────────────────┘    └─────────────────┘    │ └──────────────────┘ │
+                                               │                          │
+                                               │ ┌──────────────────────┐ │
+                                               │ │  Compaction Engine   │ │
+                                               │ │  Raw → 5m → 1h       │ │
+                                               │ │  (240x reduction)    │ │
+                                               │ └──────────────────────┘ │
+                                               │                          │
+                                               │ ┌──────────────────────┐ │
+                                               │ │  Chart.js Dashboard  │ │
+                                               │ │  /dashboard.html     │ │
+                                               │ └──────────────────────┘ │
+                                               └──────────────────────────┘
 ```
 
-The SDK batches metrics and sends them every 5 seconds. The server stores everything in memory and serves a web dashboard that polls for updates.
+**How it works:**
+1. SDK batches metrics and sends every 5s via HTTP
+2. Server stores in BadgerDB (LSM tree with Snappy compression)
+3. Compaction runs hourly: raw → 5m → 1h aggregates (240x compression)
+4. Dashboard queries with auto-downsampling for performance
+5. Time-series charts update every 30s
 
 ## API
 
+TinyObs provides a REST API for ingesting and querying metrics:
+
 ### POST /v1/ingest
+Ingest metrics from your application.
 
 ```json
 {
@@ -137,30 +160,75 @@ The SDK batches metrics and sends them every 5 seconds. The server stores everyt
 }
 ```
 
-### GET /v1/metrics
+### GET /v1/query
+Query metrics with optional filtering.
 
-Returns all stored metrics as JSON.
+```bash
+curl "http://localhost:8080/v1/query?metric=cpu_usage&start=2025-11-16T00:00:00Z"
+```
+
+### GET /v1/query/range
+Query metrics with time-range and auto-downsampling.
+
+```bash
+curl "http://localhost:8080/v1/query/range?metric=cpu_usage&start=2025-11-16T00:00:00Z&end=2025-11-16T23:59:59Z&maxPoints=1000"
+```
+
+**Parameters:**
+- `metric` (required): Metric name to query
+- `start` (optional): Start time (RFC3339 or 2006-01-02T15:04:05)
+- `end` (optional): End time (RFC3339 or 2006-01-02T15:04:05)
+- `maxPoints` (optional): Maximum data points to return (default: 1000, max: 5000)
+
+Returns downsampled time-series data with automatic resolution selection (raw/5m/1h).
+
+### GET /v1/metrics/list
+List all available metric names from the last 24 hours.
+
+```bash
+curl "http://localhost:8080/v1/metrics/list"
+```
+
+### GET /v1/stats
+Get storage statistics.
+
+```bash
+curl "http://localhost:8080/v1/stats"
+```
+
+Returns total metrics count, unique series count, storage size, and time range.
 
 ## Project Structure
 
 ```
 tinyobs/
 ├── cmd/
-│   ├── server/          # Ingest server
-│   └── example/         # Example app
+│   ├── server/              # Ingest server (main.go + tests)
+│   └── example/             # Example app that generates metrics
 ├── pkg/
-│   ├── sdk/
-│   │   ├── client.go    # Main SDK client
-│   │   ├── batch/       # Batching logic
-│   │   ├── metrics/     # Counter, Gauge, Histogram
-│   │   ├── httpx/       # HTTP middleware
-│   │   ├── runtime/     # Runtime metrics collector
-│   │   └── transport/   # HTTP transport
-│   └── ingest/
-│       └── handler.go   # Server handlers
+│   ├── sdk/                 # Client SDK for instrumenting apps
+│   │   ├── client.go        # Main SDK client
+│   │   ├── batch/           # Batching logic (5s flush)
+│   │   ├── metrics/         # Counter, Gauge, Histogram types
+│   │   ├── httpx/           # HTTP middleware for auto-metrics
+│   │   ├── runtime/         # Runtime metrics collector (Go stats)
+│   │   └── transport/       # HTTP transport layer
+│   ├── ingest/              # Server-side ingestion
+│   │   ├── handler.go       # REST API handlers
+│   │   └── dashboard.go     # Dashboard API endpoints
+│   ├── storage/             # Pluggable storage layer
+│   │   ├── interface.go     # Storage abstraction
+│   │   ├── memory/          # In-memory storage (fast, ephemeral)
+│   │   └── badger/          # BadgerDB storage (persistent, LSM)
+│   └── compaction/          # Multi-resolution downsampling
+│       ├── compactor.go     # Compaction engine
+│       └── types.go         # Aggregate types and metadata
 └── web/
-    └── index.html       # Dashboard
+    ├── index.html           # Simple dashboard (legacy)
+    └── dashboard.html       # Chart.js time-series dashboard
 ```
+
+**Code stats:** ~2,600 lines of production Go code (excluding tests)
 
 ## The 53-Day Bug
 
@@ -176,43 +244,50 @@ Turns out, closing your laptop doesn't kill background processes on macOS. The e
 
 This bug is now driving the roadmap. The next version will have data retention policies, persistent storage, and cardinality limits to prevent this kind of thing.
 
-## Known Issues
+## Known Issues & Limitations
 
-**Memory grows forever:** The server keeps all metrics in memory with no cleanup. You need to restart it periodically.
+**Data retention cleanup disabled:** Compaction creates aggregates, but deletion is currently disabled. The server will accumulate data until manually restarted. This will be fixed in the next release.
 
-**No persistence:** Restarting loses all data.
+**No query language:** You can only query one metric at a time. A PromQL-like query language is planned.
 
-**Basic dashboard:** Just shows counts, no time-series graphs yet.
+**No alerting:** There's no way to get notified when metrics cross thresholds.
 
-**Must run from project directory:** The server looks for `./web/` relative to where you run it.
+**Must run from project directory:** The server looks for `./web/` and `./data/` relative to where you run it. Deploy with proper working directory.
 
 ## Roadmap
 
-### Phase 1: Production Foundations (next 2-3 weeks)
-- [ ] Data retention policies (fix the memory leak)
-- [ ] Time-series charts with Chart.js
-- [ ] Prometheus `/metrics` endpoint (Grafana compatibility)
-- [ ] Better example app with multiple endpoints
+### ✅ V2.0 - Completed
+- [x] Time-series charts with Chart.js
+- [x] BadgerDB integration (LSM-based storage with Snappy compression)
+- [x] Query API with time-range filtering (`/v1/query/range`)
+- [x] Downsampling (raw → 5m → 1h aggregates, 240x compression)
+- [x] Production-quality dashboard with auto-downsampling
 
-### Phase 2: Persistent Storage (3-5 weeks)
-- [ ] BadgerDB integration (LSM-based storage)
+### 🚧 V2.1 - Polish (In Progress)
+- [ ] Resolution-aware data retention (enable cleanup)
 - [ ] Cardinality protection (prevent label explosion)
-- [ ] Query API with time-range filtering
-- [ ] Downsampling (store raw data → 5m aggregates → 1h aggregates)
+- [ ] Prometheus `/metrics` endpoint (Grafana compatibility)
+- [ ] Comprehensive test coverage for edge cases
 
-### Phase 3: Advanced Features (2-3 months)
+### 📅 V3.0 - Query Language (Next 2-4 weeks)
+- [ ] Simple PromQL-like query language
+- [ ] Functions: `avg()`, `sum()`, `rate()`, `count()`
+- [ ] Label matching: `{service="api"}`
+- [ ] Time ranges: `[5m]`, `[1h]`
+- [ ] Query builder UI in dashboard
+
+### 🎯 V4.0 - Alerting & Production Features (2-3 months)
 - [ ] Alerting system with webhooks
-- [ ] PromQL query language (subset)
 - [ ] Performance benchmarks
-- [ ] Distributed tracing support
+- [ ] Better example app with multiple services
+- [ ] Authentication & API keys
+- [ ] Multi-tenancy support
 
-### Phase 4: Production-Ready (4-6 months)
-- [ ] Multi-tenancy
+### 🚀 V5.0+ - Advanced Features (4-6+ months)
 - [ ] High availability and clustering
 - [ ] Cloud storage backends (S3, GCS, MinIO)
+- [ ] Distributed tracing support (OpenTelemetry)
 - [ ] Service topology visualization
-
-See [ROADMAP.md](ROADMAP.md) for detailed plans.
 
 ## Why TinyObs?
 
@@ -221,7 +296,7 @@ Most observability systems are impossible to learn from:
 - **Datadog** is closed source
 - **VictoriaMetrics** is production-focused, not teaching-focused
 
-TinyObs is different. It's about 1,500 lines of readable Go code. Every design decision is documented. The code comments explain *why*, not just *what*.
+TinyObs is different. It's ~2,600 lines of readable Go code (excluding tests). Every design decision is documented. The code comments explain *why*, not just *what*. You can read the entire codebase in an afternoon and understand how a real monitoring system works.
 
 If you want to understand how monitoring systems work, read the source. If you want to build something for your portfolio that shows real engineering depth, fork it and add features.
 
