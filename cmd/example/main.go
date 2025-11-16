@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -15,24 +17,35 @@ import (
 	"tinyobs/pkg/sdk/httpx"
 )
 
+var (
+	requestCount   int64
+	errorCount     int64
+	activeRequests int64
+	startTime      time.Time
+)
+
 func main() {
+	startTime = time.Now()
+
 	// Initialize TinyObs client
+	log.Println("🚀 Initializing TinyObs client...")
 	client, err := sdk.New(sdk.ClientConfig{
-		Service:   "example-app",
-		APIKey:    "demo-key",
-		Endpoint:  "http://localhost:8080/v1/ingest",
+		Service:    "example-app",
+		APIKey:     "demo-key",
+		Endpoint:   "http://localhost:8080/v1/ingest",
 		FlushEvery: 5 * time.Second,
 	})
 	if err != nil {
-		log.Fatalf("Failed to create TinyObs client: %v", err)
+		log.Fatalf("❌ Failed to create TinyObs client: %v", err)
 	}
 
 	// Start the client
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	log.Println("📊 Starting metrics collection...")
 	if err := client.Start(ctx); err != nil {
-		log.Fatalf("Failed to start TinyObs client: %v", err)
+		log.Fatalf("❌ Failed to start TinyObs client: %v", err)
 	}
 	defer client.Stop()
 
@@ -44,53 +57,94 @@ func main() {
 
 	// Create HTTP server with middleware
 	mux := http.NewServeMux()
-	
+
 	// Add TinyObs middleware
 	handler := httpx.Middleware(client)(mux)
 
-	// Example endpoints
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Simulate some work
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
-		
-		// Increment active users
-		activeUsers.Inc()
-		defer activeUsers.Dec()
-		
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"message": "Hello from TinyObs!", "timestamp": "%s"}`, time.Now().Format(time.RFC3339))
-	})
+	// Stats page with live dashboard
+	mux.HandleFunc("/", serveStatsPage)
 
+	// Example endpoints
 	mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
-		// Simulate API call
-		time.Sleep(time.Duration(rand.Intn(200)) * time.Millisecond)
-		
+		atomic.AddInt64(&activeRequests, 1)
+		defer atomic.AddInt64(&activeRequests, -1)
+
+		start := time.Now()
+		latency := time.Duration(rand.Intn(200)) * time.Millisecond
+		time.Sleep(latency)
+
 		// Randomly simulate errors
 		if rand.Float32() < 0.1 { // 10% error rate
+			atomic.AddInt64(&errorCount, 1)
 			errorCounter.Inc("type", "api_error", "endpoint", "/api/users")
+			log.Printf("⚠️  ERROR: /api/users request failed (latency: %v)", latency)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-		
+
+		atomic.AddInt64(&requestCount, 1)
+		requestCounter.Inc("endpoint", "/api/users", "method", r.Method)
+		requestDuration.Observe(time.Since(start).Seconds())
+
+		log.Printf("✅ /api/users - 200 OK (latency: %v)", latency)
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}`)
 	})
 
 	mux.HandleFunc("/api/orders", func(w http.ResponseWriter, r *http.Request) {
-		// Simulate order processing
-		time.Sleep(time.Duration(rand.Intn(300)) * time.Millisecond)
-		
-		// Track order metrics
+		atomic.AddInt64(&activeRequests, 1)
+		defer atomic.AddInt64(&activeRequests, -1)
+
+		start := time.Now()
+		latency := time.Duration(rand.Intn(300)) * time.Millisecond
+		time.Sleep(latency)
+
+		atomic.AddInt64(&requestCount, 1)
 		requestCounter.Inc("endpoint", "/api/orders", "method", r.Method)
-		
+		requestDuration.Observe(time.Since(start).Seconds())
+
+		log.Printf("✅ /api/orders - 200 OK (latency: %v)", latency)
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"orders": [{"id": 1, "total": 99.99}, {"id": 2, "total": 149.99}]}`)
+	})
+
+	mux.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&activeRequests, 1)
+		defer atomic.AddInt64(&activeRequests, -1)
+
+		start := time.Now()
+		latency := time.Duration(rand.Intn(150)) * time.Millisecond
+		time.Sleep(latency)
+
+		atomic.AddInt64(&requestCount, 1)
+		requestCounter.Inc("endpoint", "/api/products", "method", r.Method)
+		requestDuration.Observe(time.Since(start).Seconds())
+
+		log.Printf("✅ /api/products - 200 OK (latency: %v)", latency)
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"products": [{"id": 1, "name": "Widget"}, {"id": 2, "name": "Gadget"}]}`)
 	})
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s"}`, time.Now().Format(time.RFC3339))
+		fmt.Fprintf(w, `{"status": "healthy", "uptime": "%v", "timestamp": "%s"}`,
+			time.Since(startTime).Round(time.Second), time.Now().Format(time.RFC3339))
+	})
+
+	// Stats API
+	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{
+			"requests": %d,
+			"errors": %d,
+			"active": %d,
+			"uptime": "%v"
+		}`, atomic.LoadInt64(&requestCount), atomic.LoadInt64(&errorCount),
+			atomic.LoadInt64(&activeRequests), time.Since(startTime).Round(time.Second))
 	})
 
 	// Start server
@@ -100,28 +154,59 @@ func main() {
 	}
 
 	go func() {
-		log.Println("Starting example app on :3001")
-		log.Println("Visit http://localhost:3001 to see the app in action")
-		log.Println("Visit http://localhost:8080 to see the TinyObs dashboard")
-		
+		log.Println("🌐 Starting example app on http://localhost:3001")
+		log.Println("📊 TinyObs dashboard: http://localhost:8080/dashboard.html")
+		log.Println("📈 Generating simulated traffic...")
+
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			log.Fatalf("❌ Server failed to start: %v", err)
 		}
 	}()
 
-	// Simulate some background activity
+	// Simulate background activity
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-		
+
+		log.Println("⚙️  Background job started (runs every 2s)")
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// Simulate some background metrics
+				latency := rand.Float64() * 0.5
 				requestCounter.Inc("type", "background_job")
-				requestDuration.Observe(rand.Float64() * 0.5) // 0-500ms
+				requestDuration.Observe(latency)
+				activeUsers.Set(float64(rand.Intn(10) + 1))
+				log.Printf("🔄 Background job executed (latency: %.3fs, active_users: %d)", latency, int(rand.Intn(10)+1))
+			}
+		}
+	}()
+
+	// Simulate periodic traffic
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		endpoints := []string{"/api/users", "/api/orders", "/api/products"}
+		log.Println("🚦 Traffic simulator started (requests every 5s)")
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				endpoint := endpoints[rand.Intn(len(endpoints))]
+				go func(ep string) {
+					resp, err := http.Get("http://localhost:3001" + ep)
+					if err != nil {
+						log.Printf("⚠️  Traffic simulation failed for %s: %v", ep, err)
+						return
+					}
+					defer resp.Body.Close()
+					log.Printf("🔵 Simulated request to %s - %d %s", ep, resp.StatusCode, resp.Status)
+				}(endpoint)
 			}
 		}
 	}()
@@ -131,14 +216,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down example app...")
+	log.Println("🛑 Shutting down example app...")
 
 	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Fatalf("❌ Server forced to shutdown: %v", err)
 	}
 
 	log.Println("👋 Example app exited")
