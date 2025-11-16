@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4/options"
 	"tinyobs/pkg/sdk/metrics"
 	"tinyobs/pkg/storage"
 )
@@ -36,8 +37,8 @@ func New(cfg Config) (*Storage, error) {
 
 	// Optimize for time-series workload
 	opts = opts.
-		WithCompression(badger.ZSTD). // Better compression for metrics
-		WithNumVersionsToKeep(1)       // We don't need versioning
+		WithCompression(options.Snappy). // Compression for metrics
+		WithNumVersionsToKeep(1)         // We don't need versioning
 
 	db, err := badger.Open(opts)
 	if err != nil {
