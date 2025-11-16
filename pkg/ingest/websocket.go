@@ -24,9 +24,10 @@ const (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins - appropriate for observability tool
-		// that may be accessed from various dashboards/tools
-		return true
+		origin := r.Header.Get("Origin")
+		// Allow same-origin requests, or requests with no Origin header
+		// No Origin header = direct connection (non-browser clients like curl, testing tools)
+		return origin == "" || origin == "http://"+r.Host || origin == "https://"+r.Host
 	},
 	ReadBufferSize:  wsReadBufferSize,
 	WriteBufferSize: wsWriteBufferSize,
@@ -122,6 +123,13 @@ func (h *MetricsHub) Broadcast(data interface{}) error {
 		log.Printf("⚠️  Broadcast channel full, dropping message")
 		return nil
 	}
+}
+
+// HasClients returns true if there are any connected WebSocket clients
+func (h *MetricsHub) HasClients() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients) > 0
 }
 
 // HandleWebSocket handles WebSocket upgrade requests
