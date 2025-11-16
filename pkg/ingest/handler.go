@@ -91,6 +91,12 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		End:   parseTimeParam(query.Get("end"), time.Now()),
 	}
 
+	// Validate time range
+	if !req.Start.Before(req.End) {
+		http.Error(w, "start must be before end", http.StatusBadRequest)
+		return
+	}
+
 	// Optional filters
 	if metricName := query.Get("metric"); metricName != "" {
 		req.MetricNames = []string{metricName}
@@ -138,10 +144,12 @@ func parseTimeParam(param string, defaultTime time.Time) time.Time {
 		return t
 	}
 
-	// Try Unix timestamp
+	// Try simple datetime format
 	if t, err := time.Parse("2006-01-02T15:04:05", param); err == nil {
 		return t
 	}
 
+	// Log warning about invalid format
+	fmt.Printf("Warning: invalid time format '%s', using default. Expected RFC3339 or 2006-01-02T15:04:05\n", param)
 	return defaultTime
 }

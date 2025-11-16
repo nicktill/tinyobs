@@ -44,6 +44,11 @@ func New(store storage.Storage) *Compactor {
 // - Rate of change
 // - Min/max bounds
 func (c *Compactor) Compact5m(ctx context.Context, start, end time.Time) error {
+	// Validate time range
+	if !end.After(start) {
+		return fmt.Errorf("invalid time range: end (%v) must be after start (%v)", end, start)
+	}
+
 	// Query raw metrics in the time range
 	rawMetrics, err := c.storage.Query(ctx, storage.QueryRequest{
 		Start: start,
@@ -120,6 +125,11 @@ func (c *Compactor) Compact5m(ctx context.Context, start, end time.Time) error {
 //
 // Total reduction: ~240x from raw samples
 func (c *Compactor) Compact1h(ctx context.Context, start, end time.Time) error {
+	// Validate time range
+	if !end.After(start) {
+		return fmt.Errorf("invalid time range: end (%v) must be after start (%v)", end, start)
+	}
+
 	// Query 5-minute aggregates
 	// In production, would filter by resolution
 	rawMetrics, err := c.storage.Query(ctx, storage.QueryRequest{

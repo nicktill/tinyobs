@@ -83,10 +83,19 @@ func FromMetric(m metrics.Metric) *Aggregate {
 	var sum, min, max float64
 	var count uint64
 
-	fmt.Sscanf(m.Labels["__sum__"], "%f", &sum)
-	fmt.Sscanf(m.Labels["__count__"], "%d", &count)
-	fmt.Sscanf(m.Labels["__min__"], "%f", &min)
-	fmt.Sscanf(m.Labels["__max__"], "%f", &max)
+	// Return nil if any required metadata is malformed
+	if _, err := fmt.Sscanf(m.Labels["__sum__"], "%f", &sum); err != nil {
+		return nil
+	}
+	if _, err := fmt.Sscanf(m.Labels["__count__"], "%d", &count); err != nil {
+		return nil
+	}
+	if _, err := fmt.Sscanf(m.Labels["__min__"], "%f", &min); err != nil {
+		return nil
+	}
+	if _, err := fmt.Sscanf(m.Labels["__max__"], "%f", &max); err != nil {
+		return nil
+	}
 
 	// Remove special labels to get user labels
 	userLabels := make(map[string]string)
