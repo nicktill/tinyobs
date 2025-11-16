@@ -25,10 +25,16 @@ const (
 )
 
 func main() {
+	// Ensure data directory exists
+	dataDir := "./data/tinyobs"
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
+	}
+
 	// Initialize storage
-	log.Println("Initializing BadgerDB storage at ./data/tinyobs")
+	log.Println("Initializing BadgerDB storage at " + dataDir)
 	store, err := badger.New(badger.Config{
-		Path: "./data/tinyobs",
+		Path: dataDir,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
@@ -99,17 +105,20 @@ func runCompaction(compactor *compaction.Compactor, stop chan bool) {
 	ticker := time.NewTicker(compactionInterval)
 	defer ticker.Stop()
 
-	// Run once on startup
-	log.Println("Running initial compaction...")
-	ctx := context.Background()
-	if err := compactor.CompactAndCleanup(ctx); err != nil {
-		log.Printf("Initial compaction failed: %v", err)
-	}
+	// Run once on startup (non-blocking)
+	go func() {
+		log.Println("Running initial compaction...")
+		ctx := context.Background()
+		if err := compactor.CompactAndCleanup(ctx); err != nil {
+			log.Printf("Initial compaction failed: %v", err)
+		}
+	}()
 
 	for {
 		select {
 		case <-ticker.C:
 			log.Println("Running scheduled compaction...")
+			ctx := context.Background()
 			if err := compactor.CompactAndCleanup(ctx); err != nil {
 				log.Printf("Compaction failed: %v", err)
 			} else {

@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -69,7 +70,7 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 		Limit: metricsListLimit,
 	})
 	if err != nil {
-		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -113,6 +114,12 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Basic validation: ensure metric name is reasonable
+	if len(metricName) > 256 {
+		http.Error(w, "metric name too long (max 256 chars)", http.StatusBadRequest)
+		return
+	}
+
 	// Parse time range
 	start := parseTimeParam(query.Get("start"), time.Now().Add(-1*time.Hour))
 	end := parseTimeParam(query.Get("end"), time.Now())
@@ -148,7 +155,7 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		MetricNames: []string{metricName},
 	})
 	if err != nil {
-		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
