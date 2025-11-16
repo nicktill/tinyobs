@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/storage"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
 const (

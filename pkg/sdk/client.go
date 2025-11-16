@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"tinyobs/pkg/sdk/batch"
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/sdk/runtime"
-	"tinyobs/pkg/sdk/transport"
+	"github.com/nicktill/tinyobs/pkg/sdk/batch"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/runtime"
+	"github.com/nicktill/tinyobs/pkg/sdk/transport"
 )
 
 // ClientConfig holds configuration for the TinyObs client

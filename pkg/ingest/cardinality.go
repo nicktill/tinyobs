@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // CardinalityTracker tracks unique time series to enforce cardinality limits

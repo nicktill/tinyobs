@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"tinyobs/pkg/compaction"
-	"tinyobs/pkg/ingest"
-	"tinyobs/pkg/storage/badger"
+	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/ingest"
+	"github.com/nicktill/tinyobs/pkg/storage/badger"
 
 	"github.com/gorilla/mux"
 )

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"tinyobs/pkg/sdk/metrics"
-	"tinyobs/pkg/storage"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
 // Storage stores metrics in memory. Data is lost on restart.

@@ -3,7 +3,7 @@ package ingest
 import (
 	"fmt"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // Cardinality and validation limits
