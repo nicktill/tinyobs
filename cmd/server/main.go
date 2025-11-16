@@ -49,19 +49,35 @@ func calculateDirSize(path string) (int64, error) {
 	return size, err
 }
 
+// handleHealth returns service health status
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "healthy",
+		"version": "1.0.0",
+		"uptime":  time.Since(startTime).String(),
+	})
+}
+
+var startTime = time.Now()
+
 // handleStorageUsage returns current storage usage
 func handleStorageUsage(dataDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		usedBytes, err := calculateDirSize(dataDir)
 		if err != nil {
 			log.Printf("❌ Failed to calculate storage usage: %v", err)
-			usedBytes = 0 // Return 0 on error instead of failing
+			http.Error(w, "Failed to calculate storage", http.StatusInternalServerError)
+			return
 		}
 
 		usage := StorageUsage{
 			UsedBytes: usedBytes,
 			MaxBytes:  maxStorageBytes,
 		}
+
+		log.Printf("📊 Storage usage: %d bytes (%.2f MB)", usedBytes, float64(usedBytes)/(1024*1024))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(usage)
@@ -106,6 +122,20 @@ func main() {
 	// Create router
 	router := mux.NewRouter()
 
+	// CORS middleware for API access
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// API routes
 	api := router.PathPrefix("/v1").Subrouter()
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
@@ -115,6 +145,7 @@ func main() {
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
+	api.HandleFunc("/health", handleHealth).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
