@@ -657,23 +657,21 @@ var statsPageTemplate = `<!DOCTYPE html>
         function showToast(type, title, message) {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
+            toast.className = 'toast ' + type;
 
             const icon = type === 'success' ? '✅' : '❌';
-            toast.innerHTML = `
-                <div class="toast-icon">${icon}</div>
-                <div class="toast-content">
-                    <div class="toast-title">${title}</div>
-                    <div class="toast-message">${message}</div>
-                </div>
-            `;
+            toast.innerHTML = '<div class="toast-icon">' + icon + '</div>' +
+                '<div class="toast-content">' +
+                    '<div class="toast-title">' + title + '</div>' +
+                    '<div class="toast-message">' + message + '</div>' +
+                '</div>';
 
             container.appendChild(toast);
 
-            setTimeout(() => {
+            setTimeout(function() {
                 toast.style.opacity = '0';
                 toast.style.transform = 'translateX(100%)';
-                setTimeout(() => toast.remove(), 300);
+                setTimeout(function() { toast.remove(); }, 300);
             }, 3000);
         }
 
@@ -685,16 +683,16 @@ var statsPageTemplate = `<!DOCTYPE html>
 
                 if (response.ok) {
                     const data = await response.json();
-                    showToast('success', `${path} - ${response.status}`, `Response time: ${duration}ms`);
-                    addLog(`✅ ${path} - 200 OK (${duration}ms)`);
+                    showToast('success', path + ' - ' + response.status, 'Response time: ' + duration + 'ms');
+                    addLog('✅ ' + path + ' - 200 OK (' + duration + 'ms)');
                 } else {
-                    showToast('error', `${path} - ${response.status}`, `Request failed`);
-                    addLog(`❌ ${path} - ${response.status} (${duration}ms)`);
+                    showToast('error', path + ' - ' + response.status, 'Request failed');
+                    addLog('❌ ' + path + ' - ' + response.status + ' (' + duration + 'ms)');
                 }
             } catch (error) {
                 const duration = Date.now() - startTime;
-                showToast('error', `${path} - Error`, error.message);
-                addLog(`❌ ${path} - ${error.message} (${duration}ms)`);
+                showToast('error', path + ' - Error', error.message);
+                addLog('❌ ' + path + ' - ' + error.message + ' (' + duration + 'ms)');
             }
         }
 
