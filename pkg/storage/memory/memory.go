@@ -64,7 +64,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 		if len(req.Labels) > 0 {
 			match := true
 			for k, v := range req.Labels {
-				if m.Labels[k] != v {
+				if m.Labels == nil || m.Labels[k] != v {
 					match = false
 					break
 				}

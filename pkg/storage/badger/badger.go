@@ -267,7 +267,7 @@ func matchesQuery(m metrics.Metric, req storage.QueryRequest) bool {
 
 	// Label filter
 	for k, v := range req.Labels {
-		if m.Labels[k] != v {
+		if m.Labels == nil || m.Labels[k] != v {
 			return false
 		}
 	}
