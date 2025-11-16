@@ -160,8 +160,9 @@ func main() {
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 
-	// Serve static files
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
+	// Serve static files (strip prefix to prevent path traversal)
+	fileServer := http.FileServer(http.Dir("./web/"))
+	router.PathPrefix("/").Handler(http.StripPrefix("/", fileServer))
 
 	// Create server
 	server := &http.Server{
