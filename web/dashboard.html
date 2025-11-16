@@ -509,6 +509,12 @@
                     <select id="serviceFilter" onchange="filterDashboard()">
                         <option value="all">All Services</option>
                     </select>
+                    <select id="endpointFilter" onchange="filterDashboard()">
+                        <option value="all">All Endpoints</option>
+                    </select>
+                    <select id="metricNameFilter" onchange="filterDashboard()">
+                        <option value="all">All Metrics</option>
+                    </select>
                     <div class="time-range-selector">
                         <button class="time-btn" data-range="1h" onclick="setTimeRange('1h')">1h</button>
                         <button class="time-btn" data-range="6h" onclick="setTimeRange('6h')">6h</button>
@@ -579,6 +585,31 @@
         Chart.defaults.color = '#8b949e';
         Chart.defaults.borderColor = '#30363d';
 
+        // Color palette for consistent chart colors
+        const COLOR_PALETTE = [
+            '#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff',
+            '#ff7b72', '#79c0ff', '#56d364', '#ffa657', '#f778ba',
+            '#a5d6ff', '#7ee787', '#ffbc6f', '#ff9492', '#d2a8ff'
+        ];
+
+        // Hash function for stable color assignment
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+        }
+
+        // Get stable color for a metric series
+        function getStableColor(metricName, labels) {
+            const key = metricName + JSON.stringify(labels || {});
+            const hash = hashString(key);
+            return COLOR_PALETTE[hash % COLOR_PALETTE.length];
+        }
+
         // View Switching
         function switchView(view) {
             currentView = view;
@@ -626,13 +657,23 @@
 
         async function loadStats() {
             try {
-                const response = await fetch('/v1/stats');
-                if (!response.ok) throw new Error('Stats endpoint failed');
+                const [statsRes, storageRes] = await Promise.all([
+                    fetch('/v1/stats'),
+                    fetch('/v1/storage')
+                ]);
 
-                const stats = await response.json();
-                document.getElementById('totalMetrics').textContent = stats.TotalMetrics?.toLocaleString() || '0';
-                document.getElementById('totalSeries').textContent = stats.TotalSeries?.toLocaleString() || '0';
-                document.getElementById('storageSize').textContent = formatBytes(stats.SizeBytes);
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    document.getElementById('totalMetrics').textContent = stats.TotalMetrics?.toLocaleString() || '0';
+                    document.getElementById('totalSeries').textContent = stats.TotalSeries?.toLocaleString() || '0';
+                }
+
+                if (storageRes.ok) {
+                    const storage = await storageRes.json();
+                    const usedPct = ((storage.used_bytes / storage.max_bytes) * 100).toFixed(1);
+                    document.getElementById('storageSize').textContent =
+                        formatBytes(storage.used_bytes) + ' / ' + formatBytes(storage.max_bytes) + ' (' + usedPct + '%)';
+                }
             } catch (error) {
                 console.error('Stats error:', error);
             }
@@ -656,16 +697,26 @@
                 const data = await response.json();
                 metricsData = data.metrics || [];
 
-                // Group by service
+                // Extract unique services, endpoints, and metric names
                 const services = {};
+                const endpoints = new Set();
+                const metricNames = new Set();
+
                 metricsData.forEach(m => {
                     const service = m.labels?.service || m.labels?.__service || 'default';
                     if (!services[service]) services[service] = [];
                     services[service].push(m);
+
+                    // Collect endpoints
+                    if (m.labels?.endpoint) endpoints.add(m.labels.endpoint);
+                    if (m.labels?.path) endpoints.add(m.labels.path);
+
+                    // Collect metric names
+                    metricNames.add(m.name);
                 });
 
-                // Update service filter
-                updateServiceFilters(Object.keys(services));
+                // Update all filters
+                updateDashboardFilters(Object.keys(services), Array.from(endpoints).sort(), Array.from(metricNames).sort());
 
                 // Render service sections
                 renderDashboard(services);
@@ -675,18 +726,30 @@
             }
         }
 
-        function updateServiceFilters(services) {
+        function updateDashboardFilters(services, endpoints, metricNames) {
+            // Update service filters
             const serviceFilter = document.getElementById('serviceFilter');
             const exploreServiceFilter = document.getElementById('exploreServiceFilter');
+            const serviceOptions = services.map(s => `<option value="${s}">${s}</option>`).join('');
+            serviceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
+            exploreServiceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
 
-            const options = services.map(s => `<option value="${s}">${s}</option>`).join('');
-            serviceFilter.innerHTML = '<option value="all">All Services</option>' + options;
-            exploreServiceFilter.innerHTML = '<option value="all">All Services</option>' + options;
+            // Update endpoint filter
+            const endpointFilter = document.getElementById('endpointFilter');
+            const endpointOptions = endpoints.map(e => `<option value="${e}">${e}</option>`).join('');
+            endpointFilter.innerHTML = '<option value="all">All Endpoints</option>' + endpointOptions;
+
+            // Update metric name filter
+            const metricNameFilter = document.getElementById('metricNameFilter');
+            const metricOptions = metricNames.map(m => `<option value="${m}">${m}</option>`).join('');
+            metricNameFilter.innerHTML = '<option value="all">All Metrics</option>' + metricOptions;
         }
 
         function renderDashboard(services) {
             const container = document.getElementById('dashboardContent');
             const selectedService = document.getElementById('serviceFilter').value;
+            const selectedEndpoint = document.getElementById('endpointFilter').value;
+            const selectedMetricName = document.getElementById('metricNameFilter').value;
 
             const servicesToShow = selectedService === 'all'
                 ? Object.entries(services)
@@ -698,12 +761,29 @@
             }
 
             container.innerHTML = servicesToShow.map(([service, metrics]) => {
+                // Apply filters
+                let filteredMetrics = metrics;
+
+                if (selectedEndpoint !== 'all') {
+                    filteredMetrics = filteredMetrics.filter(m =>
+                        m.labels?.endpoint === selectedEndpoint || m.labels?.path === selectedEndpoint
+                    );
+                }
+
+                if (selectedMetricName !== 'all') {
+                    filteredMetrics = filteredMetrics.filter(m => m.name === selectedMetricName);
+                }
+
                 // Group metrics by name
                 const grouped = {};
-                metrics.forEach(m => {
+                filteredMetrics.forEach(m => {
                     if (!grouped[m.name]) grouped[m.name] = [];
                     grouped[m.name].push(m);
                 });
+
+                if (Object.keys(grouped).length === 0) {
+                    return ''; // Skip this service if no metrics match filters
+                }
 
                 const chartCards = Object.entries(grouped).slice(0, 6).map(([name, data], idx) => {
                     const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
@@ -773,18 +853,20 @@
                 const result = await response.json();
                 if (!result.data || result.data.length === 0) return;
 
-                const colors = ['#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff'];
-                const datasets = result.data.slice(0, 5).map((series, idx) => ({
-                    label: series.labels && Object.keys(series.labels).length > 0
-                        ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
-                        : metricName,
-                    data: series.points.map(p => ({ x: p.t, y: p.v })),
-                    borderColor: colors[idx % colors.length],
-                    backgroundColor: colors[idx % colors.length] + '20',
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.1
-                }));
+                const datasets = result.data.slice(0, 5).map((series) => {
+                    const color = getStableColor(series.metric, series.labels);
+                    return {
+                        label: series.labels && Object.keys(series.labels).length > 0
+                            ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
+                            : metricName,
+                        data: series.points.map(p => ({ x: p.t, y: p.v })),
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    };
+                });
 
                 if (charts[canvasId]) charts[canvasId].destroy();
 
@@ -986,8 +1068,6 @@
                 });
 
                 const results = await Promise.all(promises);
-                const colors = ['#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff', '#ff7b72'];
-                let colorIndex = 0;
                 const datasets = [];
 
                 results.forEach(result => {
@@ -997,6 +1077,7 @@
                         const key = seriesKey({ name: series.metric, labels: series.labels });
                         if (!selectedMetrics.has(key)) return;
 
+                        const color = getStableColor(series.metric, series.labels);
                         const label = series.labels && Object.keys(series.labels).length > 0
                             ? `${series.metric}{${Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')}}`
                             : series.metric;
@@ -1004,13 +1085,12 @@
                         datasets.push({
                             label: label,
                             data: series.points.map(p => ({ x: p.t, y: p.v })),
-                            borderColor: colors[colorIndex % colors.length],
-                            backgroundColor: colors[colorIndex % colors.length] + '20',
+                            borderColor: color,
+                            backgroundColor: color + '20',
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.1
                         });
-                        colorIndex++;
                     });
                 });
 
