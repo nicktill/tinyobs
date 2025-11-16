@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -23,7 +25,48 @@ const (
 	serverWriteTimeout    = 10 * time.Second
 	shutdownTimeout       = 30 * time.Second
 	compactionInterval    = 1 * time.Hour
+	maxStorageBytes       = 10 * 1024 * 1024 * 1024 // 10 GB default
 )
+
+// StorageUsage represents current storage usage stats
+type StorageUsage struct {
+	UsedBytes int64 `json:"used_bytes"`
+	MaxBytes  int64 `json:"max_bytes"`
+}
+
+// calculateDirSize recursively calculates directory size in bytes
+func calculateDirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
+}
+
+// handleStorageUsage returns current storage usage
+func handleStorageUsage(dataDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		usedBytes, err := calculateDirSize(dataDir)
+		if err != nil {
+			log.Printf("❌ Failed to calculate storage usage: %v", err)
+			usedBytes = 0 // Return 0 on error instead of failing
+		}
+
+		usage := StorageUsage{
+			UsedBytes: usedBytes,
+			MaxBytes:  maxStorageBytes,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(usage)
+	}
+}
 
 func main() {
 	log.Println("🚀 Starting TinyObs Server...")
@@ -71,6 +114,7 @@ func main() {
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
+	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
