@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -23,7 +25,74 @@ const (
 	serverWriteTimeout    = 10 * time.Second
 	shutdownTimeout       = 30 * time.Second
 	compactionInterval    = 1 * time.Hour
+	maxStorageBytes       = 10 * 1024 * 1024 * 1024 // 10 GB default
 )
+
+// StorageUsage represents current storage usage stats
+type StorageUsage struct {
+	UsedBytes int64 `json:"used_bytes"`
+	MaxBytes  int64 `json:"max_bytes"`
+}
+
+// calculateDirSize recursively calculates directory size in bytes
+// Uses actual disk blocks allocated (like `du`) rather than logical file size
+// to handle sparse files correctly (e.g., BadgerDB's .vlog files)
+func calculateDirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			// Get actual disk usage using blocks allocated
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if ok {
+				// Blocks are 512 bytes on most Unix systems
+				size += stat.Blocks * 512
+			} else {
+				// Fallback to logical size if syscall fails
+				size += info.Size()
+			}
+		}
+		return nil
+	})
+	return size, err
+}
+
+// handleHealth returns service health status
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "healthy",
+		"version": "1.0.0",
+		"uptime":  time.Since(startTime).String(),
+	})
+}
+
+var startTime = time.Now()
+
+// handleStorageUsage returns current storage usage
+func handleStorageUsage(dataDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		usedBytes, err := calculateDirSize(dataDir)
+		if err != nil {
+			log.Printf("❌ Failed to calculate storage usage: %v", err)
+			http.Error(w, "Failed to calculate storage", http.StatusInternalServerError)
+			return
+		}
+
+		usage := StorageUsage{
+			UsedBytes: usedBytes,
+			MaxBytes:  maxStorageBytes,
+		}
+
+		log.Printf("📊 Storage usage: %d bytes (%.2f MB)", usedBytes, float64(usedBytes)/(1024*1024))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(usage)
+	}
+}
 
 func main() {
 	log.Println("🚀 Starting TinyObs Server...")
@@ -63,6 +132,20 @@ func main() {
 	// Create router
 	router := mux.NewRouter()
 
+	// CORS middleware for API access
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// API routes
 	api := router.PathPrefix("/v1").Subrouter()
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
@@ -71,6 +154,8 @@ func main() {
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
+	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
+	api.HandleFunc("/health", handleHealth).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
