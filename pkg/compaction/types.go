@@ -91,7 +91,7 @@ func FromMetric(m metrics.Metric) *Aggregate {
 	// Remove special labels to get user labels
 	userLabels := make(map[string]string)
 	for k, v := range m.Labels {
-		if k[0] != '_' { // Skip __resolution__, __sum__, etc.
+		if len(k) > 0 && k[0] != '_' { // Skip __resolution__, __sum__, etc.
 			userLabels[k] = v
 		}
 	}
