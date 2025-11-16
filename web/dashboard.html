@@ -24,6 +24,27 @@
             --accent-green: #3fb950;
             --accent-orange: #f0883e;
             --accent-red: #f85149;
+            --accent-purple: #bc8cff;
+            --chart-grid: #30363d;
+            --chart-text: #8b949e;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-tertiary: #ffffff;
+            --border-color: #d0d7de;
+            --text-primary: #24292f;
+            --text-secondary: #57606a;
+            --accent-blue: #0969da;
+            --accent-green: #1a7f37;
+            --accent-orange: #bc4c00;
+            --accent-red: #cf222e;
+            --accent-purple: #8250df;
+            --chart-grid: #d0d7de;
+            --chart-text: #57606a;
+            --shadow: rgba(31, 35, 40, 0.12);
         }
 
         body {
@@ -36,28 +57,31 @@
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
-            padding: 1rem 2rem;
             position: sticky;
             top: 0;
             z-index: 100;
         }
 
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
+        .header-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .logo {
             font-size: 1.25rem;
             font-weight: 600;
             color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
-        .logo span {
+        .logo-icon {
             color: var(--accent-blue);
+            font-size: 1.5rem;
         }
 
         .header-stats {
@@ -84,53 +108,70 @@
             margin-top: 0.25rem;
         }
 
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 2rem;
+        }
+
+        .nav-tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .nav-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 2rem;
         }
 
-        .section {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+        .view {
+            display: none;
         }
 
-        .section-header {
+        .view.active {
+            display: block;
+        }
+
+        .toolbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
         }
 
-        .section-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .section-subtitle {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-            margin-top: 0.25rem;
-        }
-
-        .controls {
+        .toolbar-left {
             display: flex;
             gap: 1rem;
             align-items: center;
             flex-wrap: wrap;
         }
 
-        .input-group {
+        .toolbar-right {
             display: flex;
+            gap: 1rem;
             align-items: center;
-            gap: 0.5rem;
-            position: relative;
         }
 
         input, select, button {
@@ -167,34 +208,8 @@
             opacity: 0.9;
         }
 
-        .autocomplete {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-top: none;
-            border-radius: 0 0 6px 6px;
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-            z-index: 10;
-        }
-
-        .autocomplete.show {
-            display: block;
-        }
-
-        .autocomplete-item {
-            padding: 0.5rem 0.75rem;
-            cursor: pointer;
-            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-            font-size: 0.8125rem;
-        }
-
-        .autocomplete-item:hover {
-            background: var(--bg-secondary);
+        select {
+            min-width: 150px;
         }
 
         .time-range-selector {
@@ -213,6 +228,70 @@
             color: #000;
         }
 
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .chart-card:hover {
+            box-shadow: 0 4px 12px var(--shadow);
+            border-color: var(--accent-blue);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chart-title {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-subtitle {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .chart-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            padding: 0.375rem 0.5rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
         .metrics-browser {
             display: grid;
             grid-template-columns: 1fr;
@@ -220,11 +299,12 @@
         }
 
         .metric-row {
-            background: var(--bg-tertiary);
+            background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px var(--shadow);
             cursor: pointer;
             position: relative;
         }
@@ -305,45 +385,6 @@
             margin-right: 0.25rem;
         }
 
-        .chart-container {
-            background: var(--bg-tertiary);
-            border-radius: 6px;
-            padding: 1.5rem;
-            margin-top: 1rem;
-        }
-
-        .chart-wrapper {
-            position: relative;
-            height: 450px;
-        }
-
-        .chart-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .chart-stat {
-            text-align: center;
-        }
-
-        .chart-stat-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .chart-stat-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-top: 0.25rem;
-        }
-
         .empty-state {
             text-align: center;
             padding: 4rem 2rem;
@@ -354,16 +395,6 @@
             font-size: 3rem;
             margin-bottom: 1rem;
             opacity: 0.5;
-        }
-
-        .error {
-            background: rgba(248, 81, 73, 0.1);
-            border: 1px solid var(--accent-red);
-            color: var(--accent-red);
-            padding: 1rem;
-            border-radius: 6px;
-            margin-bottom: 1rem;
-            font-size: 0.875rem;
         }
 
         .loading {
@@ -399,27 +430,189 @@
             color: var(--accent-green);
         }
 
+        .service-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .service-section:hover {
+            box-shadow: 0 4px 16px var(--shadow);
+        }
+
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            padding: 0.75rem;
+            border-radius: 6px;
+            transition: background 0.2s ease;
+        }
+
+        .service-header:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .service-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .service-icon {
+            font-size: 1.25rem;
+        }
+
+        .collapse-icon {
+            transition: transform 0.2s;
+        }
+
+        .service-section.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .service-section.collapsed .service-charts {
+            display: none;
+        }
+
+        .service-charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .theme-toggle:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
+        .help-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: help;
+            font-size: 0.875rem;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .help-btn:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
+        .help-tooltip {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-blue);
+            border-radius: 6px;
+            padding: 1rem;
+            min-width: 280px;
+            z-index: 1000;
+            box-shadow: 0 8px 24px var(--shadow);
+        }
+
+        .help-btn:hover .help-tooltip {
+            display: block;
+        }
+
+        .help-tooltip h4 {
+            margin: 0 0 0.5rem 0;
+            color: var(--accent-blue);
+            font-size: 0.875rem;
+        }
+
+        .help-tooltip ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .help-tooltip li {
+            padding: 0.25rem 0;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .help-tooltip kbd {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 0.125rem 0.375rem;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-green);
+        }
+
         @media (max-width: 768px) {
             .header-stats {
                 display: none;
             }
 
-            .controls {
+            .toolbar {
                 flex-direction: column;
                 align-items: stretch;
             }
 
-            .chart-stats {
-                grid-template-columns: repeat(2, 1fr);
+            .toolbar-left, .toolbar-right {
+                flex-direction: column;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .service-charts {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="header-content">
+        <div class="header-top">
             <div class="logo">
-                <span>●</span> TinyObs
+                <span class="logo-icon">●</span>
+                <span>TinyObs</span>
             </div>
             <div class="header-stats">
                 <div class="stat-item">
@@ -434,57 +627,102 @@
                     <div class="stat-label">Storage</div>
                     <div class="stat-value" id="storageSize">-</div>
                 </div>
+                <div class="header-controls">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme (T)" id="themeToggle">
+                        ☀️
+                    </button>
+                    <div class="help-btn">
+                        ?
+                        <div class="help-tooltip">
+                            <h4>Keyboard Shortcuts</h4>
+                            <ul>
+                                <li><kbd>D</kbd> Dashboard view</li>
+                                <li><kbd>E</kbd> Explore view</li>
+                                <li><kbd>R</kbd> Refresh current view</li>
+                                <li><kbd>T</kbd> Toggle theme</li>
+                                <li><kbd>/</kbd> Focus search (Explore)</li>
+                                <li><kbd>ESC</kbd> Clear selection (Explore)</li>
+                                <li><kbd>1</kbd>-<kbd>4</kbd> Quick time ranges</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+        <nav class="nav-tabs">
+            <button class="nav-tab active" onclick="switchView('dashboard')" id="dashboardTab">Dashboard</button>
+            <button class="nav-tab" onclick="switchView('explore')" id="exploreTab">Explore Metrics</button>
+        </nav>
     </div>
 
     <div class="container">
-        <div id="error" class="error" style="display: none;"></div>
-
-        <div class="section">
-            <div class="section-header">
-                <div>
-                    <div class="section-title">Metrics Explorer</div>
-                    <div class="section-subtitle">Click metrics to visualize • Search to filter • Select multiple for comparison</div>
-                </div>
-                <div class="controls">
-                    <div class="input-group">
-                        <input type="text" id="searchBox" placeholder="Search metrics..." style="width: 300px;" autocomplete="off">
-                        <div id="autocomplete" class="autocomplete"></div>
-                    </div>
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view active">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <select id="serviceFilter" onchange="filterDashboard()">
+                        <option value="all">All Services</option>
+                    </select>
+                    <select id="endpointFilter" onchange="filterDashboard()">
+                        <option value="all">All Endpoints</option>
+                    </select>
+                    <select id="metricNameFilter" onchange="filterDashboard()">
+                        <option value="all">All Metrics</option>
+                    </select>
                     <div class="time-range-selector">
-                        <button class="time-btn" data-range="1h">1h</button>
-                        <button class="time-btn" data-range="6h">6h</button>
-                        <button class="time-btn active" data-range="24h">24h</button>
-                        <button class="time-btn" data-range="7d">7d</button>
+                        <button class="time-btn" data-range="1h" onclick="setTimeRange('1h')">1h</button>
+                        <button class="time-btn" data-range="6h" onclick="setTimeRange('6h')">6h</button>
+                        <button class="time-btn active" data-range="24h" onclick="setTimeRange('24h')">24h</button>
+                        <button class="time-btn" data-range="7d" onclick="setTimeRange('7d')">7d</button>
                     </div>
-                    <button class="primary" onclick="refreshData()">Refresh</button>
+                </div>
+                <div class="toolbar-right">
+                    <button class="primary" onclick="refreshDashboard()">↻ Refresh</button>
+                </div>
+            </div>
+
+            <div id="dashboardContent">
+                <div class="loading">Loading dashboard</div>
+            </div>
+        </div>
+
+        <!-- Explore View -->
+        <div id="explore-view" class="view">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <input type="text" id="searchBox" placeholder="Search metrics..." style="width: 300px;">
+                    <select id="metricTypeFilter" onchange="filterMetrics()">
+                        <option value="all">All Types</option>
+                        <option value="counter">Counters</option>
+                        <option value="gauge">Gauges</option>
+                        <option value="histogram">Histograms</option>
+                    </select>
+                    <select id="exploreServiceFilter" onchange="filterMetrics()">
+                        <option value="all">All Services</option>
+                    </select>
+                </div>
+                <div class="toolbar-right">
+                    <span class="badge success" id="selectedCount">0 selected</span>
+                    <button onclick="clearSelection()">Clear</button>
+                    <button class="primary" onclick="refreshMetrics()">↻ Refresh</button>
                 </div>
             </div>
 
             <div id="metricsBrowser" class="metrics-browser">
                 <div class="loading">Loading metrics</div>
             </div>
-        </div>
 
-        <div class="section" id="chartSection" style="display: none;">
-            <div class="section-header">
-                <div>
-                    <div class="section-title">Time Series Visualization</div>
-                    <div class="section-subtitle">Historical trends and patterns</div>
-                </div>
-                <div class="controls">
-                    <span class="badge success" id="selectedCount">0 selected</span>
-                    <button onclick="clearSelection()">Clear Selection</button>
-                    <button onclick="exportChart()">Export PNG</button>
-                </div>
-            </div>
-
-            <div id="chartStats" class="chart-stats"></div>
-
-            <div class="chart-container">
-                <div class="chart-wrapper">
-                    <canvas id="metricsChart"></canvas>
+            <div id="selectedChart" style="display: none; margin-top: 1.5rem;">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Selected Metrics</div>
+                            <div class="chart-subtitle">Time series comparison</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="exploreChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -494,21 +732,97 @@
         let metricsData = [];
         let selectedMetrics = new Set();
         let currentRange = '24h';
-        let chart = null;
-        let searchTerm = '';
-        let allMetricNames = new Set();
-        let metricRowIndex = 0; // For unique IDs
+        let charts = {};
+        let exploreChart = null;
+        let currentView = 'dashboard';
 
-        Chart.defaults.color = '#8b949e';
-        Chart.defaults.borderColor = '#30363d';
+        // Initialize theme from localStorage
+        const savedTheme = localStorage.getItem('tinyobs-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
 
-        function showError(message) {
-            const errorDiv = document.getElementById('error');
-            errorDiv.textContent = '⚠️ ' + message;
-            errorDiv.style.display = 'block';
-            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        // Update chart defaults based on theme
+        function updateChartDefaults() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            Chart.defaults.color = theme === 'light' ? '#57606a' : '#8b949e';
+            Chart.defaults.borderColor = theme === 'light' ? '#d0d7de' : '#30363d';
+        }
+        updateChartDefaults();
+
+        // Color palette for consistent chart colors
+        const COLOR_PALETTE = [
+            '#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff',
+            '#ff7b72', '#79c0ff', '#56d364', '#ffa657', '#f778ba',
+            '#a5d6ff', '#7ee787', '#ffbc6f', '#ff9492', '#d2a8ff'
+        ];
+
+        // Hash function for stable color assignment
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
         }
 
+        // Get stable color for a metric series
+        function getStableColor(metricName, labels) {
+            const key = metricName + JSON.stringify(labels || {});
+            const hash = hashString(key);
+            return COLOR_PALETTE[hash % COLOR_PALETTE.length];
+        }
+
+        // Theme Toggle
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('tinyobs-theme', newTheme);
+
+            // Update theme toggle button
+            const toggle = document.getElementById('themeToggle');
+            toggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+
+            // Update chart defaults and re-render all charts
+            updateChartDefaults();
+            if (currentView === 'dashboard') {
+                refreshDashboard();
+            } else if (selectedMetrics.size > 0) {
+                renderExploreChart();
+            }
+        }
+
+        // View Switching
+        function switchView(view) {
+            currentView = view;
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+            document.getElementById(`${view}-view`).classList.add('active');
+            document.getElementById(`${view}Tab`).classList.add('active');
+
+            if (view === 'dashboard') {
+                loadDashboard();
+            } else {
+                loadMetrics();
+            }
+        }
+
+        // Time Range
+        function setTimeRange(range) {
+            currentRange = range;
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (currentView === 'dashboard') {
+                refreshDashboard();
+            } else if (selectedMetrics.size > 0) {
+                renderExploreChart();
+            }
+        }
+
+        // Stats
         function formatBytes(bytes) {
             if (!bytes) return '0 B';
             const k = 1024;
@@ -526,18 +840,295 @@
 
         async function loadStats() {
             try {
-                const response = await fetch('/v1/stats');
-                if (!response.ok) throw new Error('Stats endpoint failed');
+                const [statsRes, storageRes] = await Promise.all([
+                    fetch('/v1/stats'),
+                    fetch('/v1/storage')
+                ]);
 
-                const stats = await response.json();
-                document.getElementById('totalMetrics').textContent = stats.TotalMetrics?.toLocaleString() || '0';
-                document.getElementById('totalSeries').textContent = stats.TotalSeries?.toLocaleString() || '0';
-                document.getElementById('storageSize').textContent = formatBytes(stats.SizeBytes);
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    document.getElementById('totalMetrics').textContent = stats.TotalMetrics?.toLocaleString() || '0';
+                    document.getElementById('totalSeries').textContent = stats.TotalSeries?.toLocaleString() || '0';
+                }
+
+                if (storageRes.ok) {
+                    const storage = await storageRes.json();
+                    const usedPct = ((storage.used_bytes / storage.max_bytes) * 100).toFixed(1);
+                    document.getElementById('storageSize').textContent =
+                        formatBytes(storage.used_bytes) + ' / ' + formatBytes(storage.max_bytes) + ' (' + usedPct + '%)';
+                }
             } catch (error) {
                 console.error('Stats error:', error);
             }
         }
 
+        // Dashboard View
+        async function loadDashboard() {
+            const container = document.getElementById('dashboardContent');
+            container.innerHTML = '<div class="loading">Loading dashboard</div>';
+
+            try {
+                const now = Date.now();
+                const ranges = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
+                const hours = ranges[currentRange];
+                const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
+                const end = new Date(now).toISOString();
+
+                const response = await fetch(`/v1/query?start=${start}&end=${end}`);
+                if (!response.ok) throw new Error('Query failed');
+
+                const data = await response.json();
+                metricsData = data.metrics || [];
+
+                // Extract unique services, endpoints, and metric names
+                const services = {};
+                const endpoints = new Set();
+                const metricNames = new Set();
+
+                metricsData.forEach(m => {
+                    const service = m.labels?.service || m.labels?.__service || 'default';
+                    if (!services[service]) services[service] = [];
+                    services[service].push(m);
+
+                    // Collect endpoints
+                    if (m.labels?.endpoint) endpoints.add(m.labels.endpoint);
+                    if (m.labels?.path) endpoints.add(m.labels.path);
+
+                    // Collect metric names
+                    metricNames.add(m.name);
+                });
+
+                // Update all filters
+                updateDashboardFilters(Object.keys(services), Array.from(endpoints).sort(), Array.from(metricNames).sort());
+
+                // Render service sections
+                renderDashboard(services);
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load dashboard</p></div>';
+            }
+        }
+
+        function updateDashboardFilters(services, endpoints, metricNames) {
+            // Update service filters
+            const serviceFilter = document.getElementById('serviceFilter');
+            const exploreServiceFilter = document.getElementById('exploreServiceFilter');
+            const serviceOptions = services.map(s => `<option value="${s}">${s}</option>`).join('');
+            serviceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
+            exploreServiceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
+
+            // Update endpoint filter
+            const endpointFilter = document.getElementById('endpointFilter');
+            const endpointOptions = endpoints.map(e => `<option value="${e}">${e}</option>`).join('');
+            endpointFilter.innerHTML = '<option value="all">All Endpoints</option>' + endpointOptions;
+
+            // Update metric name filter
+            const metricNameFilter = document.getElementById('metricNameFilter');
+            const metricOptions = metricNames.map(m => `<option value="${m}">${m}</option>`).join('');
+            metricNameFilter.innerHTML = '<option value="all">All Metrics</option>' + metricOptions;
+        }
+
+        function renderDashboard(services) {
+            const container = document.getElementById('dashboardContent');
+            const selectedService = document.getElementById('serviceFilter').value;
+            const selectedEndpoint = document.getElementById('endpointFilter').value;
+            const selectedMetricName = document.getElementById('metricNameFilter').value;
+
+            const servicesToShow = selectedService === 'all'
+                ? Object.entries(services)
+                : [[selectedService, services[selectedService]]].filter(([_, v]) => v);
+
+            if (servicesToShow.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No metrics for this service</p></div>';
+                return;
+            }
+
+            container.innerHTML = servicesToShow.map(([service, metrics]) => {
+                // Apply filters
+                let filteredMetrics = metrics;
+
+                if (selectedEndpoint !== 'all') {
+                    filteredMetrics = filteredMetrics.filter(m =>
+                        m.labels?.endpoint === selectedEndpoint || m.labels?.path === selectedEndpoint
+                    );
+                }
+
+                if (selectedMetricName !== 'all') {
+                    filteredMetrics = filteredMetrics.filter(m => m.name === selectedMetricName);
+                }
+
+                // Group metrics by name
+                const grouped = {};
+                filteredMetrics.forEach(m => {
+                    if (!grouped[m.name]) grouped[m.name] = [];
+                    grouped[m.name].push(m);
+                });
+
+                if (Object.keys(grouped).length === 0) {
+                    return ''; // Skip this service if no metrics match filters
+                }
+
+                const chartCards = Object.entries(grouped).slice(0, 6).map(([name, data], idx) => {
+                    const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
+                    return `
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div>
+                                    <div class="chart-title">${name}</div>
+                                    <div class="chart-subtitle">${data.length} series</div>
+                                </div>
+                            </div>
+                            <div class="chart-wrapper">
+                                <canvas id="${chartId}"></canvas>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="service-section" id="service-${service}">
+                        <div class="service-header" onclick="toggleService('${service}')">
+                            <h3>
+                                <span class="service-icon">📦</span>
+                                ${service}
+                                <span class="badge">${Object.keys(grouped).length} metrics</span>
+                            </h3>
+                            <span class="collapse-icon">▼</span>
+                        </div>
+                        <div class="service-charts">
+                            ${chartCards}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Render charts after DOM update
+            setTimeout(() => {
+                servicesToShow.forEach(([service, metrics]) => {
+                    // Apply the same filters when rendering charts
+                    let filteredMetrics = metrics;
+
+                    if (selectedEndpoint !== 'all') {
+                        filteredMetrics = filteredMetrics.filter(m =>
+                            m.labels?.endpoint === selectedEndpoint || m.labels?.path === selectedEndpoint
+                        );
+                    }
+
+                    if (selectedMetricName !== 'all') {
+                        filteredMetrics = filteredMetrics.filter(m => m.name === selectedMetricName);
+                    }
+
+                    const grouped = {};
+                    filteredMetrics.forEach(m => {
+                        if (!grouped[m.name]) grouped[m.name] = [];
+                        grouped[m.name].push(m);
+                    });
+
+                    Object.entries(grouped).slice(0, 6).forEach(([name, data], idx) => {
+                        const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
+                        renderServiceChart(chartId, name, data, selectedEndpoint, selectedMetricName);
+                    });
+                });
+            }, 100);
+        }
+
+        async function renderServiceChart(canvasId, metricName, data, selectedEndpoint, selectedMetricName) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            try {
+                const now = Date.now();
+                const ranges = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
+                const hours = ranges[currentRange];
+                const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
+                const end = new Date(now).toISOString();
+
+                const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=200`);
+                if (!response.ok) return;
+
+                const result = await response.json();
+                if (!result.data || result.data.length === 0) return;
+
+                // Filter series based on active filters
+                let filteredSeries = result.data;
+                if (selectedEndpoint !== 'all') {
+                    filteredSeries = filteredSeries.filter(series =>
+                        series.labels?.endpoint === selectedEndpoint || series.labels?.path === selectedEndpoint
+                    );
+                }
+
+                if (filteredSeries.length === 0) return;
+
+                const datasets = filteredSeries.slice(0, 5).map((series) => {
+                    const color = getStableColor(series.metric, series.labels);
+                    return {
+                        label: series.labels && Object.keys(series.labels).length > 0
+                            ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
+                            : metricName,
+                        data: series.points.map(p => ({ x: p.t, y: p.v })),
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    };
+                });
+
+                if (charts[canvasId]) charts[canvasId].destroy();
+
+                charts[canvasId] = new Chart(canvas, {
+                    type: 'line',
+                    data: { datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#161b22',
+                                borderColor: '#30363d',
+                                borderWidth: 1
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                grid: { color: '#30363d' },
+                                ticks: { color: '#8b949e', maxTicksLimit: 6 }
+                            },
+                            y: {
+                                grid: { color: '#30363d' },
+                                ticks: { color: '#8b949e' }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Chart render error:', error);
+            }
+        }
+
+        function toggleService(service) {
+            const section = document.getElementById(`service-${service}`);
+            section.classList.toggle('collapsed');
+        }
+
+        function filterDashboard() {
+            const services = {};
+            metricsData.forEach(m => {
+                const service = m.labels?.service || m.labels?.__service || 'default';
+                if (!services[service]) services[service] = [];
+                services[service].push(m);
+            });
+            renderDashboard(services);
+        }
+
+        function refreshDashboard() {
+            loadDashboard();
+        }
+
+        // Explore View
         async function loadMetrics() {
             try {
                 const now = Date.now();
@@ -547,33 +1138,31 @@
                 const end = new Date(now).toISOString();
 
                 const response = await fetch(`/v1/query?start=${start}&end=${end}`);
-                if (!response.ok) throw new Error('Query failed: ' + response.statusText);
+                if (!response.ok) throw new Error('Query failed');
 
                 const data = await response.json();
                 metricsData = data.metrics || [];
 
-                // Build metric names set for autocomplete
-                allMetricNames.clear();
-                metricsData.forEach(m => allMetricNames.add(m.name));
-
                 renderMetricsBrowser();
             } catch (error) {
                 console.error('Load metrics error:', error);
-                showError('Failed to load metrics: ' + error.message);
                 document.getElementById('metricsBrowser').innerHTML =
-                    '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load metrics. Check if the server is running.</p></div>';
+                    '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load metrics</p></div>';
             }
         }
 
         function renderMetricsBrowser() {
             const browser = document.getElementById('metricsBrowser');
+            const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+            const typeFilter = document.getElementById('metricTypeFilter').value;
+            const serviceFilter = document.getElementById('exploreServiceFilter').value;
 
             if (!metricsData || metricsData.length === 0) {
-                browser.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No metrics available. Start sending metrics to see them here.</p></div>';
+                browser.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No metrics available</p></div>';
                 return;
             }
 
-            // Group by metric name + labels
+            // Group metrics
             const grouped = {};
             metricsData.forEach(m => {
                 const key = seriesKey(m);
@@ -587,20 +1176,24 @@
                 grouped[key].values.push(m);
             });
 
-            // Filter by search
-            const filtered = Object.entries(grouped).filter(([key, data]) =>
-                data.name.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+            // Filter
+            const filtered = Object.entries(grouped).filter(([key, data]) => {
+                const matchesSearch = data.name.toLowerCase().includes(searchTerm);
+                const matchesType = typeFilter === 'all' || inferMetricType(data.name) === typeFilter;
+                const service = data.labels?.service || data.labels?.__service || 'default';
+                const matchesService = serviceFilter === 'all' || service === serviceFilter;
+                return matchesSearch && matchesType && matchesService;
+            });
 
             if (filtered.length === 0) {
-                browser.innerHTML = '<div class="empty-state"><p>No metrics match your search.</p></div>';
+                browser.innerHTML = '<div class="empty-state"><p>No metrics match your filters</p></div>';
                 return;
             }
 
             browser.innerHTML = filtered.map(([key, data]) => {
                 const latest = data.values[data.values.length - 1];
                 const isSelected = selectedMetrics.has(key);
-                const rowId = `metric-row-${metricRowIndex++}`;
+                const escapedKey = key.replace(/"/g, '&quot;');
 
                 const labelsHtml = Object.keys(data.labels).length > 0
                     ? Object.entries(data.labels)
@@ -609,11 +1202,8 @@
                         .join('')
                     : '<div class="label">no labels</div>';
 
-                // Escape quotes in key for HTML attribute
-                const escapedKey = key.replace(/"/g, '&quot;');
-
                 return `
-                    <div id="${rowId}" class="metric-row ${isSelected ? 'selected' : ''}" data-key="${escapedKey}">
+                    <div class="metric-row ${isSelected ? 'selected' : ''}" data-key="${escapedKey}" onclick="toggleMetric(this, '${escapedKey}')">
                         <div class="metric-content">
                             <div class="metric-name">${data.name}</div>
                             <div class="metric-labels">${labelsHtml}</div>
@@ -625,13 +1215,6 @@
                     </div>
                 `;
             }).join('');
-
-            // Add click listeners after rendering
-            document.querySelectorAll('.metric-row').forEach(row => {
-                row.addEventListener('click', function() {
-                    toggleMetric(this, this.dataset.key);
-                });
-            });
         }
 
         function seriesKey(metric) {
@@ -639,57 +1222,40 @@
             return `${metric.name}${labels}`;
         }
 
-        function toggleMetric(element, key) {
-            console.log('Toggling metric:', key);
+        function inferMetricType(name) {
+            if (name.includes('_total') || name.includes('_count')) return 'counter';
+            if (name.includes('_bucket') || name.includes('_duration')) return 'histogram';
+            return 'gauge';
+        }
 
-            if (selectedMetrics.has(key)) {
-                selectedMetrics.delete(key);
+        function toggleMetric(element, key) {
+            const decodedKey = key.replace(/&quot;/g, '"');
+
+            if (selectedMetrics.has(decodedKey)) {
+                selectedMetrics.delete(decodedKey);
                 element.classList.remove('selected');
             } else {
-                selectedMetrics.add(key);
+                selectedMetrics.add(decodedKey);
                 element.classList.add('selected');
             }
 
-            updateSelectedCount();
+            document.getElementById('selectedCount').textContent = `${selectedMetrics.size} selected`;
+
             if (selectedMetrics.size > 0) {
-                renderChart();
-                // Scroll to chart
+                renderExploreChart();
+                const chartEl = document.getElementById('selectedChart');
+                chartEl.style.display = 'block';
+                // Smooth scroll to chart after a brief delay to ensure it's rendered
                 setTimeout(() => {
-                    document.getElementById('chartSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    chartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 100);
             } else {
-                document.getElementById('chartSection').style.display = 'none';
+                document.getElementById('selectedChart').style.display = 'none';
             }
         }
 
-        function updateSelectedCount() {
-            document.getElementById('selectedCount').textContent = `${selectedMetrics.size} selected`;
-        }
-
-        function clearSelection() {
-            selectedMetrics.clear();
-            document.querySelectorAll('.metric-row').forEach(row => row.classList.remove('selected'));
-            document.getElementById('chartSection').style.display = 'none';
-            updateSelectedCount();
-        }
-
-        function calculateStats(data) {
-            if (!data || data.length === 0) return { avg: 0, min: 0, max: 0, latest: 0 };
-
-            const values = data.map(p => p.y);
-            return {
-                avg: values.reduce((a, b) => a + b, 0) / values.length,
-                min: Math.min(...values),
-                max: Math.max(...values),
-                latest: values[values.length - 1]
-            };
-        }
-
-        async function renderChart() {
+        async function renderExploreChart() {
             if (selectedMetrics.size === 0) return;
-
-            console.log('Rendering chart for metrics:', Array.from(selectedMetrics));
-            document.getElementById('chartSection').style.display = 'block';
 
             const now = Date.now();
             const ranges = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
@@ -697,7 +1263,6 @@
             const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
             const end = new Date(now).toISOString();
 
-            // Get unique metric names from selected series
             const metricNames = new Set();
             metricsData.forEach(m => {
                 const key = seriesKey(m);
@@ -705,8 +1270,6 @@
                     metricNames.add(m.name);
                 }
             });
-
-            console.log('Querying metrics:', Array.from(metricNames));
 
             try {
                 const promises = Array.from(metricNames).map(async name => {
@@ -716,13 +1279,7 @@
                 });
 
                 const results = await Promise.all(promises);
-                console.log('Query results:', results);
-
-                const colors = ['#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff', '#ff7b72', '#79c0ff', '#56d364'];
-                let colorIndex = 0;
-
                 const datasets = [];
-                let allStats = [];
 
                 results.forEach(result => {
                     if (!result.data) return;
@@ -731,55 +1288,33 @@
                         const key = seriesKey({ name: series.metric, labels: series.labels });
                         if (!selectedMetrics.has(key)) return;
 
-                        const color = colors[colorIndex % colors.length];
-                        colorIndex++;
-
-                        const data = series.points.map(p => ({ x: p.t, y: p.v }));
-                        const stats = calculateStats(data);
-                        stats.name = series.metric;
-                        stats.color = color;
-                        allStats.push(stats);
-
+                        const color = getStableColor(series.metric, series.labels);
                         const label = series.labels && Object.keys(series.labels).length > 0
                             ? `${series.metric}{${Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')}}`
                             : series.metric;
 
                         datasets.push({
                             label: label,
-                            data: data,
+                            data: series.points.map(p => ({ x: p.t, y: p.v })),
                             borderColor: color,
                             backgroundColor: color + '20',
                             borderWidth: 2,
                             pointRadius: 0,
-                            pointHitRadius: 10,
                             tension: 0.1
                         });
                     });
                 });
 
-                console.log('Datasets:', datasets);
+                if (exploreChart) exploreChart.destroy();
 
-                if (datasets.length === 0) {
-                    showError('No data found for selected metrics');
-                    return;
-                }
-
-                // Render stats
-                renderChartStats(allStats);
-
-                if (chart) chart.destroy();
-
-                const ctx = document.getElementById('metricsChart').getContext('2d');
-                chart = new Chart(ctx, {
+                const ctx = document.getElementById('exploreChart').getContext('2d');
+                exploreChart = new Chart(ctx, {
                     type: 'line',
                     data: { datasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
-                        },
+                        interaction: { mode: 'index', intersect: false },
                         plugins: {
                             legend: {
                                 display: true,
@@ -787,17 +1322,8 @@
                                 labels: {
                                     color: '#c9d1d9',
                                     padding: 12,
-                                    font: { size: 11, family: "'Monaco', 'Menlo', 'Consolas', monospace" },
-                                    usePointStyle: true
+                                    font: { size: 11, family: "'Monaco', 'Menlo', 'Consolas', monospace" }
                                 }
-                            },
-                            tooltip: {
-                                backgroundColor: '#161b22',
-                                borderColor: '#30363d',
-                                borderWidth: 1,
-                                titleColor: '#c9d1d9',
-                                bodyColor: '#c9d1d9',
-                                padding: 12
                             }
                         },
                         scales: {
@@ -813,121 +1339,109 @@
                         }
                     }
                 });
-
-                console.log('Chart rendered successfully');
             } catch (error) {
-                console.error('Chart render error:', error);
-                showError('Failed to render chart: ' + error.message);
+                console.error('Explore chart error:', error);
             }
         }
 
-        function renderChartStats(stats) {
-            const container = document.getElementById('chartStats');
-            container.innerHTML = stats.map(s => `
-                <div class="chart-stat">
-                    <div class="chart-stat-label" style="color: ${s.color}">${s.name}</div>
-                    <div class="chart-stat-value">${formatValue(s.latest)}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                        avg: ${formatValue(s.avg)} • min: ${formatValue(s.min)} • max: ${formatValue(s.max)}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function exportChart() {
-            if (!chart) return;
-            const link = document.createElement('a');
-            link.download = `tinyobs-chart-${Date.now()}.png`;
-            link.href = chart.toBase64Image();
-            link.click();
-        }
-
-        function refreshData() {
-            selectedMetrics.clear();
-            loadStats();
-            loadMetrics();
-            document.getElementById('chartSection').style.display = 'none';
-            updateSelectedCount();
-        }
-
-        // Autocomplete functionality
-        function updateAutocomplete(value) {
-            const autocomplete = document.getElementById('autocomplete');
-
-            if (!value) {
-                autocomplete.classList.remove('show');
-                return;
-            }
-
-            const matches = Array.from(allMetricNames).filter(name =>
-                name.toLowerCase().includes(value.toLowerCase())
-            ).slice(0, 10);
-
-            if (matches.length === 0) {
-                autocomplete.classList.remove('show');
-                return;
-            }
-
-            autocomplete.innerHTML = matches.map(name =>
-                `<div class="autocomplete-item" data-name="${name}">${name}</div>`
-            ).join('');
-
-            autocomplete.classList.add('show');
-
-            // Add click listeners
-            autocomplete.querySelectorAll('.autocomplete-item').forEach(item => {
-                item.addEventListener('click', function() {
-                    document.getElementById('searchBox').value = this.dataset.name;
-                    searchTerm = this.dataset.name;
-                    autocomplete.classList.remove('show');
-                    renderMetricsBrowser();
-                });
-            });
-        }
-
-        // Event listeners
-        const searchBox = document.getElementById('searchBox');
-        searchBox.addEventListener('input', (e) => {
-            searchTerm = e.target.value;
-            updateAutocomplete(searchTerm);
+        function filterMetrics() {
             renderMetricsBrowser();
-        });
+        }
 
-        searchBox.addEventListener('focus', (e) => {
-            if (e.target.value) {
-                updateAutocomplete(e.target.value);
-            }
-        });
+        function clearSelection() {
+            selectedMetrics.clear();
+            document.querySelectorAll('.metric-row').forEach(row => row.classList.remove('selected'));
+            document.getElementById('selectedChart').style.display = 'none';
+            document.getElementById('selectedCount').textContent = '0 selected';
+        }
 
-        // Close autocomplete when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.input-group')) {
-                document.getElementById('autocomplete').classList.remove('show');
-            }
-        });
+        function refreshMetrics() {
+            selectedMetrics.clear();
+            loadMetrics();
+        }
 
-        document.querySelectorAll('.time-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentRange = btn.dataset.range;
-                if (selectedMetrics.size > 0) {
-                    renderChart();
+        // Search
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchBox = document.getElementById('searchBox');
+            searchBox.addEventListener('input', filterMetrics);
+
+            // Initialize theme toggle button icon
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const themeToggleBtn = document.getElementById('themeToggle');
+            themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+
+            // Enhanced Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                // Don't trigger shortcuts if user is typing in an input
+                if (e.target.tagName === 'INPUT' && e.key !== 'Escape') return;
+
+                // ESC to clear selection in Explore view or blur input
+                if (e.key === 'Escape') {
+                    if (currentView === 'explore') {
+                        clearSelection();
+                    }
+                    // Blur any focused input
+                    if (document.activeElement.tagName === 'INPUT') {
+                        document.activeElement.blur();
+                    }
+                }
+
+                // D for Dashboard view
+                if ((e.key === 'd' || e.key === 'D') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    switchView('dashboard');
+                }
+
+                // E for Explore view
+                if ((e.key === 'e' || e.key === 'E') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    switchView('explore');
+                }
+
+                // R to refresh current view
+                if ((e.key === 'r' || e.key === 'R') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    if (currentView === 'dashboard') {
+                        refreshDashboard();
+                    } else {
+                        refreshMetrics();
+                    }
+                }
+
+                // T to toggle theme
+                if ((e.key === 't' || e.key === 'T') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    toggleTheme();
+                }
+
+                // / to focus search (if in explore view)
+                if (e.key === '/' && currentView === 'explore' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    searchBox.focus();
+                }
+
+                // 1-4 for quick time range selection (Dashboard only)
+                if (currentView === 'dashboard' && e.target.tagName !== 'INPUT') {
+                    const timeRanges = { '1': '1h', '2': '6h', '3': '24h', '4': '7d' };
+                    if (timeRanges[e.key]) {
+                        e.preventDefault();
+                        setTimeRange(timeRanges[e.key]);
+                    }
                 }
             });
-        });
 
-        // Initial load
-        loadStats();
-        loadMetrics();
-
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
+            // Initial load
             loadStats();
-            if (selectedMetrics.size === 0) {
-                loadMetrics();
-            }
-        }, 30000);
+            loadDashboard();
+
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                loadStats();
+                if (currentView === 'dashboard') {
+                    refreshDashboard();
+                }
+            }, 30000);
+        });
     </script>
 </body>
 </html>
