@@ -71,5 +71,3 @@ func (t *HTTPTransport) Send(ctx context.Context, metrics []metrics.Metric) erro
 
 	return nil
 }
-
-

@@ -42,10 +42,10 @@ type RangeQueryResponse struct {
 
 // SeriesData represents a single time series
 type SeriesData struct {
-	Metric     string              `json:"metric"`
-	Labels     map[string]string   `json:"labels,omitempty"`
-	Points     []Point             `json:"points"`
-	Resolution string              `json:"resolution"`
+	Metric     string            `json:"metric"`
+	Labels     map[string]string `json:"labels,omitempty"`
+	Points     []Point           `json:"points"`
+	Resolution string            `json:"resolution"`
 }
 
 // Point represents a single data point
