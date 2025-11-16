@@ -16,6 +16,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const (
+	// Server configuration
+	serverReadTimeout     = 10 * time.Second
+	serverWriteTimeout    = 10 * time.Second
+	shutdownTimeout       = 30 * time.Second
+	compactionInterval    = 1 * time.Hour
+)
+
 func main() {
 	// Initialize storage
 	log.Println("Initializing BadgerDB storage at ./data/tinyobs")
@@ -56,8 +64,8 @@ func main() {
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      router,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  serverReadTimeout,
+		WriteTimeout: serverWriteTimeout,
 	}
 
 	// Start server in goroutine
@@ -76,7 +84,7 @@ func main() {
 	log.Println("Shutting down server...")
 
 	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
@@ -86,9 +94,9 @@ func main() {
 	log.Println("Server exited")
 }
 
-// runCompaction runs the compaction job every hour
+// runCompaction runs the compaction job periodically
 func runCompaction(compactor *compaction.Compactor, stop chan bool) {
-	ticker := time.NewTicker(1 * time.Hour)
+	ticker := time.NewTicker(compactionInterval)
 	defer ticker.Stop()
 
 	// Run once on startup

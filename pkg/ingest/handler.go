@@ -57,7 +57,7 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store metrics
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), ingestTimeout)
 	defer cancel()
 
 	if err := h.storage.Write(ctx, req.Metrics); err != nil {
@@ -87,7 +87,7 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Build storage query
 	req := storage.QueryRequest{
-		Start: parseTimeParam(query.Get("start"), time.Now().Add(-1*time.Hour)),
+		Start: parseTimeParam(query.Get("start"), time.Now().Add(-defaultQueryWindow)),
 		End:   parseTimeParam(query.Get("end"), time.Now()),
 	}
 
@@ -96,7 +96,7 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		req.MetricNames = []string{metricName}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
 	results, err := h.storage.Query(ctx, req)
@@ -114,7 +114,7 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 // HandleStats handles the /v1/stats endpoint
 func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), statsTimeout)
 	defer cancel()
 
 	stats, err := h.storage.Stats(ctx)

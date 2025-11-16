@@ -11,6 +11,22 @@ import (
 	"tinyobs/pkg/storage"
 )
 
+const (
+	// API timeouts
+	ingestTimeout = 5 * time.Second
+	queryTimeout  = 10 * time.Second
+	statsTimeout  = 5 * time.Second
+	listTimeout   = 5 * time.Second
+
+	// Query defaults and limits
+	defaultQueryWindow    = 1 * time.Hour
+	defaultMaxPoints      = 1000
+	maxPointsLimit        = 5000
+	metricsListLimit      = 10000
+	metricsListTimeWindow = 24 * time.Hour
+	maxQueryWindow        = 90 * 24 * time.Hour // 90 days max
+)
+
 // MetricsListResponse returns available metric names
 type MetricsListResponse struct {
 	Metrics []string `json:"metrics"`
@@ -43,14 +59,14 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), listTimeout)
 	defer cancel()
 
 	// Query last 24h to find active metrics
 	results, err := h.storage.Query(ctx, storage.QueryRequest{
-		Start: time.Now().Add(-24 * time.Hour),
+		Start: time.Now().Add(-metricsListTimeWindow),
 		End:   time.Now(),
-		Limit: 10000, // Reasonable limit
+		Limit: metricsListLimit,
 	})
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
@@ -101,20 +117,28 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	start := parseTimeParam(query.Get("start"), time.Now().Add(-1*time.Hour))
 	end := parseTimeParam(query.Get("end"), time.Now())
 
+	// Validate time range
 	if end.Before(start) {
 		http.Error(w, "end must be after start", http.StatusBadRequest)
 		return
 	}
 
+	// Prevent queries that are too large
+	queryWindow := end.Sub(start)
+	if queryWindow > maxQueryWindow {
+		http.Error(w, "query window too large (max 90 days)", http.StatusBadRequest)
+		return
+	}
+
 	// Parse max points (default: 1000 for performance)
-	maxPoints := 1000
+	maxPoints := defaultMaxPoints
 	if mp := query.Get("maxPoints"); mp != "" {
-		if parsed, err := strconv.Atoi(mp); err == nil && parsed > 0 && parsed <= 5000 {
+		if parsed, err := strconv.Atoi(mp); err == nil && parsed > 0 && parsed <= maxPointsLimit {
 			maxPoints = parsed
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 
 	// Query metrics
