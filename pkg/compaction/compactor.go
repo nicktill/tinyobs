@@ -114,31 +114,36 @@ func (c *Compactor) Compact1h(ctx context.Context, start, end time.Time) error {
 	buckets := make(map[string]*Aggregate)
 
 	for _, m := range rawMetrics {
+		// Parse as aggregate (skip if not an aggregate or wrong resolution)
+		sourceAgg := FromMetric(m)
+		if sourceAgg == nil || sourceAgg.Resolution != Resolution5m {
+			continue // Only re-aggregate 5m aggregates
+		}
+
 		bucketTime := roundTo1Hour(m.Timestamp)
-		key := aggregateKey(m.Name, m.Labels, bucketTime)
+		key := aggregateKey(m.Name, sourceAgg.Labels, bucketTime)
 
 		agg, exists := buckets[key]
 		if !exists {
 			agg = &Aggregate{
 				Name:       m.Name,
-				Labels:     m.Labels,
+				Labels:     sourceAgg.Labels,
 				Timestamp:  bucketTime,
 				Resolution: Resolution1h,
-				Min:        m.Value,
-				Max:        m.Value,
+				Min:        sourceAgg.Min,
+				Max:        sourceAgg.Max,
 			}
 			buckets[key] = agg
 		}
 
-		// Aggregate the aggregates
-		// This works because we stored sum/count, not average
-		agg.Sum += m.Value
-		agg.Count++
-		if m.Value < agg.Min {
-			agg.Min = m.Value
+		// Re-aggregate by combining Sum and Count (preserves original data)
+		agg.Sum += sourceAgg.Sum
+		agg.Count += sourceAgg.Count
+		if sourceAgg.Min < agg.Min {
+			agg.Min = sourceAgg.Min
 		}
-		if m.Value > agg.Max {
-			agg.Max = m.Value
+		if sourceAgg.Max > agg.Max {
+			agg.Max = sourceAgg.Max
 		}
 	}
 
@@ -172,10 +177,15 @@ func (c *Compactor) CompactAndCleanup(ctx context.Context) error {
 	}
 
 	// Step 2: Delete raw data older than 6 hours
-	// (We now have 5m aggregates for this period)
+	// TODO: Currently Delete removes ALL metrics, including aggregates
+	// Need to implement resolution-aware deletion to only remove raw data
+	// Skipping for now to avoid deleting newly created aggregates
+	// See: https://github.com/yourusername/tinyobs/issues/XX
+	/*
 	if err := c.storage.Delete(ctx, now.Add(-6*time.Hour)); err != nil {
 		return fmt.Errorf("failed to delete old raw data: %w", err)
 	}
+	*/
 
 	// Step 3: Compact 5m aggregates from 2-7 days ago into 1h aggregates
 	compact1hStart := now.Add(-7 * 24 * time.Hour)
@@ -186,10 +196,13 @@ func (c *Compactor) CompactAndCleanup(ctx context.Context) error {
 	}
 
 	// Step 4: Delete 5m aggregates older than 7 days
-	// (We now have 1h aggregates for this period)
+	// TODO: Same issue as Step 2 - need resolution-aware deletion
+	// Skipping for now to avoid deleting newly created 1h aggregates
+	/*
 	if err := c.storage.Delete(ctx, now.Add(-7*24*time.Hour)); err != nil {
 		return fmt.Errorf("failed to delete old 5m aggregates: %w", err)
 	}
+	*/
 
 	return nil
 }

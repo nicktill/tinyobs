@@ -6,7 +6,7 @@ Production storage using BadgerDB (LSM tree). Persists to disk, survives restart
 
 - **LSM tree** - Optimized for write-heavy workloads (perfect for metrics)
 - **Pure Go** - No CGo dependencies, easy to build
-- **Built-in compression** - Zstd compression reduces disk usage by ~10x
+- **Built-in compression** - Snappy compression reduces disk usage significantly
 - **Battle-tested** - Used by Dgraph, IPFS, and other production systems
 
 ## Usage

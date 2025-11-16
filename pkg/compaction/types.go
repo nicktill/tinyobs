@@ -1,6 +1,7 @@
 package compaction
 
 import (
+	"fmt"
 	"time"
 
 	"tinyobs/pkg/sdk/metrics"
@@ -36,13 +37,27 @@ type Aggregate struct {
 }
 
 // ToMetric converts an aggregate back to a metric representation
-// This allows aggregates to be stored using the same storage interface
+// Stores aggregate metadata in special labels for proper re-aggregation
 func (a *Aggregate) ToMetric() metrics.Metric {
+	// Copy user labels and add aggregate metadata
+	labels := make(map[string]string)
+	for k, v := range a.Labels {
+		labels[k] = v
+	}
+
+	// Store resolution and aggregate statistics as special labels
+	// This prevents data loss during re-aggregation
+	labels["__resolution__"] = string(a.Resolution)
+	labels["__sum__"] = fmt.Sprintf("%f", a.Sum)
+	labels["__count__"] = fmt.Sprintf("%d", a.Count)
+	labels["__min__"] = fmt.Sprintf("%f", a.Min)
+	labels["__max__"] = fmt.Sprintf("%f", a.Max)
+
 	return metrics.Metric{
 		Name:      a.Name,
-		Type:      metrics.GaugeType, // Aggregates are treated as gauges
-		Value:     a.Average(),
-		Labels:    a.Labels,
+		Type:      metrics.GaugeType,
+		Value:     a.Average(), // Store average as the main value
+		Labels:    labels,
 		Timestamp: a.Timestamp,
 	}
 }
@@ -53,6 +68,44 @@ func (a *Aggregate) Average() float64 {
 		return 0
 	}
 	return a.Sum / float64(a.Count)
+}
+
+// FromMetric reconstructs an Aggregate from a metric with aggregate metadata
+// Returns nil if the metric is not an aggregate (no __resolution__ label)
+func FromMetric(m metrics.Metric) *Aggregate {
+	// Check if this is an aggregate
+	resolution, isAggregate := m.Labels["__resolution__"]
+	if !isAggregate {
+		return nil
+	}
+
+	// Parse aggregate metadata
+	var sum, min, max float64
+	var count uint64
+
+	fmt.Sscanf(m.Labels["__sum__"], "%f", &sum)
+	fmt.Sscanf(m.Labels["__count__"], "%d", &count)
+	fmt.Sscanf(m.Labels["__min__"], "%f", &min)
+	fmt.Sscanf(m.Labels["__max__"], "%f", &max)
+
+	// Remove special labels to get user labels
+	userLabels := make(map[string]string)
+	for k, v := range m.Labels {
+		if k[0] != '_' { // Skip __resolution__, __sum__, etc.
+			userLabels[k] = v
+		}
+	}
+
+	return &Aggregate{
+		Name:       m.Name,
+		Labels:     userLabels,
+		Timestamp:  m.Timestamp,
+		Resolution: Resolution(resolution),
+		Sum:        sum,
+		Count:      count,
+		Min:        min,
+		Max:        max,
+	}
 }
 
 // Percentile calculates the Pth percentile from stored values
