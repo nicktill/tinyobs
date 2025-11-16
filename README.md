@@ -295,7 +295,7 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [x] Prometheus `/metrics` endpoint (Grafana compatibility)
 - [x] Enhanced .gitignore for build artifacts
 
-### 🚧 V2.2 - Smart Dashboard (In Progress)
+### ✅ V2.2 - Smart Dashboard (Complete!)
 - [x] Multi-metric overlay charts (compare metrics on same chart)
 - [x] Dashboard templates (Go Runtime, HTTP API, Database presets)
 - [x] Label-based filtering UI with auto-discovery
@@ -304,8 +304,8 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [x] Enhanced keyboard shortcuts (D, E, R, T, /, ESC, 1-4)
 - [x] Stable color assignment (no more flickering charts!)
 - [x] Auto-scroll to selected metrics in Explore view
-- [ ] Export/import dashboard configurations (JSON)
-- [ ] Time comparison view (compare to 24h ago)
+- [x] Export/import dashboard configurations (JSON)
+- [x] Time comparison view (compare to 24h ago)
 
 ### 📅 V3.0 - Real-time & Anomaly Detection (Next 2-4 weeks)
 - [ ] WebSocket live updates (replace 30s polling)
