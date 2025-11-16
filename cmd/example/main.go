@@ -750,5 +750,8 @@ var statsPageTemplate = `<!DOCTYPE html>
 func serveStatsPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	tmpl := template.Must(template.New("stats").Parse(statsPageTemplate))
-	tmpl.Execute(w, nil)
+	if err := tmpl.Execute(w, nil); err != nil {
+		log.Printf("❌ Failed to execute template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
