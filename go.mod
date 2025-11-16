@@ -1,4 +1,4 @@
-module tinyobs
+module github.com/nicktill/tinyobs
 
 go 1.23.0
 

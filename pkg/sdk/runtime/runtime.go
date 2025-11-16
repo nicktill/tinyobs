@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"time"
 
-	"tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // Collector collects runtime metrics
