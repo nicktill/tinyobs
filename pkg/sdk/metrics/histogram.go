@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -70,7 +69,6 @@ type Histogram struct {
 	buckets []float64
 	mu      sync.Mutex
 	sets    map[string]*bucketSet // Per label combination
-	values  map[string][]float64  // Keep raw values for percentile calculations
 }
 
 // NewHistogram creates a new histogram metric with default buckets
@@ -80,7 +78,6 @@ func NewHistogram(name string, client ClientInterface) *Histogram {
 		client:  client,
 		buckets: DefaultBuckets,
 		sets:    make(map[string]*bucketSet),
-		values:  make(map[string][]float64),
 	}
 }
 
@@ -99,9 +96,6 @@ func (h *Histogram) Observe(value float64, labels ...string) {
 
 	// Add to buckets
 	h.sets[key].observe(value)
-
-	// Also store raw value for percentile calculations
-	h.values[key] = append(h.values[key], value)
 
 	// IMPORTANT: Do NOT send metric here!
 	// Metrics are sent in bulk during periodic flush by the client
@@ -156,63 +150,7 @@ func (h *Histogram) Flush() []Metric {
 		bs.reset()
 	}
 
-	// Clear raw values to prevent memory leak
-	h.values = make(map[string][]float64)
-
 	return metrics
-}
-
-// GetStats returns basic statistics for the histogram
-func (h *Histogram) GetStats(labels ...string) (count int, sum, min, max, avg float64) {
-	key := h.makeKey(labels...)
-
-	h.mu.Lock()
-	values := make([]float64, len(h.values[key]))
-	copy(values, h.values[key])
-	h.mu.Unlock()
-
-	if len(values) == 0 {
-		return 0, 0, 0, 0, 0
-	}
-
-	count = len(values)
-	sum = 0
-	min = values[0]
-	max = values[0]
-
-	for _, v := range values {
-		sum += v
-		if v < min {
-			min = v
-		}
-		if v > max {
-			max = v
-		}
-	}
-
-	avg = sum / float64(count)
-	return count, sum, min, max, avg
-}
-
-// GetPercentile returns the value at the given percentile
-func (h *Histogram) GetPercentile(percentile float64, labels ...string) float64 {
-	key := h.makeKey(labels...)
-
-	h.mu.Lock()
-	values := make([]float64, len(h.values[key]))
-	copy(values, h.values[key])
-	h.mu.Unlock()
-
-	if len(values) == 0 {
-		return 0
-	}
-
-	sort.Float64s(values)
-	index := int(percentile * float64(len(values)-1))
-	if index >= len(values) {
-		index = len(values) - 1
-	}
-	return values[index]
 }
 
 // makeKey creates a key from labels for internal storage
