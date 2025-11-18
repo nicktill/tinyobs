@@ -27,6 +27,10 @@ type Config struct {
 
 	// InMemory mode (for testing)
 	InMemory bool
+
+	// MaxMemoryMB limits BadgerDB memory usage in MB (0 = use defaults based on environment)
+	// Recommended: 64-128 MB for local dev, 256-512 MB for production
+	MaxMemoryMB int64
 }
 
 // New creates a BadgerDB storage backend
@@ -37,10 +41,34 @@ func New(cfg Config) (*Storage, error) {
 		opts = opts.WithInMemory(true)
 	}
 
+	// SAFETY: Set memory limits to prevent OOM on small servers/laptops
+	// BadgerDB's defaults can use 1-2 GB which is dangerous for self-hosted deployments
+	var memTableSize, valueLogMaxEntries int64
+	if cfg.MaxMemoryMB > 0 {
+		// User specified limit - use it
+		memTableSize = cfg.MaxMemoryMB * 1024 * 1024 / 4 // 25% for memtable
+		valueLogMaxEntries = 10000                        // Conservative value log
+	} else {
+		// Auto-detect: Conservative limits for local dev, higher for production
+		// Production detection: Check if running with persistent storage and not in ./data
+		isProduction := !cfg.InMemory && cfg.Path != "" && cfg.Path != "./data/tinyobs"
+		if isProduction {
+			// Production: 256 MB total (~64 MB memtable, rest for caching)
+			memTableSize = 64 * 1024 * 1024
+			valueLogMaxEntries = 100000
+		} else {
+			// Local dev: 64 MB total (~16 MB memtable)
+			memTableSize = 16 * 1024 * 1024
+			valueLogMaxEntries = 10000
+		}
+	}
+
 	// Optimize for time-series workload
 	opts = opts.
-		WithCompression(options.Snappy). // Compression for metrics
-		WithNumVersionsToKeep(1)         // We don't need versioning
+		WithCompression(options.Snappy).     // Compression for metrics
+		WithNumVersionsToKeep(1).            // We don't need versioning
+		WithMemTableSize(memTableSize).      // Limit memory table size
+		WithValueLogMaxEntries(uint32(valueLogMaxEntries)) // Limit value log entries
 
 	db, err := badger.Open(opts)
 	if err != nil {

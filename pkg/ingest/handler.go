@@ -14,16 +14,31 @@ import (
 
 // Handler handles metric ingestion
 type Handler struct {
-	storage     storage.Storage
-	cardinality *CardinalityTracker
+	storage        storage.Storage
+	cardinality    *CardinalityTracker
+	storageChecker StorageLimitChecker
+}
+
+// StorageLimitChecker provides storage usage information for limit enforcement
+type StorageLimitChecker interface {
+	// GetUsage returns current storage usage in bytes
+	GetUsage() (int64, error)
+	// GetLimit returns the configured storage limit in bytes
+	GetLimit() int64
 }
 
 // NewHandler creates a new ingest handler
 func NewHandler(store storage.Storage) *Handler {
 	return &Handler{
-		storage:     store,
-		cardinality: NewCardinalityTracker(),
+		storage:        store,
+		cardinality:    NewCardinalityTracker(),
+		storageChecker: nil, // Optional - can be set via SetStorageChecker
 	}
+}
+
+// SetStorageChecker configures storage limit checking
+func (h *Handler) SetStorageChecker(checker StorageLimitChecker) {
+	h.storageChecker = checker
 }
 
 // IngestRequest represents the request payload
@@ -55,6 +70,26 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	if len(req.Metrics) > MaxMetricsPerRequest {
 		http.Error(w, ErrTooManyMetrics.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Check storage limits BEFORE processing (fail fast to prevent disk overflow)
+	if h.storageChecker != nil {
+		currentUsage, err := h.storageChecker.GetUsage()
+		if err != nil {
+			log.Printf("⚠️  Failed to check storage usage: %v", err)
+			// Continue anyway - don't block ingestion on monitoring failure
+		} else {
+			limit := h.storageChecker.GetLimit()
+			if currentUsage >= limit {
+				// 507 Insufficient Storage (WebDAV standard, appropriate for storage limits)
+				w.WriteHeader(507)
+				http.Error(w, fmt.Sprintf("Storage limit exceeded: %d/%d bytes used (%.1f%%). Please free up space or increase limit.",
+					currentUsage, limit, float64(currentUsage)/float64(limit)*100), 507)
+				log.Printf("🚨 STORAGE LIMIT EXCEEDED: %d/%d bytes (%.1f%%) - rejecting ingest",
+					currentUsage, limit, float64(currentUsage)/float64(limit)*100)
+				return
+			}
+		}
 	}
 
 	// Validate metrics and check cardinality
