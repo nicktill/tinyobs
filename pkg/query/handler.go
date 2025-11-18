@@ -118,19 +118,17 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute query with timeout
-	ctx, cancel := r.Context(), func() {}
-	if r.Context().Err() == nil {
-		ctx, cancel = r.Context(), cancel
-	}
-	defer cancel()
+	ctx := r.Context()
 
 	result, err := h.executor.Execute(ctx, query)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
 		return
 	}
+	// CRITICAL: Always close result to free memory
+	defer result.Close()
 
-	// Convert result to response format
+	// Convert result to response format (copies data, so safe to close result after)
 	response := QueryResponse{
 		Status: "success",
 		Query:  req.Query,
@@ -201,6 +199,8 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
 		return
 	}
+	// CRITICAL: Always close result to free memory
+	defer result.Close()
 
 	// Convert to instant query format (single values, not ranges)
 	response := QueryResponse{
