@@ -14,6 +14,7 @@ import (
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
 	"github.com/nicktill/tinyobs/pkg/ingest"
+	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 
@@ -116,6 +117,10 @@ func main() {
 	handler := ingest.NewHandler(store)
 	log.Println("📊 Ingest handler created with cardinality protection")
 
+	// Create query handler for TinyQuery (PromQL-compatible)
+	queryHandler := query.NewHandler(store)
+	log.Println("🔍 TinyQuery handler created (PromQL-compatible query engine)")
+
 	// Create WebSocket hub for real-time updates
 	hub := ingest.NewMetricsHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -169,6 +174,8 @@ func main() {
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
 	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
+	api.HandleFunc("/query/execute", queryHandler.HandleQueryExecute).Methods("POST")  // TinyQuery endpoint
+	api.HandleFunc("/query/instant", queryHandler.HandleQueryInstant).Methods("GET", "POST") // Prometheus-compatible instant query
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
