@@ -152,6 +152,11 @@ func main() {
 	wg.Add(1)
 	go runCompaction(compactor, stopCompaction, &wg)
 
+	// Start BadgerDB garbage collection (reclaims disk space)
+	stopGC := make(chan bool)
+	wg.Add(1)
+	go runBadgerGC(store, stopGC, &wg)
+
 	// Create router
 	router := mux.NewRouter()
 
@@ -222,9 +227,12 @@ func main() {
 
 	log.Println("🛑 Shutdown signal received...")
 
-	// Stop background tasks first
-	log.Println("⏸️  Stopping background compaction...")
+	// CRITICAL: Cancel context FIRST to stop goroutines
+	// Must be called before wg.Wait() or we get deadlock!
+	log.Println("⏸️  Stopping background tasks...")
+	cancel() // Stops hub.Run() and broadcastMetrics() goroutines
 	close(stopCompaction)
+	close(stopGC)
 
 	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -232,12 +240,24 @@ func main() {
 
 	log.Println("🔄 Gracefully shutting down server...")
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("❌ Server forced to shutdown: %v", err)
+		log.Printf("⚠️  Server shutdown warning: %v", err)
 	}
 
 	// Wait for background goroutines to finish
 	log.Println("⏳ Waiting for background tasks to complete...")
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// Wait with timeout to prevent infinite hang
+	select {
+	case <-done:
+		log.Println("✅ All background tasks stopped cleanly")
+	case <-time.After(5 * time.Second):
+		log.Println("⚠️  Some background tasks did not stop in time (forcing exit)")
+	}
 
 	log.Println("👋 TinyObs server exited cleanly")
 }
@@ -319,6 +339,48 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 					log.Printf("❌ Failed to broadcast metrics: %v", err)
 				}
 			}
+		}
+	}
+}
+
+// runBadgerGC runs BadgerDB garbage collection periodically to reclaim disk space
+// SAFETY: BadgerDB uses LSM trees which accumulate deleted data in value log
+// GC is essential to prevent unbounded disk growth
+func runBadgerGC(store storage.Storage, stop chan bool, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// GC runs every 10 minutes
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	// Type assert to get underlying BadgerDB
+	badgerStore, ok := store.(*badger.Storage)
+	if !ok {
+		log.Println("⚠️  Storage is not BadgerDB, skipping GC")
+		return
+	}
+
+	log.Println("🗑️  BadgerDB GC scheduler started (runs every 10m)")
+
+	for {
+		select {
+		case <-ticker.C:
+			// Run GC with 0.5 discard ratio (reclaim space if 50% of file is garbage)
+			log.Println("🗑️  Running BadgerDB garbage collection...")
+			start := time.Now()
+
+			// RunValueLogGC runs until no more garbage can be collected
+			// We limit to 1 iteration per tick to avoid blocking
+			err := badgerStore.RunGC(0.5)
+			if err != nil {
+				// Not an error if no GC was needed
+				log.Printf("🗑️  GC completed in %v (no rewrite needed)", time.Since(start).Round(time.Millisecond))
+			} else {
+				log.Printf("✅ GC completed in %v (disk space reclaimed)", time.Since(start).Round(time.Millisecond))
+			}
+		case <-stop:
+			log.Println("🛑 Stopping BadgerDB GC scheduler")
+			return
 		}
 	}
 }

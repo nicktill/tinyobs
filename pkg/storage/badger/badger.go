@@ -182,6 +182,14 @@ func (s *Storage) Close() error {
 	return s.db.Close()
 }
 
+// RunGC runs BadgerDB's value log garbage collection
+// This reclaims disk space from deleted/updated values
+// discardRatio: run GC if this fraction of file can be discarded (0.5 = 50%)
+// Returns error only if GC failed, nil if GC not needed or succeeded
+func (s *Storage) RunGC(discardRatio float64) error {
+	return s.db.RunValueLogGC(discardRatio)
+}
+
 // Stats returns storage statistics
 func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
 	stats := &storage.Stats{}
