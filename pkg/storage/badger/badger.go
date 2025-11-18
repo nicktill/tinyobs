@@ -57,11 +57,33 @@ func New(cfg Config) (*Storage, error) {
 		valueLogMaxEntries = 5000
 	}
 
-	// Optimize for time-series workload
+	// CRITICAL MEMORY LIMITS: BadgerDB has multiple unbounded memory consumers
+	// Without these limits, it can consume 1-2 GB even with small memtable
+	blockCacheSize := memTableSize / 2 // Block cache: 50% of memtable
+	indexCacheSize := memTableSize / 4 // Index cache: 25% of memtable
+
+	// Optimize for time-series workload with strict memory bounds
 	opts = opts.
-		WithCompression(options.Snappy).                    // Compression for metrics
-		WithNumVersionsToKeep(1).                           // We don't need versioning
-		WithMemTableSize(memTableSize).                     // Limit memory table size
+		// Compression and versioning
+		WithCompression(options.Snappy). // Compression for metrics
+		WithNumVersionsToKeep(1).        // We don't need versioning
+
+		// Memory table configuration
+		WithMemTableSize(memTableSize). // Limit memory table size
+		WithNumMemtables(3).            // Limit concurrent memtables (3 = active + 2 flushing)
+
+		// Block and index caching (CRITICAL for memory bounds)
+		WithBlockCacheSize(blockCacheSize). // Limit block cache to prevent unbounded growth
+		WithIndexCacheSize(indexCacheSize). // Limit index cache to prevent unbounded growth
+
+		// LSM tree configuration (reduces memory and disk usage)
+		WithMaxLevels(4).               // Reduce LSM depth (default 7) for smaller datasets
+		WithNumLevelZeroTables(2).      // Trigger compaction earlier (default 5)
+		WithNumLevelZeroTablesStall(4). // Hard limit before stalling writes (default 10)
+		WithValueThreshold(1024).       // Keep small values in LSM, large in vlog (default 1MB)
+		WithNumCompactors(1).           // Limit compaction threads to 1 (reduces CPU/memory)
+
+		// Value log configuration
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
 		WithValueLogFileSize(64 << 20)                      // CRITICAL: 64 MB value log files instead of default 2GB!
 
@@ -94,6 +116,8 @@ func (s *Storage) Write(ctx context.Context, metrics []metrics.Metric) error {
 // Query retrieves metrics matching the request
 func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metrics.Metric, error) {
 	var results []metrics.Metric
+	startTime := time.Now()
+	var iterCount int
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -104,6 +128,24 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 
 		// Scan all keys (in production, would use prefix for efficiency)
 		for it.Rewind(); it.Valid(); it.Next() {
+			iterCount++
+
+			// CRITICAL: Check for context cancellation every 1000 iterations
+			// Prevents long-running queries from blocking shutdown or exceeding timeouts
+			if iterCount%1000 == 0 {
+				select {
+				case <-ctx.Done():
+					// Log slow query warning before returning error
+					elapsed := time.Since(startTime)
+					if elapsed > 5*time.Second {
+						fmt.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+					}
+					return ctx.Err()
+				default:
+					// Continue processing
+				}
+			}
+
 			item := it.Item()
 
 			err := item.Value(func(val []byte) error {
@@ -136,6 +178,13 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 				break
 			}
 		}
+
+		// Log slow queries for performance monitoring
+		elapsed := time.Since(startTime)
+		if elapsed > 5*time.Second {
+			fmt.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+		}
+
 		return nil
 	})
 

@@ -48,7 +48,82 @@ type StorageMonitor struct {
 	cachedUsage   int64
 	lastCheck     time.Time
 	cacheDuration time.Duration
-	mu            sync.RWMutex
+	mu            sync.Mutex // FIXED: Use single mutex instead of RWMutex to avoid race condition
+}
+
+// CompactionMonitor tracks compaction health and failures
+type CompactionMonitor struct {
+	mu                sync.RWMutex
+	lastSuccess       time.Time
+	lastAttempt       time.Time
+	consecutiveErrors int
+	lastError         string
+}
+
+// RecordSuccess records a successful compaction
+func (cm *CompactionMonitor) RecordSuccess() {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.lastSuccess = time.Now()
+	cm.lastAttempt = time.Now()
+	cm.consecutiveErrors = 0
+	cm.lastError = ""
+}
+
+// RecordFailure records a failed compaction
+func (cm *CompactionMonitor) RecordFailure(err error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.lastAttempt = time.Now()
+	cm.consecutiveErrors++
+	cm.lastError = err.Error()
+}
+
+// IsHealthy returns true if compaction is working properly
+func (cm *CompactionMonitor) IsHealthy() bool {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	// Unhealthy if:
+	// 1. Never succeeded, OR
+	// 2. Haven't succeeded in >1 hour, OR
+	// 3. More than 3 consecutive failures
+	if cm.lastSuccess.IsZero() {
+		return false
+	}
+	if time.Since(cm.lastSuccess) > 1*time.Hour {
+		return false
+	}
+	if cm.consecutiveErrors > 3 {
+		return false
+	}
+	return true
+}
+
+// Status returns current compaction status for health checks
+func (cm *CompactionMonitor) Status() map[string]interface{} {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	status := map[string]interface{}{
+		"healthy": cm.IsHealthy(),
+	}
+
+	if !cm.lastSuccess.IsZero() {
+		status["last_success"] = cm.lastSuccess.Format(time.RFC3339)
+		status["time_since_success"] = time.Since(cm.lastSuccess).String()
+	}
+
+	if !cm.lastAttempt.IsZero() {
+		status["last_attempt"] = cm.lastAttempt.Format(time.RFC3339)
+	}
+
+	if cm.consecutiveErrors > 0 {
+		status["consecutive_errors"] = cm.consecutiveErrors
+		status["last_error"] = cm.lastError
+	}
+
+	return status
 }
 
 // NewStorageMonitor creates a storage monitor
@@ -61,25 +136,17 @@ func NewStorageMonitor(dataDir string, maxBytes int64) *StorageMonitor {
 }
 
 // GetUsage returns current storage usage in bytes (cached)
+// FIXED: Eliminated double-checked locking race condition by using single mutex
 func (sm *StorageMonitor) GetUsage() (int64, error) {
-	sm.mu.RLock()
-	// Return cached value if still fresh
-	if time.Since(sm.lastCheck) < sm.cacheDuration {
-		usage := sm.cachedUsage
-		sm.mu.RUnlock()
-		return usage, nil
-	}
-	sm.mu.RUnlock()
-
-	// Cache expired, recalculate
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	// Double-check another goroutine didn't just update it
+	// Return cached value if still fresh
 	if time.Since(sm.lastCheck) < sm.cacheDuration {
 		return sm.cachedUsage, nil
 	}
 
+	// Cache expired, recalculate
 	usage, err := calculateDirSize(sm.dataDir)
 	if err != nil {
 		return 0, err
@@ -123,15 +190,29 @@ func calculateDirSize(path string) (int64, error) {
 // - filesize_windows.go (Windows): Uses GetCompressedFileSizeW API
 
 // handleHealth returns service health status
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "healthy",
-		"version": "1.0.0",
-		"uptime":  time.Since(startTime).String(),
-	}); err != nil {
-		log.Printf("❌ Failed to encode health response: %v", err)
+func handleHealth(compactionMonitor *CompactionMonitor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Determine overall health status
+		compactionHealthy := compactionMonitor.IsHealthy()
+		overallStatus := "healthy"
+		statusCode := http.StatusOK
+
+		if !compactionHealthy {
+			overallStatus = "degraded"
+			statusCode = http.StatusServiceUnavailable
+		}
+
+		w.WriteHeader(statusCode)
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":     overallStatus,
+			"version":    "1.0.0",
+			"uptime":     time.Since(startTime).String(),
+			"compaction": compactionMonitor.Status(),
+		}); err != nil {
+			log.Printf("❌ Failed to encode health response: %v", err)
+		}
 	}
 }
 
@@ -244,14 +325,15 @@ func main() {
 	}()
 	log.Println("📤 Metrics broadcaster started (updates every 5s)")
 
-	// Create compactor
+	// Create compactor with health monitoring
 	compactor := compaction.New(store)
+	compactionMonitor := &CompactionMonitor{}
 	log.Printf("⚙️  Compaction engine ready (runs every %v)", compactionInterval)
 
-	// Start background compaction with cleanup tracking
+	// Start background compaction with cleanup tracking and failure retry
 	stopCompaction := make(chan bool)
 	wg.Add(1)
-	go runCompaction(compactor, stopCompaction, &wg)
+	go runCompaction(compactor, compactionMonitor, stopCompaction, &wg)
 
 	// Start BadgerDB garbage collection (reclaims disk space)
 	stopGC := make(chan bool)
@@ -286,7 +368,7 @@ func main() {
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
-	api.HandleFunc("/health", handleHealth).Methods("GET")
+	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
@@ -364,35 +446,67 @@ func main() {
 }
 
 // runCompaction runs the compaction job periodically
-func runCompaction(compactor *compaction.Compactor, stop chan bool, wg *sync.WaitGroup) {
+func runCompaction(compactor *compaction.Compactor, monitor *CompactionMonitor, stop chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	ticker := time.NewTicker(compactionInterval)
 	defer ticker.Stop()
 
-	// Run once on startup (non-blocking, tracked by parent WaitGroup)
+	// Helper function to run compaction with retry and exponential backoff
+	runWithRetry := func(ctx context.Context, isInitial bool) {
+		maxRetries := 3
+		baseDelay := 30 * time.Second
+
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if attempt > 0 {
+				delay := baseDelay * time.Duration(1<<(attempt-1)) // Exponential backoff: 30s, 60s, 120s
+				log.Printf("⏳ Retrying compaction in %v (attempt %d/%d)...", delay, attempt+1, maxRetries+1)
+				select {
+				case <-time.After(delay):
+				case <-stop:
+					return
+				}
+			}
+
+			start := time.Now()
+			err := compactor.CompactAndCleanup(ctx)
+
+			if err == nil {
+				// Success!
+				monitor.RecordSuccess()
+				if isInitial {
+					log.Printf("✅ Initial compaction completed in %v", time.Since(start).Round(time.Millisecond))
+				} else {
+					log.Printf("✅ Compaction completed in %v (data cleanup + downsampling)", time.Since(start).Round(time.Millisecond))
+				}
+				return
+			}
+
+			// Failure - record and log
+			monitor.RecordFailure(err)
+			log.Printf("❌ Compaction failed (attempt %d/%d): %v", attempt+1, maxRetries+1, err)
+
+			// Check if we should alert
+			if monitor.consecutiveErrors > 3 || time.Since(monitor.lastSuccess) > 1*time.Hour {
+				log.Printf("🚨 ALERT: Compaction has been failing! Consecutive errors: %d, Time since success: %v",
+					monitor.consecutiveErrors, time.Since(monitor.lastSuccess))
+			}
+		}
+
+		log.Printf("❌ Compaction failed after %d attempts, will retry on next schedule", maxRetries+1)
+	}
+
+	// Run once on startup (non-blocking)
 	go func() {
 		log.Println("🔧 Running initial compaction (raw → 5m → 1h aggregates)...")
-		ctx := context.Background()
-		start := time.Now()
-		if err := compactor.CompactAndCleanup(ctx); err != nil {
-			log.Printf("❌ Initial compaction failed: %v", err)
-		} else {
-			log.Printf("✅ Initial compaction completed in %v", time.Since(start).Round(time.Millisecond))
-		}
+		runWithRetry(context.Background(), true)
 	}()
 
 	for {
 		select {
 		case <-ticker.C:
 			log.Println("⏰ Scheduled compaction started...")
-			ctx := context.Background()
-			start := time.Now()
-			if err := compactor.CompactAndCleanup(ctx); err != nil {
-				log.Printf("❌ Compaction failed: %v", err)
-			} else {
-				log.Printf("✅ Compaction completed in %v (data cleanup + downsampling)", time.Since(start).Round(time.Millisecond))
-			}
+			runWithRetry(context.Background(), false)
 		case <-stop:
 			log.Println("🛑 Stopping compaction scheduler")
 			return
