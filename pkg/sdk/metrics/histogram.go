@@ -1,7 +1,9 @@
 package metrics
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -123,10 +125,7 @@ func (h *Histogram) Flush() []Metric {
 
 		// Send cumulative bucket counts (Prometheus-style)
 		for i, bound := range bs.buckets {
-			bucketLabels := make(map[string]string)
-			for k, v := range labels {
-				bucketLabels[k] = v
-			}
+			bucketLabels := copyLabels(labels)
 			bucketLabels["le"] = formatBound(bound)
 
 			metrics = append(metrics, Metric{
@@ -138,27 +137,19 @@ func (h *Histogram) Flush() []Metric {
 		}
 
 		// Send sum
-		sumLabels := make(map[string]string)
-		for k, v := range labels {
-			sumLabels[k] = v
-		}
 		metrics = append(metrics, Metric{
 			Name:   h.name + "_sum",
 			Type:   HistogramType,
 			Value:  bs.sum,
-			Labels: sumLabels,
+			Labels: copyLabels(labels),
 		})
 
 		// Send count
-		countLabels := make(map[string]string)
-		for k, v := range labels {
-			countLabels[k] = v
-		}
 		metrics = append(metrics, Metric{
 			Name:   h.name + "_count",
 			Type:   HistogramType,
 			Value:  float64(bs.count),
-			Labels: countLabels,
+			Labels: copyLabels(labels),
 		})
 
 		// Reset buckets after flush
@@ -260,21 +251,19 @@ func splitKey(key string) []string {
 	if key == "" {
 		return nil
 	}
+	return strings.Split(key, ",")
+}
 
-	var parts []string
-	current := ""
-	for i := 0; i < len(key); i++ {
-		if key[i] == ',' {
-			parts = append(parts, current)
-			current = ""
-		} else {
-			current += string(key[i])
-		}
+// copyLabels creates a copy of a label map
+func copyLabels(labels map[string]string) map[string]string {
+	if labels == nil {
+		return nil
 	}
-	if current != "" {
-		parts = append(parts, current)
+	copy := make(map[string]string, len(labels))
+	for k, v := range labels {
+		copy[k] = v
 	}
-	return parts
+	return copy
 }
 
 // formatBound formats a bucket bound as a string
@@ -282,47 +271,6 @@ func formatBound(bound float64) string {
 	if bound == 10.0 {
 		return "+Inf" // Prometheus convention for last bucket
 	}
-	// Format with up to 3 decimal places, trimming trailing zeros
-	s := ""
-	if bound < 0.01 {
-		s = "0.001" // Trim for small values
-	} else if bound < 0.1 {
-		s = "0.01"
-	} else if bound < 1 {
-		s = "0.1"
-	} else {
-		// For larger values, format as integer or 1 decimal
-		if bound == float64(int(bound)) {
-			s = string(rune(int(bound) + '0'))
-		} else {
-			// Simple formatting for common values
-			switch bound {
-			case 0.001:
-				s = "0.001"
-			case 0.005:
-				s = "0.005"
-			case 0.01:
-				s = "0.01"
-			case 0.025:
-				s = "0.025"
-			case 0.05:
-				s = "0.05"
-			case 0.1:
-				s = "0.1"
-			case 0.25:
-				s = "0.25"
-			case 0.5:
-				s = "0.5"
-			case 1.0:
-				s = "1.0"
-			case 2.5:
-				s = "2.5"
-			case 5.0:
-				s = "5.0"
-			default:
-				s = "10.0"
-			}
-		}
-	}
-	return s
+	// Format with appropriate precision, removing trailing zeros
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", bound), "0"), ".")
 }

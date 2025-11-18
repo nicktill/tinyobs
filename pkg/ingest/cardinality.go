@@ -3,6 +3,7 @@ package ingest
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,11 +142,8 @@ func (c *CardinalityTracker) rebuildCountsLocked() {
 	for key := range c.seriesSeen {
 		// Extract metric name from key (everything before first comma)
 		metricName := key
-		for idx := 0; idx < len(key); idx++ {
-			if key[idx] == ',' {
-				metricName = key[:idx]
-				break
-			}
+		if idx := strings.IndexByte(key, ','); idx >= 0 {
+			metricName = key[:idx]
 		}
 		c.seriesCount[metricName]++
 		c.totalSeries++
