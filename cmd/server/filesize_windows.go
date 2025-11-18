@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	kernel32           = syscall.NewLazyDLL("kernel32.dll")
-	getCompressedSize  = kernel32.NewProc("GetCompressedFileSizeW")
+	kernel32          = syscall.NewLazyDLL("kernel32.dll")
+	getCompressedSize = kernel32.NewProc("GetCompressedFileSizeW")
 )
 
 // getActualFileSize returns actual disk usage in bytes on Windows

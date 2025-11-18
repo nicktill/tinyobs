@@ -8,9 +8,9 @@ type TokenType int
 const (
 	// Literals
 	TokenIdentifier TokenType = iota // metric_name, label_name
-	TokenNumber                       // 123, 45.67
-	TokenString                       // "value"
-	TokenDuration                     // 5m, 1h, 7d
+	TokenNumber                      // 123, 45.67
+	TokenString                      // "value"
+	TokenDuration                    // 5m, 1h, 7d
 
 	// Operators
 	TokenPlus     // +
@@ -37,16 +37,16 @@ const (
 	TokenUnless // unless
 
 	// Aggregation Functions (as tokens for better parsing)
-	TokenSum        // sum
-	TokenAvg        // avg
-	TokenMax        // max
-	TokenMin        // min
-	TokenCount      // count
-	TokenStddev     // stddev
-	TokenStdvar     // stdvar
-	TokenTopK       // topk
-	TokenBottomK    // bottomk
-	TokenQuantile   // quantile
+	TokenSum         // sum
+	TokenAvg         // avg
+	TokenMax         // max
+	TokenMin         // min
+	TokenCount       // count
+	TokenStddev      // stddev
+	TokenStdvar      // stdvar
+	TokenTopK        // topk
+	TokenBottomK     // bottomk
+	TokenQuantile    // quantile
 	TokenCountValues // count_values
 
 	// Delimiters

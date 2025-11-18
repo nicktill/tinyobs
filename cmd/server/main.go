@@ -39,12 +39,12 @@ type StorageUsage struct {
 
 // StorageMonitor tracks storage usage with caching to avoid expensive filesystem calls
 type StorageMonitor struct {
-	dataDir      string
-	maxBytes     int64
-	cachedUsage  int64
-	lastCheck    time.Time
+	dataDir       string
+	maxBytes      int64
+	cachedUsage   int64
+	lastCheck     time.Time
 	cacheDuration time.Duration
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 }
 
 // NewStorageMonitor creates a storage monitor
@@ -276,7 +276,7 @@ func main() {
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
 	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
-	api.HandleFunc("/query/execute", queryHandler.HandleQueryExecute).Methods("POST")  // TinyQuery endpoint
+	api.HandleFunc("/query/execute", queryHandler.HandleQueryExecute).Methods("POST")        // TinyQuery endpoint
 	api.HandleFunc("/query/instant", queryHandler.HandleQueryInstant).Methods("GET", "POST") // Prometheus-compatible instant query
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
