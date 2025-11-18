@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -34,6 +35,60 @@ const (
 type StorageUsage struct {
 	UsedBytes int64 `json:"used_bytes"`
 	MaxBytes  int64 `json:"max_bytes"`
+}
+
+// StorageMonitor tracks storage usage with caching to avoid expensive filesystem calls
+type StorageMonitor struct {
+	dataDir      string
+	maxBytes     int64
+	cachedUsage  int64
+	lastCheck    time.Time
+	cacheDuration time.Duration
+	mu           sync.RWMutex
+}
+
+// NewStorageMonitor creates a storage monitor
+func NewStorageMonitor(dataDir string, maxBytes int64) *StorageMonitor {
+	return &StorageMonitor{
+		dataDir:       dataDir,
+		maxBytes:      maxBytes,
+		cacheDuration: 10 * time.Second, // Cache for 10 seconds to avoid expensive disk scans
+	}
+}
+
+// GetUsage returns current storage usage in bytes (cached)
+func (sm *StorageMonitor) GetUsage() (int64, error) {
+	sm.mu.RLock()
+	// Return cached value if still fresh
+	if time.Since(sm.lastCheck) < sm.cacheDuration {
+		usage := sm.cachedUsage
+		sm.mu.RUnlock()
+		return usage, nil
+	}
+	sm.mu.RUnlock()
+
+	// Cache expired, recalculate
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Double-check another goroutine didn't just update it
+	if time.Since(sm.lastCheck) < sm.cacheDuration {
+		return sm.cachedUsage, nil
+	}
+
+	usage, err := calculateDirSize(sm.dataDir)
+	if err != nil {
+		return 0, err
+	}
+
+	sm.cachedUsage = usage
+	sm.lastCheck = time.Now()
+	return usage, nil
+}
+
+// GetLimit returns the configured storage limit
+func (sm *StorageMonitor) GetLimit() int64 {
+	return sm.maxBytes
 }
 
 // calculateDirSize recursively calculates directory size in bytes
@@ -68,10 +123,21 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 var startTime = time.Now()
 
+// getEnvInt64 gets an int64 from environment variable or returns default
+func getEnvInt64(key string, defaultValue int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return parsed
+		}
+		log.Printf("⚠️  Invalid value for %s: %q, using default %d", key, val, defaultValue)
+	}
+	return defaultValue
+}
+
 // handleStorageUsage returns current storage usage
-func handleStorageUsage(dataDir string) http.HandlerFunc {
+func handleStorageUsage(monitor *StorageMonitor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		usedBytes, err := calculateDirSize(dataDir)
+		usedBytes, err := monitor.GetUsage()
 		if err != nil {
 			log.Printf("❌ Failed to calculate storage usage: %v", err)
 			http.Error(w, "Failed to calculate storage", http.StatusInternalServerError)
@@ -80,7 +146,7 @@ func handleStorageUsage(dataDir string) http.HandlerFunc {
 
 		usage := StorageUsage{
 			UsedBytes: usedBytes,
-			MaxBytes:  maxStorageBytes,
+			MaxBytes:  monitor.GetLimit(),
 		}
 
 		log.Printf("📊 Storage usage: %d bytes (%.2f MB)", usedBytes, float64(usedBytes)/(1024*1024))
@@ -95,6 +161,21 @@ func handleStorageUsage(dataDir string) http.HandlerFunc {
 func main() {
 	log.Println("🚀 Starting TinyObs Server...")
 
+	// Read configuration from environment variables
+	// TINYOBS_MAX_STORAGE_GB: Maximum storage in GB (default: 10)
+	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: auto-detect)
+	maxStorageMB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", 10) * 1024 // Convert GB to MB
+	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 0)           // 0 = auto-detect
+	maxStorageBytesConfigured := maxStorageMB * 1024 * 1024
+
+	if maxMemoryMB > 0 {
+		log.Printf("⚙️  Configuration: Storage limit = %.2f GB, Memory limit = %d MB",
+			float64(maxStorageBytesConfigured)/(1024*1024*1024), maxMemoryMB)
+	} else {
+		log.Printf("⚙️  Configuration: Storage limit = %.2f GB, Memory limit = auto-detect",
+			float64(maxStorageBytesConfigured)/(1024*1024*1024))
+	}
+
 	// Ensure data directory exists
 	dataDir := "./data/tinyobs"
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
@@ -102,10 +183,11 @@ func main() {
 	}
 	log.Printf("📁 Data directory: %s", dataDir)
 
-	// Initialize storage
+	// Initialize storage with memory limits
 	log.Println("💾 Initializing BadgerDB storage with Snappy compression...")
 	store, err := badger.New(badger.Config{
-		Path: dataDir,
+		Path:        dataDir,
+		MaxMemoryMB: maxMemoryMB,
 	})
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize storage: %v", err)
@@ -113,9 +195,14 @@ func main() {
 	defer store.Close()
 	log.Println("✅ BadgerDB storage initialized successfully")
 
+	// Create storage monitor for limit enforcement
+	storageMonitor := NewStorageMonitor(dataDir, maxStorageBytesConfigured)
+	log.Printf("💾 Storage limit enforcement enabled: %.2f GB max", float64(maxStorageBytesConfigured)/(1024*1024*1024))
+
 	// Create ingest handler
 	handler := ingest.NewHandler(store)
-	log.Println("📊 Ingest handler created with cardinality protection")
+	handler.SetStorageChecker(storageMonitor)
+	log.Println("📊 Ingest handler created with cardinality protection & storage limits")
 
 	// Create query handler for TinyQuery (PromQL-compatible)
 	queryHandler := query.NewHandler(store)
@@ -184,7 +271,7 @@ func main() {
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
-	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
+	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
 
