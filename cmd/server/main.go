@@ -36,7 +36,7 @@ type StorageUsage struct {
 }
 
 // calculateDirSize recursively calculates directory size in bytes
-// Uses logical file size for cross-platform compatibility
+// Uses platform-specific implementation (see storage_unix.go and storage_windows.go)
 func calculateDirSize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
@@ -44,7 +44,7 @@ func calculateDirSize(path string) (int64, error) {
 			return err
 		}
 		if !info.IsDir() {
-			size += info.Size()
+			size += getFileSize(info)
 		}
 		return nil
 	})
