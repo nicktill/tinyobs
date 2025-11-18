@@ -138,6 +138,9 @@ func (c *Client) Start(ctx context.Context) error {
 	// Start runtime collection
 	go c.collectRuntimeMetrics()
 
+	// Start histogram flushing (aggregates observations into buckets)
+	go c.flushHistograms()
+
 	return nil
 }
 
@@ -188,6 +191,36 @@ func (c *Client) collectRuntimeMetrics() {
 			for _, collector := range c.collectors {
 				metrics := collector.Collect(c.ctx)
 				for _, metric := range metrics {
+					c.SendMetric(metric)
+				}
+			}
+		}
+	}
+}
+
+// flushHistograms periodically flushes histogram buckets
+// This sends aggregated bucket counts instead of individual observations
+func (c *Client) flushHistograms() {
+	// Flush interval should match the batch flush interval
+	ticker := time.NewTicker(c.config.FlushEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			c.mu.RLock()
+			histograms := make([]*metrics.Histogram, 0, len(c.histograms))
+			for _, h := range c.histograms {
+				histograms = append(histograms, h)
+			}
+			c.mu.RUnlock()
+
+			// Flush each histogram and send aggregated metrics
+			for _, h := range histograms {
+				aggregatedMetrics := h.Flush()
+				for _, metric := range aggregatedMetrics {
 					c.SendMetric(metric)
 				}
 			}
