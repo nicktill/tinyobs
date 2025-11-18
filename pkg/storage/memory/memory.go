@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -9,26 +10,51 @@ import (
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
+const (
+	// SAFETY: Hard limit on in-memory metrics to prevent OOM on laptops
+	// At ~100 bytes per metric, this is ~5 MB max
+	MaxMetricsInMemory = 50_000
+
+	// When limit is reached, evict this many oldest metrics
+	EvictionBatchSize = 10_000
+)
+
 // Storage stores metrics in memory. Data is lost on restart.
-// Useful for testing and development.
+// SAFETY: Limited to 50k metrics (~5 MB) to prevent unbounded memory growth
+// Useful for testing and development only - NOT for production use
 type Storage struct {
 	metrics []metrics.Metric
 	mu      sync.RWMutex
 }
 
-// New creates an in-memory storage backend
+// New creates an in-memory storage backend with safety limits
 func New() *Storage {
 	return &Storage{
 		metrics: make([]metrics.Metric, 0, 10000),
 	}
 }
 
-// Write stores metrics in memory
+// Write stores metrics in memory with automatic eviction when limit is reached
 func (s *Storage) Write(ctx context.Context, metrics []metrics.Metric) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.metrics = append(s.metrics, metrics...)
+
+	// SAFETY: Evict oldest metrics when limit is exceeded
+	if len(s.metrics) > MaxMetricsInMemory {
+		// Sort by timestamp (oldest first)
+		sort.Slice(s.metrics, func(i, j int) bool {
+			return s.metrics[i].Timestamp.Before(s.metrics[j].Timestamp)
+		})
+
+		// Remove oldest batch
+		toRemove := len(s.metrics) - MaxMetricsInMemory + EvictionBatchSize
+		if toRemove > 0 {
+			s.metrics = s.metrics[toRemove:]
+		}
+	}
+
 	return nil
 }
 
