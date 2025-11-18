@@ -36,8 +36,8 @@ type StorageUsage struct {
 }
 
 // calculateDirSize recursively calculates directory size in bytes
-// Uses actual disk blocks allocated (like `du`) rather than logical file size
-// to handle sparse files correctly (e.g., BadgerDB's .vlog files)
+// Uses logical file size for cross-platform compatibility
+// Note: May overreport for sparse files (e.g., BadgerDB .vlog files)
 func calculateDirSize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
@@ -45,15 +45,7 @@ func calculateDirSize(path string) (int64, error) {
 			return err
 		}
 		if !info.IsDir() {
-			// Get actual disk usage using blocks allocated
-			stat, ok := info.Sys().(*syscall.Stat_t)
-			if ok {
-				// Blocks are 512 bytes on most Unix systems
-				size += stat.Blocks * 512
-			} else {
-				// Fallback to logical size if syscall fails
-				size += info.Size()
-			}
+			size += info.Size()
 		}
 		return nil
 	})
