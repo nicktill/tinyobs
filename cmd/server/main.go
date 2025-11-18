@@ -177,9 +177,9 @@ func main() {
 
 	// Read configuration from environment variables
 	// TINYOBS_MAX_STORAGE_GB: Maximum storage in GB (default: 1 GB for laptops)
-	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: 32 MB)
+	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: 48 MB)
 	maxStorageGB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", defaultMaxStorageGB)
-	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 32) // 32 MB default (minimal footprint)
+	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 48) // 48 MB default (16 MB memtable minimum)
 	maxStorageBytesConfigured := maxStorageGB * 1024 * 1024 * 1024
 
 	if maxMemoryMB > 0 {
