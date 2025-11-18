@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
 	"github.com/nicktill/tinyobs/pkg/ingest"
+	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 
@@ -35,22 +37,86 @@ type StorageUsage struct {
 	MaxBytes  int64 `json:"max_bytes"`
 }
 
+// StorageMonitor tracks storage usage with caching to avoid expensive filesystem calls
+type StorageMonitor struct {
+	dataDir       string
+	maxBytes      int64
+	cachedUsage   int64
+	lastCheck     time.Time
+	cacheDuration time.Duration
+	mu            sync.RWMutex
+}
+
+// NewStorageMonitor creates a storage monitor
+func NewStorageMonitor(dataDir string, maxBytes int64) *StorageMonitor {
+	return &StorageMonitor{
+		dataDir:       dataDir,
+		maxBytes:      maxBytes,
+		cacheDuration: 10 * time.Second, // Cache for 10 seconds to avoid expensive disk scans
+	}
+}
+
+// GetUsage returns current storage usage in bytes (cached)
+func (sm *StorageMonitor) GetUsage() (int64, error) {
+	sm.mu.RLock()
+	// Return cached value if still fresh
+	if time.Since(sm.lastCheck) < sm.cacheDuration {
+		usage := sm.cachedUsage
+		sm.mu.RUnlock()
+		return usage, nil
+	}
+	sm.mu.RUnlock()
+
+	// Cache expired, recalculate
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Double-check another goroutine didn't just update it
+	if time.Since(sm.lastCheck) < sm.cacheDuration {
+		return sm.cachedUsage, nil
+	}
+
+	usage, err := calculateDirSize(sm.dataDir)
+	if err != nil {
+		return 0, err
+	}
+
+	sm.cachedUsage = usage
+	sm.lastCheck = time.Now()
+	return usage, nil
+}
+
+// GetLimit returns the configured storage limit
+func (sm *StorageMonitor) GetLimit() int64 {
+	return sm.maxBytes
+}
+
 // calculateDirSize recursively calculates directory size in bytes
-// Uses logical file size for cross-platform compatibility
-// Note: May overreport for sparse files (e.g., BadgerDB .vlog files)
+// Uses actual disk usage (not logical size) to handle sparse files correctly
 func calculateDirSize(path string) (int64, error) {
 	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() {
-			size += info.Size()
+			// Get actual disk usage, not logical file size
+			actualSize, err := getActualFileSize(filePath, info)
+			if err != nil {
+				// Fallback to logical size if we can't get actual size
+				size += info.Size()
+			} else {
+				size += actualSize
+			}
 		}
 		return nil
 	})
 	return size, err
 }
+
+// getActualFileSize is implemented in platform-specific files:
+// - filesize_unix.go (Linux/Mac): Uses syscall.Stat_t.Blocks
+// - filesize_windows.go (Windows): Uses GetCompressedFileSizeW API
 
 // handleHealth returns service health status
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +133,21 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 var startTime = time.Now()
 
+// getEnvInt64 gets an int64 from environment variable or returns default
+func getEnvInt64(key string, defaultValue int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return parsed
+		}
+		log.Printf("⚠️  Invalid value for %s: %q, using default %d", key, val, defaultValue)
+	}
+	return defaultValue
+}
+
 // handleStorageUsage returns current storage usage
-func handleStorageUsage(dataDir string) http.HandlerFunc {
+func handleStorageUsage(monitor *StorageMonitor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		usedBytes, err := calculateDirSize(dataDir)
+		usedBytes, err := monitor.GetUsage()
 		if err != nil {
 			log.Printf("❌ Failed to calculate storage usage: %v", err)
 			http.Error(w, "Failed to calculate storage", http.StatusInternalServerError)
@@ -79,7 +156,7 @@ func handleStorageUsage(dataDir string) http.HandlerFunc {
 
 		usage := StorageUsage{
 			UsedBytes: usedBytes,
-			MaxBytes:  maxStorageBytes,
+			MaxBytes:  monitor.GetLimit(),
 		}
 
 		log.Printf("📊 Storage usage: %d bytes (%.2f MB)", usedBytes, float64(usedBytes)/(1024*1024))
@@ -94,6 +171,21 @@ func handleStorageUsage(dataDir string) http.HandlerFunc {
 func main() {
 	log.Println("🚀 Starting TinyObs Server...")
 
+	// Read configuration from environment variables
+	// TINYOBS_MAX_STORAGE_GB: Maximum storage in GB (default: 10)
+	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: auto-detect)
+	maxStorageMB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", 10) * 1024 // Convert GB to MB
+	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 0)           // 0 = auto-detect
+	maxStorageBytesConfigured := maxStorageMB * 1024 * 1024
+
+	if maxMemoryMB > 0 {
+		log.Printf("⚙️  Configuration: Storage limit = %.2f GB, Memory limit = %d MB",
+			float64(maxStorageBytesConfigured)/(1024*1024*1024), maxMemoryMB)
+	} else {
+		log.Printf("⚙️  Configuration: Storage limit = %.2f GB, Memory limit = auto-detect",
+			float64(maxStorageBytesConfigured)/(1024*1024*1024))
+	}
+
 	// Ensure data directory exists
 	dataDir := "./data/tinyobs"
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
@@ -101,10 +193,11 @@ func main() {
 	}
 	log.Printf("📁 Data directory: %s", dataDir)
 
-	// Initialize storage
+	// Initialize storage with memory limits
 	log.Println("💾 Initializing BadgerDB storage with Snappy compression...")
 	store, err := badger.New(badger.Config{
-		Path: dataDir,
+		Path:        dataDir,
+		MaxMemoryMB: maxMemoryMB,
 	})
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize storage: %v", err)
@@ -112,9 +205,18 @@ func main() {
 	defer store.Close()
 	log.Println("✅ BadgerDB storage initialized successfully")
 
+	// Create storage monitor for limit enforcement
+	storageMonitor := NewStorageMonitor(dataDir, maxStorageBytesConfigured)
+	log.Printf("💾 Storage limit enforcement enabled: %.2f GB max", float64(maxStorageBytesConfigured)/(1024*1024*1024))
+
 	// Create ingest handler
 	handler := ingest.NewHandler(store)
-	log.Println("📊 Ingest handler created with cardinality protection")
+	handler.SetStorageChecker(storageMonitor)
+	log.Println("📊 Ingest handler created with cardinality protection & storage limits")
+
+	// Create query handler for TinyQuery (PromQL-compatible)
+	queryHandler := query.NewHandler(store)
+	log.Println("🔍 TinyQuery handler created (PromQL-compatible query engine)")
 
 	// Create WebSocket hub for real-time updates
 	hub := ingest.NewMetricsHub()
@@ -147,6 +249,11 @@ func main() {
 	wg.Add(1)
 	go runCompaction(compactor, stopCompaction, &wg)
 
+	// Start BadgerDB garbage collection (reclaims disk space)
+	stopGC := make(chan bool)
+	wg.Add(1)
+	go runBadgerGC(store, stopGC, &wg)
+
 	// Create router
 	router := mux.NewRouter()
 
@@ -169,10 +276,12 @@ func main() {
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
 	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
+	api.HandleFunc("/query/execute", queryHandler.HandleQueryExecute).Methods("POST")        // TinyQuery endpoint
+	api.HandleFunc("/query/instant", queryHandler.HandleQueryInstant).Methods("GET", "POST") // Prometheus-compatible instant query
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
-	api.HandleFunc("/storage", handleStorageUsage(dataDir)).Methods("GET")
+	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
 
@@ -215,9 +324,12 @@ func main() {
 
 	log.Println("🛑 Shutdown signal received...")
 
-	// Stop background tasks first
-	log.Println("⏸️  Stopping background compaction...")
+	// CRITICAL: Cancel context FIRST to stop goroutines
+	// Must be called before wg.Wait() or we get deadlock!
+	log.Println("⏸️  Stopping background tasks...")
+	cancel() // Stops hub.Run() and broadcastMetrics() goroutines
 	close(stopCompaction)
+	close(stopGC)
 
 	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -225,12 +337,24 @@ func main() {
 
 	log.Println("🔄 Gracefully shutting down server...")
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("❌ Server forced to shutdown: %v", err)
+		log.Printf("⚠️  Server shutdown warning: %v", err)
 	}
 
 	// Wait for background goroutines to finish
 	log.Println("⏳ Waiting for background tasks to complete...")
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// Wait with timeout to prevent infinite hang
+	select {
+	case <-done:
+		log.Println("✅ All background tasks stopped cleanly")
+	case <-time.After(5 * time.Second):
+		log.Println("⚠️  Some background tasks did not stop in time (forcing exit)")
+	}
 
 	log.Println("👋 TinyObs server exited cleanly")
 }
@@ -312,6 +436,48 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 					log.Printf("❌ Failed to broadcast metrics: %v", err)
 				}
 			}
+		}
+	}
+}
+
+// runBadgerGC runs BadgerDB garbage collection periodically to reclaim disk space
+// SAFETY: BadgerDB uses LSM trees which accumulate deleted data in value log
+// GC is essential to prevent unbounded disk growth
+func runBadgerGC(store storage.Storage, stop chan bool, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// GC runs every 10 minutes
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	// Type assert to get underlying BadgerDB
+	badgerStore, ok := store.(*badger.Storage)
+	if !ok {
+		log.Println("⚠️  Storage is not BadgerDB, skipping GC")
+		return
+	}
+
+	log.Println("🗑️  BadgerDB GC scheduler started (runs every 10m)")
+
+	for {
+		select {
+		case <-ticker.C:
+			// Run GC with 0.5 discard ratio (reclaim space if 50% of file is garbage)
+			log.Println("🗑️  Running BadgerDB garbage collection...")
+			start := time.Now()
+
+			// RunValueLogGC runs until no more garbage can be collected
+			// We limit to 1 iteration per tick to avoid blocking
+			err := badgerStore.RunGC(0.5)
+			if err != nil {
+				// Not an error if no GC was needed
+				log.Printf("🗑️  GC completed in %v (no rewrite needed)", time.Since(start).Round(time.Millisecond))
+			} else {
+				log.Printf("✅ GC completed in %v (disk space reclaimed)", time.Since(start).Round(time.Millisecond))
+			}
+		case <-stop:
+			log.Println("🛑 Stopping BadgerDB GC scheduler")
+			return
 		}
 	}
 }
