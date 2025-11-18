@@ -41,26 +41,18 @@ func New(cfg Config) (*Storage, error) {
 		opts = opts.WithInMemory(true)
 	}
 
-	// SAFETY: Set memory limits to prevent OOM on small servers/laptops
+	// SAFETY: MINIMAL memory limits for laptops
 	// BadgerDB's defaults can use 1-2 GB which is dangerous for self-hosted deployments
+	// We use VERY aggressive limits: 32 MB total (8 MB memtable + 24 MB cache)
 	var memTableSize, valueLogMaxEntries int64
 	if cfg.MaxMemoryMB > 0 {
 		// User specified limit - use it
 		memTableSize = cfg.MaxMemoryMB * 1024 * 1024 / 4 // 25% for memtable
-		valueLogMaxEntries = 10000                       // Conservative value log
+		valueLogMaxEntries = 5000                        // Minimal value log
 	} else {
-		// Auto-detect: Conservative limits for local dev, higher for production
-		// Production detection: Check if running with persistent storage and not in ./data
-		isProduction := !cfg.InMemory && cfg.Path != "" && cfg.Path != "./data/tinyobs"
-		if isProduction {
-			// Production: 256 MB total (~64 MB memtable, rest for caching)
-			memTableSize = 64 * 1024 * 1024
-			valueLogMaxEntries = 100000
-		} else {
-			// Local dev: 64 MB total (~16 MB memtable)
-			memTableSize = 16 * 1024 * 1024
-			valueLogMaxEntries = 10000
-		}
+		// Default: ULTRA lightweight for laptops (32 MB total)
+		memTableSize = 8 * 1024 * 1024  // 8 MB memtable (was 16 MB)
+		valueLogMaxEntries = 5000       // Smaller value log (was 10000)
 	}
 
 	// Optimize for time-series workload
