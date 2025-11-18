@@ -11,50 +11,54 @@ import (
 )
 
 const (
-	// SAFETY: Hard limit on in-memory metrics to prevent OOM on laptops
-	// At ~100 bytes per metric, this is ~5 MB max
-	MaxMetricsInMemory = 50_000
+	// DefaultMaxMetrics is the default maximum number of metrics to store
+	// ~5 MB memory at 100 bytes per metric
+	DefaultMaxMetrics = 50000
+)
 
-	// When limit is reached, evict this many oldest metrics
-	EvictionBatchSize = 10_000
+var (
+	// ErrMemoryLimitExceeded is returned when storage limit is reached
+	ErrMemoryLimitExceeded = fmt.Errorf("memory storage limit exceeded (max %d metrics)", DefaultMaxMetrics)
 )
 
 // Storage stores metrics in memory. Data is lost on restart.
-// SAFETY: Limited to 50k metrics (~5 MB) to prevent unbounded memory growth
-// Useful for testing and development only - NOT for production use
+// Useful for testing and development.
+// SAFETY: Bounded by MaxMetrics to prevent unbounded memory growth
 type Storage struct {
-	metrics []metrics.Metric
-	mu      sync.RWMutex
+	metrics    []metrics.Metric
+	mu         sync.RWMutex
+	MaxMetrics int // Maximum number of metrics to store (0 = use default)
 }
 
-// New creates an in-memory storage backend with safety limits
+// New creates an in-memory storage backend
 func New() *Storage {
 	return &Storage{
-		metrics: make([]metrics.Metric, 0, 10000),
+		metrics:    make([]metrics.Metric, 0, 10000),
+		MaxMetrics: DefaultMaxMetrics,
 	}
 }
 
-// Write stores metrics in memory with automatic eviction when limit is reached
+// Write stores metrics in memory
+// Returns error if adding metrics would exceed MaxMetrics limit
 func (s *Storage) Write(ctx context.Context, metrics []metrics.Metric) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.metrics = append(s.metrics, metrics...)
-
-	// SAFETY: Evict oldest metrics when limit is exceeded
-	if len(s.metrics) > MaxMetricsInMemory {
-		// Sort by timestamp (oldest first)
-		sort.Slice(s.metrics, func(i, j int) bool {
-			return s.metrics[i].Timestamp.Before(s.metrics[j].Timestamp)
-		})
-
-		// Remove oldest batch
-		toRemove := len(s.metrics) - MaxMetricsInMemory + EvictionBatchSize
-		if toRemove > 0 {
-			s.metrics = s.metrics[toRemove:]
-		}
+	maxMetrics := s.MaxMetrics
+	if maxMetrics == 0 {
+		maxMetrics = DefaultMaxMetrics
 	}
 
+	// Check if adding these metrics would exceed limit
+	newTotal := len(s.metrics) + len(metrics)
+	if newTotal > maxMetrics {
+		return fmt.Errorf("cannot write %d metrics: would exceed limit (%d + %d > %d). "+
+			"Current: %d metrics (~%.1f MB). Consider using Delete() to remove old data or increase MaxMetrics",
+			len(metrics), len(s.metrics), len(metrics), maxMetrics,
+			len(s.metrics), float64(len(s.metrics))*100/1024/1024)
+	}
+
+	s.metrics = append(s.metrics, metrics...)
 	return nil
 }
 

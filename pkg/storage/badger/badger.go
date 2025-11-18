@@ -57,11 +57,33 @@ func New(cfg Config) (*Storage, error) {
 		valueLogMaxEntries = 5000
 	}
 
-	// Optimize for time-series workload
+	// CRITICAL MEMORY LIMITS: BadgerDB has multiple unbounded memory consumers
+	// Without these limits, it can consume 1-2 GB even with small memtable
+	blockCacheSize := memTableSize / 2 // Block cache: 50% of memtable
+	indexCacheSize := memTableSize / 4 // Index cache: 25% of memtable
+
+	// Optimize for time-series workload with strict memory bounds
 	opts = opts.
-		WithCompression(options.Snappy).                    // Compression for metrics
-		WithNumVersionsToKeep(1).                           // We don't need versioning
-		WithMemTableSize(memTableSize).                     // Limit memory table size
+		// Compression and versioning
+		WithCompression(options.Snappy). // Compression for metrics
+		WithNumVersionsToKeep(1).        // We don't need versioning
+
+		// Memory table configuration
+		WithMemTableSize(memTableSize). // Limit memory table size
+		WithNumMemtables(3).            // Limit concurrent memtables (3 = active + 2 flushing)
+
+		// Block and index caching (CRITICAL for memory bounds)
+		WithBlockCacheSize(blockCacheSize). // Limit block cache to prevent unbounded growth
+		WithIndexCacheSize(indexCacheSize). // Limit index cache to prevent unbounded growth
+
+		// LSM tree configuration (reduces memory and disk usage)
+		WithMaxLevels(4).               // Reduce LSM depth (default 7) for smaller datasets
+		WithNumLevelZeroTables(2).      // Trigger compaction earlier (default 5)
+		WithNumLevelZeroTablesStall(4). // Hard limit before stalling writes (default 10)
+		WithValueThreshold(1024).       // Keep small values in LSM, large in vlog (default 1MB)
+		WithNumCompactors(1).           // Limit compaction threads to 1 (reduces CPU/memory)
+
+		// Value log configuration
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
 		WithValueLogFileSize(64 << 20)                      // CRITICAL: 64 MB value log files instead of default 2GB!
 
@@ -74,28 +96,70 @@ func New(cfg Config) (*Storage, error) {
 }
 
 // Write stores metrics in BadgerDB
+// CRITICAL: Enforces context timeout/cancellation to prevent indefinite blocking
 func (s *Storage) Write(ctx context.Context, metrics []metrics.Metric) error {
-	return s.db.Update(func(txn *badger.Txn) error {
-		for _, m := range metrics {
-			key := makeKey(m.Name, m.Labels, m.Timestamp)
-			value, err := encodeMetric(m)
-			if err != nil {
-				return fmt.Errorf("failed to encode metric: %w", err)
-			}
+	// Check context before starting expensive operation
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
-			if err := txn.Set(key, value); err != nil {
-				return fmt.Errorf("failed to write metric: %w", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- s.db.Update(func(txn *badger.Txn) error {
+			for i, m := range metrics {
+				// Check context periodically (every 100 metrics)
+				if i%100 == 0 {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+					}
+				}
+
+				key := makeKey(m.Name, m.Labels, m.Timestamp)
+				value, err := encodeMetric(m)
+				if err != nil {
+					return fmt.Errorf("failed to encode metric: %w", err)
+				}
+
+				if err := txn.Set(key, value); err != nil {
+					return fmt.Errorf("failed to write metric: %w", err)
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		// Context cancelled while waiting for operation to complete
+		return fmt.Errorf("write operation cancelled: %w", ctx.Err())
+	}
 }
 
 // Query retrieves metrics matching the request
+// CRITICAL: Enforces context timeout/cancellation to prevent indefinite blocking
 func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metrics.Metric, error) {
-	var results []metrics.Metric
+	// Check context before starting expensive operation
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
-	err := s.db.View(func(txn *badger.Txn) error {
+	var results []metrics.Metric
+	startTime := time.Now()
+	var iterCount int
+
+	type queryResult struct {
+		results []metrics.Metric
+		err     error
+	}
+	done := make(chan queryResult, 1)
+
+	go func() {
+		var res queryResult
+		res.err = s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 100
 
@@ -104,6 +168,24 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 
 		// Scan all keys (in production, would use prefix for efficiency)
 		for it.Rewind(); it.Valid(); it.Next() {
+			iterCount++
+
+			// CRITICAL: Check for context cancellation every 1000 iterations
+			// Prevents long-running queries from blocking shutdown or exceeding timeouts
+			if iterCount%1000 == 0 {
+				select {
+				case <-ctx.Done():
+					// Log slow query warning before returning error
+					elapsed := time.Since(startTime)
+					if elapsed > 5*time.Second {
+						fmt.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+					}
+					return ctx.Err()
+				default:
+					// Continue processing
+				}
+			}
+
 			item := it.Item()
 
 			err := item.Value(func(val []byte) error {
@@ -136,26 +218,62 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 				break
 			}
 		}
-		return nil
-	})
 
-	return results, err
+		// Log slow queries for performance monitoring
+		elapsed := time.Since(startTime)
+		if elapsed > 5*time.Second {
+			fmt.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+		}
+
+		return nil
+		})
+		res.results = results
+		done <- res
+	}()
+
+	select {
+	case res := <-done:
+		return res.results, res.err
+	case <-ctx.Done():
+		// Context cancelled while waiting for operation to complete
+		return nil, fmt.Errorf("query operation cancelled: %w", ctx.Err())
+	}
 }
 
 // Delete removes metrics matching the deletion criteria
+// CRITICAL: Enforces context timeout/cancellation to prevent indefinite blocking
 func (s *Storage) Delete(ctx context.Context, opts storage.DeleteOptions) error {
-	return s.db.Update(func(txn *badger.Txn) error {
-		iterOpts := badger.DefaultIteratorOptions
-		// Need values if filtering by resolution
-		iterOpts.PrefetchValues = opts.Resolution != nil
+	// Check context before starting expensive operation
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
-		it := txn.NewIterator(iterOpts)
-		defer it.Close()
+	done := make(chan error, 1)
+	go func() {
+		done <- s.db.Update(func(txn *badger.Txn) error {
+			iterOpts := badger.DefaultIteratorOptions
+			// Need values if filtering by resolution
+			iterOpts.PrefetchValues = opts.Resolution != nil
 
-		var keysToDelete [][]byte
+			it := txn.NewIterator(iterOpts)
+			defer it.Close()
 
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
+			var keysToDelete [][]byte
+			var iterCount int
+
+			for it.Rewind(); it.Valid(); it.Next() {
+				iterCount++
+
+				// Check context periodically (every 1000 iterations)
+				if iterCount%1000 == 0 {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+					}
+				}
+
+				item := it.Item()
 
 			// Extract timestamp from key
 			_, ts := parseKey(item.Key())
@@ -189,15 +307,24 @@ func (s *Storage) Delete(ctx context.Context, opts storage.DeleteOptions) error 
 			keysToDelete = append(keysToDelete, key)
 		}
 
-		// Delete collected keys
-		for _, key := range keysToDelete {
-			if err := txn.Delete(key); err != nil {
-				return err
+			// Delete collected keys
+			for _, key := range keysToDelete {
+				if err := txn.Delete(key); err != nil {
+					return err
+				}
 			}
-		}
 
-		return nil
-	})
+			return nil
+		})
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		// Context cancelled while waiting for operation to complete
+		return fmt.Errorf("delete operation cancelled: %w", ctx.Err())
+	}
 }
 
 // Close shuts down BadgerDB cleanly
@@ -214,51 +341,85 @@ func (s *Storage) RunGC(discardRatio float64) error {
 }
 
 // Stats returns storage statistics
+// CRITICAL: Enforces context timeout/cancellation to prevent indefinite blocking
 func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
-	stats := &storage.Stats{}
-
-	err := s.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		seriesMap := make(map[string]bool)
-		var oldestTS, newestTS time.Time
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			stats.TotalMetrics++
-
-			// Parse key to get series and timestamp
-			seriesKey, ts := parseKey(item.Key())
-			seriesMap[seriesKey] = true
-
-			if oldestTS.IsZero() || ts.Before(oldestTS) {
-				oldestTS = ts
-			}
-			if newestTS.IsZero() || ts.After(newestTS) {
-				newestTS = ts
-			}
-		}
-
-		stats.TotalSeries = uint64(len(seriesMap))
-		stats.OldestMetric = oldestTS
-		stats.NewestMetric = newestTS
-
-		return nil
-	})
-
-	if err != nil {
+	// Check context before starting expensive operation
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	// Get DB size from LSM
-	lsmSize, vlogSize := s.db.Size()
-	stats.SizeBytes = uint64(lsmSize + vlogSize)
+	type statsResult struct {
+		stats *storage.Stats
+		err   error
+	}
+	done := make(chan statsResult, 1)
 
-	return stats, nil
+	go func() {
+		var res statsResult
+		stats := &storage.Stats{}
+
+		res.err = s.db.View(func(txn *badger.Txn) error {
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchValues = false
+
+			it := txn.NewIterator(opts)
+			defer it.Close()
+
+			seriesMap := make(map[string]bool)
+			var oldestTS, newestTS time.Time
+			var iterCount int
+
+			for it.Rewind(); it.Valid(); it.Next() {
+				iterCount++
+
+				// Check context periodically (every 1000 iterations)
+				if iterCount%1000 == 0 {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+					}
+				}
+
+				item := it.Item()
+				stats.TotalMetrics++
+
+				// Parse key to get series and timestamp
+				seriesKey, ts := parseKey(item.Key())
+				seriesMap[seriesKey] = true
+
+				if oldestTS.IsZero() || ts.Before(oldestTS) {
+					oldestTS = ts
+				}
+				if newestTS.IsZero() || ts.After(newestTS) {
+					newestTS = ts
+				}
+			}
+
+			stats.TotalSeries = uint64(len(seriesMap))
+			stats.OldestMetric = oldestTS
+			stats.NewestMetric = newestTS
+
+			return nil
+		})
+
+		if res.err == nil {
+			// Get DB size from LSM
+			lsmSize, vlogSize := s.db.Size()
+			stats.SizeBytes = uint64(lsmSize + vlogSize)
+		}
+
+		res.stats = stats
+		done <- res
+	}()
+
+	select {
+	case res := <-done:
+		return res.stats, res.err
+	case <-ctx.Done():
+		// Context cancelled while waiting for operation to complete
+		return nil, fmt.Errorf("stats operation cancelled: %w", ctx.Err())
+	}
 }
 
 // makeKey creates a sortable key: series_hash + timestamp

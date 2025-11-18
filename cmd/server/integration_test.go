@@ -80,9 +80,15 @@ func TestE2E_IngestAndQuery(t *testing.T) {
 	}
 
 	var queryResp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&queryResp)
+	if err := json.NewDecoder(w.Body).Decode(&queryResp); err != nil {
+		t.Fatalf("Failed to decode query response: %v", err)
+	}
 
-	count := int(queryResp["count"].(float64))
+	countFloat, ok := queryResp["count"].(float64)
+	if !ok {
+		t.Fatalf("count field is not a float64: %T", queryResp["count"])
+	}
+	count := int(countFloat)
 	if count != 2 {
 		t.Errorf("Expected 2 metrics in query results, got %d", count)
 	}

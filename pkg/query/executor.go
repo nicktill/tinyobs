@@ -574,7 +574,11 @@ func (e *Executor) executeIncrease(ctx context.Context, fn *FunctionCall, start,
 	// Caller is responsible for closing the returned result
 
 	// Get duration from range selector
-	rangeExpr := fn.Args[0].(*RangeSelector)
+	rangeExpr, ok := fn.Args[0].(*RangeSelector)
+	if !ok {
+		rateResult.Close()
+		return nil, fmt.Errorf("increase() requires a range vector argument, got %T", fn.Args[0])
+	}
 	duration := rangeExpr.Duration.Seconds()
 
 	// Multiply all rate values by duration (modifying in-place to avoid extra allocation)
