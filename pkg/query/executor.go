@@ -18,10 +18,19 @@ type ExecutorConfig struct {
 	MaxSamples int
 }
 
-// DefaultExecutorConfig returns safe defaults for self-hosted environments
+// DefaultExecutorConfig returns safe defaults for local development
+// For production/cloud deployments, use ProductionExecutorConfig or custom limits
 func DefaultExecutorConfig() ExecutorConfig {
 	return ExecutorConfig{
-		MaxSamples: 10_000_000, // ~640MB worst case with GC overhead
+		MaxSamples: 1_000_000, // ~20-64MB typical, safe for laptops with 8GB RAM
+	}
+}
+
+// ProductionExecutorConfig returns defaults for production/cloud deployments
+// Use this when running on dedicated servers with >16GB RAM
+func ProductionExecutorConfig() ExecutorConfig {
+	return ExecutorConfig{
+		MaxSamples: 50_000_000, // ~1-3GB typical, suitable for cloud instances
 	}
 }
 
