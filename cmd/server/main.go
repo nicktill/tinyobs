@@ -28,7 +28,11 @@ const (
 	serverWriteTimeout = 10 * time.Second
 	shutdownTimeout    = 30 * time.Second
 	compactionInterval = 1 * time.Hour
-	maxStorageBytes    = 10 * 1024 * 1024 * 1024 // 10 GB default
+
+	// SAFETY: Conservative storage limit for self-hosted laptops
+	// With compaction: ~50 MB after 30 days, ~70 MB after 1 year
+	// This allows headroom for growth while preventing disk bloat
+	defaultMaxStorageGB = 1 // 1 GB default (was 10 GB - way too high!)
 )
 
 // StorageUsage represents current storage usage stats
@@ -172,11 +176,11 @@ func main() {
 	log.Println("🚀 Starting TinyObs Server...")
 
 	// Read configuration from environment variables
-	// TINYOBS_MAX_STORAGE_GB: Maximum storage in GB (default: 10)
-	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: auto-detect)
-	maxStorageMB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", 10) * 1024 // Convert GB to MB
-	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 0)           // 0 = auto-detect
-	maxStorageBytesConfigured := maxStorageMB * 1024 * 1024
+	// TINYOBS_MAX_STORAGE_GB: Maximum storage in GB (default: 1 GB for laptops)
+	// TINYOBS_MAX_MEMORY_MB: Maximum BadgerDB memory in MB (default: 48 MB)
+	maxStorageGB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", defaultMaxStorageGB)
+	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 48) // 48 MB default (16 MB memtable minimum)
+	maxStorageBytesConfigured := maxStorageGB * 1024 * 1024 * 1024
 
 	if maxMemoryMB > 0 {
 		log.Printf("⚙️  Configuration: Storage limit = %.2f GB, Memory limit = %d MB",
