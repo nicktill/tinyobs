@@ -162,33 +162,56 @@ GET /v1/query/instant?query=http_requests_total&time=2025-01-01T12:00:00Z
 
 ### Memory Limits
 
-Default: **10M samples max per query** (~640MB worst case)
+**Tiered Defaults by Environment:**
+
+| Environment | Default Limit | Typical RAM Usage | Max RAM (Worst Case) |
+|-------------|--------------|-------------------|----------------------|
+| **Local Dev** (default) | 1M samples | 20-32MB | 64MB |
+| **Production/Cloud** | 50M samples | 1-1.6GB | 3.2GB |
+| **Custom** | Your choice | Calculate below | — |
 
 ```go
-// Customize limits
+// Local development (default)
+executor := query.NewExecutor(store)  // 1M samples
+
+// Production/cloud deployment
+executor := query.NewExecutorWithConfig(store, query.ProductionExecutorConfig())
+
+// Custom limits
 executor := query.NewExecutorWithConfig(store, query.ExecutorConfig{
-    MaxSamples: 5_000_000, // Reduce for laptops with limited RAM
+    MaxSamples: 10_000_000,  // Your custom limit
 })
+```
+
+**Memory calculation:**
+```
+Typical:     samples × 20 bytes  (most common)
+Conservative: samples × 32 bytes  (safe estimate)
+Worst case:   samples × 64 bytes  (GC + slice waste)
 ```
 
 ### Memory Usage Per Sample
 
 - **Raw sample:** 16 bytes
-- **Go GC overhead:** 2x multiplier
-- **Slice capacity waste:** Up to 2x more
-- **Worst case:** 64 bytes per sample
+- **Go GC overhead:** 2x multiplier (typical)
+- **Slice capacity waste:** Up to 2x more (rare edge case)
+- **Typical usage:** 20-32 bytes per sample
+- **Worst case:** 64 bytes per sample (rare)
 
-**Example calculations:**
+**Example calculations (typical case):**
 
 ```
 Small query (100 series × 1h @ 15s):
-  24,000 samples × 64 bytes = 1.5 MB ✅
+  24,000 samples × 20 bytes = 480 KB ✅
 
 Medium query (100 series × 24h @ 15s):
-  576,000 samples × 64 bytes = 36.8 MB ✅
+  576,000 samples × 20 bytes = 11.5 MB ✅
 
 Large query (1000 series × 24h @ 15s):
-  5,760,000 samples × 64 bytes = 368 MB ⚠️
+  5,760,000 samples × 20 bytes = 115 MB ⚠️ (hits 1M default limit at ~17h)
+
+Production (10K series × 24h @ 15s):
+  57,600,000 samples × 20 bytes = 1.15 GB (requires ProductionExecutorConfig)
 ```
 
 ### Best Practices
@@ -199,9 +222,10 @@ Large query (1000 series × 24h @ 15s):
 - Use aggregations to reduce result size
 
 **❌ DON'T:**
-- Query more than 1000 series for long time ranges (>6h)
+- Query >100 series for 24h on local dev (will hit 1M limit)
 - Forget to close results (causes memory leaks!)
-- Run unlimited queries on laptops with <8GB RAM
+- Use local dev defaults in production (use ProductionExecutorConfig)
+- Run production queries on laptops with <8GB RAM
 
 ### Error Handling
 

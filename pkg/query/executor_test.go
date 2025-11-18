@@ -171,7 +171,14 @@ func TestMemoryLimitWithinBounds(t *testing.T) {
 
 func TestDefaultExecutorConfig(t *testing.T) {
 	config := DefaultExecutorConfig()
-	if config.MaxSamples != 10_000_000 {
-		t.Errorf("Expected default MaxSamples to be 10M, got %d", config.MaxSamples)
+	if config.MaxSamples != 1_000_000 {
+		t.Errorf("Expected default MaxSamples to be 1M (local dev), got %d", config.MaxSamples)
+	}
+}
+
+func TestProductionExecutorConfig(t *testing.T) {
+	config := ProductionExecutorConfig()
+	if config.MaxSamples != 50_000_000 {
+		t.Errorf("Expected production MaxSamples to be 50M, got %d", config.MaxSamples)
 	}
 }
