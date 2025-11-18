@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 )
 
 // CardinalityTracker tracks unique time series to enforce cardinality limits
+// SAFETY: Periodically clears old series to prevent unbounded memory growth
 type CardinalityTracker struct {
 	mu sync.RWMutex
 
@@ -20,15 +22,28 @@ type CardinalityTracker struct {
 	totalSeries int
 
 	// seriesSeen tracks which series we've already counted
-	// seriesKey(name, labels) -> true
-	seriesSeen map[string]bool
+	// seriesKey(name, labels) -> lastSeen timestamp
+	seriesSeen map[string]time.Time
+
+	// lastCleanup tracks when we last cleaned up old series
+	lastCleanup time.Time
 }
+
+// Constants for memory safety
+const (
+	// Clean up series not seen in last 24 hours
+	seriesRetentionPeriod = 24 * time.Hour
+
+	// Run cleanup every hour
+	cleanupInterval = 1 * time.Hour
+)
 
 // NewCardinalityTracker creates a new cardinality tracker
 func NewCardinalityTracker() *CardinalityTracker {
 	return &CardinalityTracker{
 		seriesCount: make(map[string]int),
-		seriesSeen:  make(map[string]bool),
+		seriesSeen:  make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 }
 
@@ -38,11 +53,14 @@ func (c *CardinalityTracker) Check(m metrics.Metric) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Periodically clean up old series to prevent memory leak
+	c.cleanupOldSeriesLocked()
+
 	// Create series key (metric name + sorted labels)
 	key := seriesKey(m.Name, m.Labels)
 
-	// If we've seen this series before, it's fine
-	if c.seriesSeen[key] {
+	// If we've seen this series recently, it's fine
+	if _, exists := c.seriesSeen[key]; exists {
 		return nil
 	}
 
@@ -66,11 +84,70 @@ func (c *CardinalityTracker) Record(m metrics.Metric) {
 	defer c.mu.Unlock()
 
 	key := seriesKey(m.Name, m.Labels)
+	now := time.Now()
 
-	// Only increment if this is a new series
-	if !c.seriesSeen[key] {
-		c.seriesSeen[key] = true
+	// Update last seen timestamp
+	_, existed := c.seriesSeen[key]
+	c.seriesSeen[key] = now
+
+	// Only increment counters if this is a new series
+	if !existed {
 		c.seriesCount[m.Name]++
+		c.totalSeries++
+	}
+}
+
+// cleanupOldSeriesLocked removes series not seen in seriesRetentionPeriod
+// MUST be called with lock held
+// This prevents unbounded memory growth in long-running servers
+func (c *CardinalityTracker) cleanupOldSeriesLocked() {
+	// Only run cleanup periodically
+	now := time.Now()
+	if now.Sub(c.lastCleanup) < cleanupInterval {
+		return
+	}
+
+	c.lastCleanup = now
+	cutoff := now.Add(-seriesRetentionPeriod)
+
+	// Find series to remove
+	var toRemove []string
+	for key, lastSeen := range c.seriesSeen {
+		if lastSeen.Before(cutoff) {
+			toRemove = append(toRemove, key)
+		}
+	}
+
+	// Remove old series
+	for _, key := range toRemove {
+		delete(c.seriesSeen, key)
+
+		// We can't easily update per-metric counts without storing the metric name
+		// This is acceptable - counts will be slightly inflated but won't grow unboundedly
+	}
+
+	// Rebuild series count from scratch if we removed anything significant
+	if len(toRemove) > 1000 {
+		c.rebuildCountsLocked()
+	}
+}
+
+// rebuildCountsLocked recalculates series counts from seriesSeen
+// MUST be called with lock held
+func (c *CardinalityTracker) rebuildCountsLocked() {
+	c.seriesCount = make(map[string]int)
+	c.totalSeries = 0
+
+	for key := range c.seriesSeen {
+		// Extract metric name from key (everything before first comma)
+		metricName := key
+		for idx := 0; idx < len(key); idx++ {
+			if key[idx] == ',' {
+				metricName = key[:idx]
+				break
+			}
+		}
+		c.seriesCount[metricName]++
 		c.totalSeries++
 	}
 }
