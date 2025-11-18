@@ -156,12 +156,71 @@ GET /v1/query/instant?query=http_requests_total&time=2025-01-01T12:00:00Z
 
 **Response:** Same format as /v1/query/execute but returns single value per series.
 
+## Memory Management
+
+**CRITICAL for self-hosted deployments:** Always call `result.Close()` to free memory.
+
+### Memory Limits
+
+Default: **10M samples max per query** (~640MB worst case)
+
+```go
+// Customize limits
+executor := query.NewExecutorWithConfig(store, query.ExecutorConfig{
+    MaxSamples: 5_000_000, // Reduce for laptops with limited RAM
+})
+```
+
+### Memory Usage Per Sample
+
+- **Raw sample:** 16 bytes
+- **Go GC overhead:** 2x multiplier
+- **Slice capacity waste:** Up to 2x more
+- **Worst case:** 64 bytes per sample
+
+**Example calculations:**
+
+```
+Small query (100 series × 1h @ 15s):
+  24,000 samples × 64 bytes = 1.5 MB ✅
+
+Medium query (100 series × 24h @ 15s):
+  576,000 samples × 64 bytes = 36.8 MB ✅
+
+Large query (1000 series × 24h @ 15s):
+  5,760,000 samples × 64 bytes = 368 MB ⚠️
+```
+
+### Best Practices
+
+**✅ DO:**
+- Call `result.Close()` in defer immediately after Execute()
+- Limit time ranges for high-cardinality queries
+- Use aggregations to reduce result size
+
+**❌ DON'T:**
+- Query more than 1000 series for long time ranges (>6h)
+- Forget to close results (causes memory leaks!)
+- Run unlimited queries on laptops with <8GB RAM
+
+### Error Handling
+
+```go
+result, err := executor.Execute(ctx, query)
+if err != nil {
+    if strings.Contains(err.Error(), "exceeded max samples") {
+        // Reduce time range or increase MaxSamples
+    }
+}
+defer result.Close() // Always close!
+```
+
 ## Performance
 
 - **Query parsing:** ~50µs for typical queries
 - **Vector selector:** ~1ms for 1000 series
 - **Aggregation:** ~5ms for 10,000 points
-- **rate() calculation:** ~2ms for 1000 series over 5m
+- **rate() calculation:** O(n) sliding window (was O(n²), now optimized)
 
 ## Differences from PromQL
 

@@ -7,28 +7,91 @@ import (
 	"sort"
 	"time"
 
-	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
+
+// ExecutorConfig configures query execution limits
+type ExecutorConfig struct {
+	// MaxSamples limits the number of samples a query can load into memory
+	// Each sample consumes ~16-64 bytes depending on GC overhead
+	// Default: 10M samples (~640MB worst case)
+	MaxSamples int
+}
+
+// DefaultExecutorConfig returns safe defaults for self-hosted environments
+func DefaultExecutorConfig() ExecutorConfig {
+	return ExecutorConfig{
+		MaxSamples: 10_000_000, // ~640MB worst case with GC overhead
+	}
+}
 
 // Executor executes parsed query expressions against storage
 type Executor struct {
 	storage storage.Storage
+	config  ExecutorConfig
+	// Track samples loaded per query for limit enforcement
+	samplesLoaded int
 }
 
-// NewExecutor creates a new query executor
+// NewExecutor creates a new query executor with default config
 func NewExecutor(store storage.Storage) *Executor {
-	return &Executor{storage: store}
+	return NewExecutorWithConfig(store, DefaultExecutorConfig())
+}
+
+// NewExecutorWithConfig creates a new query executor with custom config
+func NewExecutorWithConfig(store storage.Storage, config ExecutorConfig) *Executor {
+	return &Executor{
+		storage: store,
+		config:  config,
+	}
 }
 
 // Execute executes a query and returns time series data
+// The returned Result should be closed with result.Close() to free memory
 func (e *Executor) Execute(ctx context.Context, query *Query) (*Result, error) {
-	return e.executeExpr(ctx, query.Expr, query.Start, query.End, query.Step)
+	// Reset sample counter for this query
+	e.samplesLoaded = 0
+
+	result, err := e.executeExpr(ctx, query.Expr, query.Start, query.End, query.Step)
+	if err != nil {
+		return nil, err
+	}
+
+	// Track total samples in result for monitoring
+	if result != nil {
+		totalSamples := 0
+		for _, series := range result.Series {
+			totalSamples += len(series.Points)
+		}
+		result.TotalSamples = totalSamples
+	}
+
+	return result, nil
 }
 
 // Result represents the result of a query execution
+// Always call Close() when done to free memory
 type Result struct {
-	Series []TimeSeries
+	Series       []TimeSeries
+	TotalSamples int // Total number of samples in result (for monitoring)
+}
+
+// Close releases memory held by the result
+// This should be called as soon as the result is no longer needed
+func (r *Result) Close() error {
+	if r == nil {
+		return nil
+	}
+
+	// Clear series data to allow GC to reclaim memory
+	for i := range r.Series {
+		r.Series[i].Points = nil
+		r.Series[i].Labels = nil
+	}
+	r.Series = nil
+	r.TotalSamples = 0
+
+	return nil
 }
 
 // TimeSeries represents a single time series with values over time
@@ -90,6 +153,13 @@ func (e *Executor) executeVectorSelector(ctx context.Context, vec *VectorSelecto
 		return nil, fmt.Errorf("storage query failed: %w", err)
 	}
 
+	// Check sample limit to prevent OOM
+	e.samplesLoaded += len(metricsData)
+	if e.samplesLoaded > e.config.MaxSamples {
+		return nil, fmt.Errorf("query exceeded max samples limit: loaded %d, limit %d (reduce time range or increase MaxSamples)",
+			e.samplesLoaded, e.config.MaxSamples)
+	}
+
 	// Group metrics by label set into time series
 	seriesMap := make(map[string]*TimeSeries)
 	for _, m := range metricsData {
@@ -134,11 +204,14 @@ func (e *Executor) executeBinaryExpr(ctx context.Context, bin *BinaryExpr, start
 	if err != nil {
 		return nil, err
 	}
+	// CRITICAL: Close intermediate results after we're done
+	defer left.Close()
 
 	right, err := e.executeExpr(ctx, bin.Right, start, end, step)
 	if err != nil {
 		return nil, err
 	}
+	defer right.Close()
 
 	// Apply operator
 	return e.applyBinaryOp(left, right, bin.Op)
@@ -203,16 +276,18 @@ func (e *Executor) executeAggregateExpr(ctx context.Context, agg *AggregateExpr,
 	if err != nil {
 		return nil, err
 	}
+	// CRITICAL: Close intermediate result after we're done with it
+	defer inner.Close()
 
 	// Group series by labels
 	groups := e.groupSeries(inner.Series, agg.Grouping, agg.Without)
 
 	// Apply aggregation to each group
-	result := &Result{Series: []TimeSeries{}}
-	for labels, series := range groups {
+	result := &Result{Series: make([]TimeSeries, 0, len(groups))}
+	for _, group := range groups {
 		ts := TimeSeries{
-			Labels: labels,
-			Points: e.aggregate(series, agg.Op),
+			Labels: group.labels,
+			Points: e.aggregate(group.series, agg.Op),
 		}
 		result.Series = append(result.Series, ts)
 	}
@@ -220,49 +295,103 @@ func (e *Executor) executeAggregateExpr(ctx context.Context, agg *AggregateExpr,
 	return result, nil
 }
 
+// seriesGroup represents a group of time series with their labels
+type seriesGroup struct {
+	labels map[string]string
+	series []TimeSeries
+}
+
 // groupSeries groups time series by specified labels
-func (e *Executor) groupSeries(series []TimeSeries, grouping []string, without bool) map[map[string]string][]TimeSeries {
-	groups := make(map[string][]TimeSeries)
-	groupLabels := make(map[string]map[string]string)
+func (e *Executor) groupSeries(series []TimeSeries, grouping []string, without bool) []seriesGroup {
+	groupsMap := make(map[string]*seriesGroup)
 
 	for _, ts := range series {
 		// Build group key based on grouping labels
-		var key string
-		labels := make(map[string]string)
+		key := e.buildGroupKey(ts.Labels, grouping, without)
 
-		if without {
-			// Include all labels except those in grouping
-			for k, v := range ts.Labels {
-				skip := false
-				for _, g := range grouping {
-					if k == g {
-						skip = true
-						break
-					}
-				}
-				if !skip {
-					labels[k] = v
-					key += k + "=" + v + ","
-				}
-			}
+		if group, exists := groupsMap[key]; exists {
+			group.series = append(group.series, ts)
 		} else {
-			// Include only labels in grouping
-			for _, g := range grouping {
-				if v, ok := ts.Labels[g]; ok {
-					labels[g] = v
-					key += g + "=" + v + ","
-				}
+			// Create new group with labels
+			labels := e.extractGroupLabels(ts.Labels, grouping, without)
+			groupsMap[key] = &seriesGroup{
+				labels: labels,
+				series: []TimeSeries{ts},
 			}
 		}
-
-		groups[key] = append(groups[key], ts)
-		groupLabels[key] = labels
 	}
 
-	// Convert to map[labels]series
-	result := make(map[map[string]string][]TimeSeries)
-	for key, series := range groups {
-		result[groupLabels[key]] = series
+	// Convert map to slice
+	result := make([]seriesGroup, 0, len(groupsMap))
+	for _, group := range groupsMap {
+		result = append(result, *group)
+	}
+
+	return result
+}
+
+// buildGroupKey creates a unique key for a group
+func (e *Executor) buildGroupKey(labels map[string]string, grouping []string, without bool) string {
+	var key string
+
+	if without {
+		// Sort all label keys for consistent ordering
+		keys := make([]string, 0, len(labels))
+		for k := range labels {
+			skip := false
+			for _, g := range grouping {
+				if k == g {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			key += k + "=" + labels[k] + ","
+		}
+	} else {
+		// Use only grouping labels in sorted order
+		sort.Strings(grouping)
+		for _, g := range grouping {
+			if v, ok := labels[g]; ok {
+				key += g + "=" + v + ","
+			}
+		}
+	}
+
+	return key
+}
+
+// extractGroupLabels extracts the labels that should be in the result
+func (e *Executor) extractGroupLabels(labels map[string]string, grouping []string, without bool) map[string]string {
+	result := make(map[string]string)
+
+	if without {
+		// Include all labels except those in grouping
+		for k, v := range labels {
+			skip := false
+			for _, g := range grouping {
+				if k == g {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				result[k] = v
+			}
+		}
+	} else {
+		// Include only labels in grouping
+		for _, g := range grouping {
+			if v, ok := labels[g]; ok {
+				result[g] = v
+			}
+		}
 	}
 
 	return result
@@ -382,31 +511,33 @@ func (e *Executor) executeRate(ctx context.Context, fn *FunctionCall, start, end
 	if err != nil {
 		return nil, err
 	}
+	// CRITICAL: Close intermediate result after we're done
+	defer data.Close()
 
 	// Calculate rate for each series
-	result := &Result{Series: []TimeSeries{}}
+	result := &Result{Series: make([]TimeSeries, 0, len(data.Series))} // Pre-allocate
 	for _, ts := range data.Series {
 		rateSeries := TimeSeries{
 			Labels: ts.Labels,
-			Points: []Point{},
+			Points: make([]Point, 0, len(ts.Points)), // Pre-allocate
 		}
 
 		// For each point, calculate rate using the range duration
 		duration := rangeExpr.Duration.Seconds()
+		// Use two-pointer technique to avoid O(n²) - maintain sliding window
+		startIdx := 0
 		for i := 0; i < len(ts.Points); i++ {
-			// Find the point 'duration' seconds ago
+			// Find the point 'duration' seconds ago using sliding window
 			rangeStart := ts.Points[i].Time.Add(-rangeExpr.Duration)
-			var startPoint *Point
-			for j := i - 1; j >= 0; j-- {
-				if ts.Points[j].Time.Before(rangeStart) || ts.Points[j].Time.Equal(rangeStart) {
-					startPoint = &ts.Points[j]
-					break
-				}
+
+			// Advance startIdx to point just before rangeStart
+			for startIdx < i && ts.Points[startIdx+1].Time.Before(rangeStart) {
+				startIdx++
 			}
 
-			if startPoint != nil {
+			if startIdx < i && (ts.Points[startIdx].Time.Before(rangeStart) || ts.Points[startIdx].Time.Equal(rangeStart)) {
 				// Calculate rate: (current - start) / duration
-				rate := (ts.Points[i].Value - startPoint.Value) / duration
+				rate := (ts.Points[i].Value - ts.Points[startIdx].Value) / duration
 				if rate < 0 {
 					rate = 0 // Counter reset, treat as 0
 				}
@@ -430,12 +561,14 @@ func (e *Executor) executeIncrease(ctx context.Context, fn *FunctionCall, start,
 	if err != nil {
 		return nil, err
 	}
+	// NOTE: We reuse rateResult and modify it in-place, so don't defer close here
+	// Caller is responsible for closing the returned result
 
 	// Get duration from range selector
 	rangeExpr := fn.Args[0].(*RangeSelector)
 	duration := rangeExpr.Duration.Seconds()
 
-	// Multiply all rate values by duration
+	// Multiply all rate values by duration (modifying in-place to avoid extra allocation)
 	for i := range rateResult.Series {
 		for j := range rateResult.Series[i].Points {
 			rateResult.Series[i].Points[j].Value *= duration
