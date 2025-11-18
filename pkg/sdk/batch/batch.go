@@ -3,6 +3,7 @@ package batch
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
@@ -26,6 +27,8 @@ type Batcher struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	flushing atomic.Bool // Prevents concurrent flushes (HIGH: prevents unbounded goroutine spawning)
 }
 
 // New creates a new batcher
@@ -47,15 +50,20 @@ func (b *Batcher) Start(ctx context.Context) error {
 }
 
 // Add adds a metric to the batch
+// CRITICAL: Uses atomic flag to prevent unbounded goroutine spawning under high load
 func (b *Batcher) Add(metric metrics.Metric) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	b.metrics = append(b.metrics, metric)
+	shouldFlush := len(b.metrics) >= b.config.MaxBatchSize
+	b.mu.Unlock()
 
-	// Flush if batch is full
-	if len(b.metrics) >= b.config.MaxBatchSize {
-		go b.flush()
+	// Flush if batch is full AND no flush is already running
+	// CompareAndSwap ensures only one flush goroutine runs at a time
+	if shouldFlush && b.flushing.CompareAndSwap(false, true) {
+		go func() {
+			b.flush()
+			b.flushing.Store(false)
+		}()
 	}
 }
 
@@ -89,6 +97,7 @@ func (b *Batcher) Stop() error {
 }
 
 // flushLoop periodically flushes metrics
+// CRITICAL: Uses atomic flag to prevent concurrent flushes with Add()
 func (b *Batcher) flushLoop() {
 	defer close(b.done)
 
@@ -100,7 +109,11 @@ func (b *Batcher) flushLoop() {
 		case <-b.ctx.Done():
 			return
 		case <-ticker.C:
-			b.flush()
+			// Only flush if no flush is already running
+			if b.flushing.CompareAndSwap(false, true) {
+				b.flush()
+				b.flushing.Store(false)
+			}
 		}
 	}
 }

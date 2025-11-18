@@ -515,9 +515,15 @@ func runCompaction(compactor *compaction.Compactor, monitor *CompactionMonitor, 
 }
 
 // broadcastMetrics periodically fetches and broadcasts metrics to WebSocket clients
+// CRITICAL: Uses exponential backoff on errors to prevent log spam during outages
 func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.MetricsHub) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	// Exponential backoff state for error handling
+	var consecutiveErrors int
+	var lastErrorTime time.Time
+	const maxBackoff = 5 * time.Minute
 
 	for {
 		select {
@@ -536,8 +542,29 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 				Limit: 1000, // Limit to prevent overwhelming clients
 			})
 			if err != nil {
-				log.Printf("❌ Failed to query metrics for broadcast: %v", err)
+				consecutiveErrors++
+				now := time.Now()
+
+				// Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s (max 5m)
+				// Prevents log spam during persistent errors or outages
+				backoff := time.Duration(1<<uint(min(consecutiveErrors-1, 8))) * time.Second
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+
+				// Only log if enough time has passed since last error
+				if lastErrorTime.IsZero() || now.Sub(lastErrorTime) >= backoff {
+					log.Printf("❌ Failed to query metrics for broadcast (error #%d, backoff %v): %v",
+						consecutiveErrors, backoff, err)
+					lastErrorTime = now
+				}
 				continue
+			}
+
+			// Reset error count on success
+			if consecutiveErrors > 0 {
+				log.Printf("✅ Metrics broadcast recovered after %d errors", consecutiveErrors)
+				consecutiveErrors = 0
 			}
 
 			// Only broadcast if we have data
@@ -556,6 +583,14 @@ func broadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 			}
 		}
 	}
+}
+
+// min returns the minimum of two integers (Go 1.20 doesn't have builtin min for int)
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // runBadgerGC runs BadgerDB garbage collection periodically to reclaim disk space
