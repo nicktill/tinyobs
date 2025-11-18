@@ -68,7 +68,8 @@ func New(cfg Config) (*Storage, error) {
 		WithCompression(options.Snappy).     // Compression for metrics
 		WithNumVersionsToKeep(1).            // We don't need versioning
 		WithMemTableSize(memTableSize).      // Limit memory table size
-		WithValueLogMaxEntries(uint32(valueLogMaxEntries)) // Limit value log entries
+		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
+		WithValueLogFileSize(64 << 20)       // CRITICAL: 64 MB value log files instead of default 2GB!
 
 	db, err := badger.Open(opts)
 	if err != nil {
