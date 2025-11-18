@@ -184,28 +184,41 @@
             outline: none;
         }
 
-        input:focus, select:focus {
+        input:focus, select:focus, button:focus {
             border-color: var(--accent-blue);
+            outline: 2px solid var(--accent-blue);
+            outline-offset: 2px;
         }
 
         button {
             cursor: pointer;
             font-weight: 500;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
         }
 
         button:hover {
             background: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         button.primary {
             background: var(--accent-blue);
             border-color: var(--accent-blue);
             color: #ffffff;
+            box-shadow: 0 2px 4px rgba(88, 166, 255, 0.2);
         }
 
         button.primary:hover {
             opacity: 0.9;
+            box-shadow: 0 4px 8px rgba(88, 166, 255, 0.3);
+        }
+
+        button.primary:active {
+            box-shadow: 0 1px 2px rgba(88, 166, 255, 0.2);
         }
 
         select {
@@ -273,11 +286,13 @@
             padding: 1.5rem;
             box-shadow: 0 1px 3px var(--shadow);
             transition: all 0.2s ease;
+            cursor: pointer;
         }
 
         .chart-card:hover {
             box-shadow: 0 4px 12px var(--shadow);
             border-color: var(--accent-blue);
+            transform: translateY(-2px);
         }
 
         .chart-header {
@@ -299,6 +314,19 @@
             font-size: 0.8125rem;
             color: var(--text-secondary);
             margin-top: 0.25rem;
+        }
+
+        .chart-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2rem;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .chart-card:hover .chart-status {
+            transform: scale(1.2);
         }
 
         .chart-actions {
@@ -637,7 +665,146 @@
             color: var(--accent-green);
         }
 
+        /* Chart Modal */
+        #chartModal {
+            border: none;
+            border-radius: 12px;
+            padding: 0;
+            max-width: 1200px;
+            width: 90vw;
+            max-height: 90vh;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        #chartModal::backdrop {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            color: var(--accent-blue);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            max-height: calc(90vh - 200px);
+        }
+
+        .modal-chart-wrapper {
+            height: 400px;
+            margin-bottom: 2rem;
+        }
+
+        .modal-section {
+            margin-bottom: 2rem;
+        }
+
+        .modal-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .query-editor {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .query-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .metric-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .info-item {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 768px) {
+            #chartModal {
+                width: 95vw;
+                max-height: 95vh;
+            }
+
+            .modal-body {
+                padding: 1rem;
+            }
+
+            .modal-chart-wrapper {
+                height: 300px;
+            }
+
             .header-stats {
                 display: none;
             }
@@ -730,6 +897,12 @@
                     <select id="metricNameFilter" onchange="filterDashboard()">
                         <option value="all">All Metrics</option>
                     </select>
+                    <select id="chartsPerServiceSelect" onchange="setChartsPerService()" title="Charts per service">
+                        <option value="6">6 charts/service</option>
+                        <option value="12">12 charts/service</option>
+                        <option value="24">24 charts/service</option>
+                        <option value="999">Show all</option>
+                    </select>
                     <div class="time-range-selector">
                         <button class="time-btn" data-range="1h" onclick="setTimeRange('1h')">1h</button>
                         <button class="time-btn" data-range="6h" onclick="setTimeRange('6h')">6h</button>
@@ -792,6 +965,47 @@
         </div>
     </div>
 
+    <!-- Chart Drill-Down Modal -->
+    <dialog id="chartModal" aria-labelledby="modalTitle" aria-modal="true">
+        <div class="modal-header">
+            <div class="modal-title" id="modalTitle">Chart Details</div>
+            <button class="modal-close" onclick="closeChartModal()" aria-label="Close modal" title="Close (ESC)">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-section">
+                <div class="modal-chart-wrapper">
+                    <canvas id="modalChart"></canvas>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-title">🔍 Query Editor</div>
+                <textarea id="queryEditor" class="query-editor" placeholder="Enter TinyQuery expression...&#10;&#10;Examples:&#10;  http_requests_total&#10;  rate(http_requests_total[5m])&#10;  sum by (endpoint) (http_requests_total)"></textarea>
+                <div class="query-actions">
+                    <button class="primary" onclick="executeModalQuery()">Execute Query</button>
+                    <button onclick="copyQuery()">📋 Copy</button>
+                    <button onclick="shareQuery()">🔗 Share</button>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-title">📋 Metric Info</div>
+                <div class="metric-info-grid" id="metricInfoGrid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-title">💾 Export</div>
+                <div class="export-buttons">
+                    <button onclick="exportChartPNG()">📊 Export PNG</button>
+                    <button onclick="exportChartCSV()">📄 Export CSV</button>
+                    <button onclick="exportChartJSON()">📦 Export JSON</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
     <script>
         let metricsData = [];
         let selectedMetrics = new Set();
@@ -800,6 +1014,8 @@
         let exploreChart = null;
         let currentView = 'dashboard';
         let comparisonMode = false;
+        let chartsPerService = parseInt(localStorage.getItem('tinyobs-charts-per-service') || '6');
+        let expandedServices = new Set();
 
         // Initialize theme from localStorage
         const savedTheme = localStorage.getItem('tinyobs-theme') || 'dark';
@@ -1159,14 +1375,42 @@
                     return ''; // Skip this service if no metrics match filters
                 }
 
-                const chartCards = Object.entries(grouped).slice(0, 6).map(([name, data], idx) => {
+                const totalMetrics = Object.keys(grouped).length;
+                const isExpanded = expandedServices.has(service);
+                const limit = isExpanded ? totalMetrics : chartsPerService;
+                const metricsToShow = Object.entries(grouped).slice(0, limit);
+                const hasMore = totalMetrics > limit;
+
+                const chartCards = metricsToShow.map(([name, data], idx) => {
                     const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
+
+                    // Calculate basic stats for status indicator
+                    let avgValue = 0;
+                    let latestValue = 0;
+                    let pointCount = 0;
+
+                    data.forEach(m => {
+                        avgValue += m.value;
+                        latestValue = m.value;
+                        pointCount++;
+                    });
+
+                    if (pointCount > 0) {
+                        avgValue /= pointCount;
+                    }
+
+                    // Get status (we'll calculate trend properly when rendering the chart)
+                    const status = getMetricStatus(name, avgValue, latestValue, 0);
+
                     return `
-                        <div class="chart-card">
+                        <div class="chart-card" onclick="openChartModal('${name.replace(/'/g, "\\'")}', '${service.replace(/'/g, "\\'")}')">
                             <div class="chart-header">
                                 <div>
                                     <div class="chart-title">${name}</div>
-                                    <div class="chart-subtitle">${data.length} series</div>
+                                    <div class="chart-subtitle">${data.length} series • Click to explore</div>
+                                </div>
+                                <div class="chart-status" style="color: ${status.color}; font-size: 1.25rem;" title="${status.label}">
+                                    ${status.icon}
                                 </div>
                             </div>
                             <div class="chart-wrapper">
@@ -1176,18 +1420,28 @@
                     `;
                 }).join('');
 
+                const showMoreButton = hasMore ? `
+                    <div style="text-align: center; padding: 1rem;">
+                        <button class="primary" onclick="expandService('${service}')">
+                            Show ${totalMetrics - limit} more charts
+                        </button>
+                    </div>
+                ` : '';
+
                 return `
                     <div class="service-section" id="service-${service}">
                         <div class="service-header" onclick="toggleService('${service}')">
                             <h3>
                                 <span class="service-icon">📦</span>
                                 ${service}
-                                <span class="badge">${Object.keys(grouped).length} metrics</span>
+                                <span class="badge">${totalMetrics} metrics</span>
+                                ${hasMore && !isExpanded ? `<span class="badge" style="background: var(--bg-tertiary);">Showing ${limit} of ${totalMetrics}</span>` : ''}
                             </h3>
                             <span class="collapse-icon">▼</span>
                         </div>
                         <div class="service-charts">
                             ${chartCards}
+                            ${showMoreButton}
                         </div>
                     </div>
                 `;
@@ -1215,7 +1469,11 @@
                         grouped[m.name].push(m);
                     });
 
-                    Object.entries(grouped).slice(0, 6).forEach(([name, data], idx) => {
+                    const totalMetrics = Object.keys(grouped).length;
+                    const isExpanded = expandedServices.has(service);
+                    const limit = isExpanded ? totalMetrics : chartsPerService;
+
+                    Object.entries(grouped).slice(0, limit).forEach(([name, data], idx) => {
                         const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
                         renderServiceChart(chartId, name, data, selectedEndpoint, selectedMetricName);
                     });
@@ -1356,6 +1614,19 @@
             }
         }
 
+        function setChartsPerService() {
+            const value = document.getElementById('chartsPerServiceSelect').value;
+            chartsPerService = parseInt(value);
+            localStorage.setItem('tinyobs-charts-per-service', chartsPerService.toString());
+            expandedServices.clear(); // Reset expansions
+            filterDashboard();
+        }
+
+        function expandService(service) {
+            expandedServices.add(service);
+            filterDashboard();
+        }
+
         function toggleService(service) {
             const section = document.getElementById(`service-${service}`);
             section.classList.toggle('collapsed');
@@ -1369,6 +1640,390 @@
                 services[service].push(m);
             });
             renderDashboard(services);
+        }
+
+        // Status thresholds for smart indicators
+        const statusThresholds = {
+            error_rate: { warning: 0.01, critical: 0.05 }, // 1% warning, 5% critical
+            latency: { warning: 100, critical: 500 }, // milliseconds
+            response_time: { warning: 200, critical: 1000 },
+            cpu_usage: { warning: 70, critical: 90 }, // percentage
+            memory_usage: { warning: 75, critical: 90 },
+            disk_usage: { warning: 80, critical: 95 },
+            request_duration: { warning: 1000, critical: 5000 },
+            failure_rate: { warning: 0.02, critical: 0.1 }
+        };
+
+        function getMetricStatus(metricName, avgValue, latestValue, trend) {
+            // Find matching threshold
+            let threshold = null;
+            for (const [key, value] of Object.entries(statusThresholds)) {
+                if (metricName.toLowerCase().includes(key)) {
+                    threshold = value;
+                    break;
+                }
+            }
+
+            if (!threshold) {
+                // No specific threshold, use generic trend-based status
+                if (Math.abs(trend) < 0.05) return { icon: '→', color: '#8b949e', label: 'Stable' };
+                if (trend > 0.2) return { icon: '↑', color: '#f85149', label: 'Rising' };
+                if (trend < -0.2) return { icon: '↓', color: '#56d364', label: 'Declining' };
+                return { icon: '→', color: '#8b949e', label: 'Stable' };
+            }
+
+            // Use threshold-based status
+            const value = latestValue !== undefined ? latestValue : avgValue;
+            if (value >= threshold.critical) {
+                return { icon: '🚨', color: '#f85149', label: 'Critical' };
+            } else if (value >= threshold.warning) {
+                return { icon: '⚠️', color: '#ffa657', label: 'Warning' };
+            } else {
+                return { icon: '✅', color: '#56d364', label: 'Healthy' };
+            }
+        }
+
+        function calculateTrend(points) {
+            if (!points || points.length < 2) return 0;
+
+            // Compare first half vs second half
+            const midpoint = Math.floor(points.length / 2);
+            const firstHalf = points.slice(0, midpoint);
+            const secondHalf = points.slice(midpoint);
+
+            const firstAvg = firstHalf.reduce((sum, p) => sum + p.y, 0) / firstHalf.length;
+            const secondAvg = secondHalf.reduce((sum, p) => sum + p.y, 0) / secondHalf.length;
+
+            if (firstAvg === 0) return 0;
+            return (secondAvg - firstAvg) / firstAvg;
+        }
+
+        // Modal functionality
+        let modalChart = null;
+        let modalMetricData = null;
+
+        async function openChartModal(metricName, service) {
+            try {
+                // Set modal title
+                document.getElementById('modalTitle').textContent = metricName;
+
+                // Fetch data for the modal chart
+                const now = Date.now();
+                const ranges = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
+                const hours = ranges[currentRange];
+                const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
+                const end = new Date(now).toISOString();
+
+                const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=500`);
+                if (!response.ok) throw new Error('Failed to fetch data');
+
+                const result = await response.json();
+                modalMetricData = result;
+
+                // Render chart in modal
+                renderModalChart(metricName, result);
+
+                // Pre-fill query editor
+                document.getElementById('queryEditor').value = metricName;
+
+                // Populate metric info
+                populateMetricInfo(metricName, result, service);
+
+                // Show modal
+                document.getElementById('chartModal').showModal();
+            } catch (error) {
+                console.error('Error opening modal:', error);
+                alert('Failed to load chart data');
+            }
+        }
+
+        function renderModalChart(metricName, result) {
+            const canvas = document.getElementById('modalChart');
+
+            // Destroy existing chart
+            if (modalChart) {
+                modalChart.destroy();
+                modalChart = null;
+            }
+
+            // Prepare datasets
+            const datasets = [];
+            const colors = ['#58a6ff', '#f78166', '#56d364', '#d2a8ff', '#ffa657', '#f85149'];
+
+            if (result.data && result.data.length > 0) {
+                result.data.forEach((series, idx) => {
+                    const color = colors[idx % colors.length];
+                    const label = series.labels && Object.keys(series.labels).length > 0
+                        ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}="${v}"`).join(', ')
+                        : metricName;
+
+                    datasets.push({
+                        label: label,
+                        data: series.points.map(p => ({ x: p.t, y: p.v })),
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        pointHoverRadius: 4,
+                        tension: 0.1
+                    });
+                });
+            }
+
+            // Create new chart
+            modalChart = new Chart(canvas, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            display: datasets.length > 1,
+                            position: 'top',
+                            labels: {
+                                color: '#c9d1d9',
+                                font: { size: 12 },
+                                boxWidth: 12,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#161b22',
+                            borderColor: '#30363d',
+                            borderWidth: 1,
+                            titleColor: '#c9d1d9',
+                            bodyColor: '#8b949e',
+                            callbacks: {
+                                title: (items) => {
+                                    if (items.length > 0) {
+                                        return new Date(items[0].parsed.x).toLocaleString();
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            grid: { color: '#30363d' },
+                            ticks: { color: '#8b949e' }
+                        },
+                        y: {
+                            grid: { color: '#30363d' },
+                            ticks: { color: '#8b949e' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function populateMetricInfo(metricName, result, service) {
+            const grid = document.getElementById('metricInfoGrid');
+
+            // Calculate stats
+            let totalPoints = 0;
+            let minValue = Infinity;
+            let maxValue = -Infinity;
+            let avgValue = 0;
+            let seriesCount = result.data ? result.data.length : 0;
+
+            if (result.data) {
+                result.data.forEach(series => {
+                    series.points.forEach(p => {
+                        totalPoints++;
+                        minValue = Math.min(minValue, p.v);
+                        maxValue = Math.max(maxValue, p.v);
+                        avgValue += p.v;
+                    });
+                });
+            }
+
+            if (totalPoints > 0) {
+                avgValue /= totalPoints;
+            } else {
+                minValue = 0;
+                maxValue = 0;
+            }
+
+            grid.innerHTML = `
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Metric Name</div>
+                    <div class="metric-info-value">${metricName}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Service</div>
+                    <div class="metric-info-value">${service || 'N/A'}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Series Count</div>
+                    <div class="metric-info-value">${seriesCount}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Time Range</div>
+                    <div class="metric-info-value">${currentRange}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Min Value</div>
+                    <div class="metric-info-value">${minValue.toFixed(2)}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Max Value</div>
+                    <div class="metric-info-value">${maxValue.toFixed(2)}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Avg Value</div>
+                    <div class="metric-info-value">${avgValue.toFixed(2)}</div>
+                </div>
+                <div class="metric-info-item">
+                    <div class="metric-info-label">Data Points</div>
+                    <div class="metric-info-value">${totalPoints}</div>
+                </div>
+            `;
+        }
+
+        function closeChartModal() {
+            const modal = document.getElementById('chartModal');
+            modal.close();
+
+            // Clean up chart
+            if (modalChart) {
+                modalChart.destroy();
+                modalChart = null;
+            }
+
+            modalMetricData = null;
+        }
+
+        async function executeModalQuery() {
+            const query = document.getElementById('queryEditor').value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+
+            try {
+                // Use TinyQuery API
+                const response = await fetch('/v1/query/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+
+                const result = await response.json();
+
+                // Update modal chart with new data
+                const metricName = query.split('(')[0].trim();
+                renderModalChart(metricName, result);
+
+                // Update metric info
+                populateMetricInfo(metricName, result, 'custom');
+            } catch (error) {
+                console.error('Query execution error:', error);
+                alert(`Query failed: ${error.message}`);
+            }
+        }
+
+        async function copyQuery() {
+            const query = document.getElementById('queryEditor').value;
+            try {
+                await navigator.clipboard.writeText(query);
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => { btn.textContent = originalText; }, 2000);
+            } catch (error) {
+                console.error('Copy failed:', error);
+                alert('Failed to copy to clipboard');
+            }
+        }
+
+        function shareQuery() {
+            const query = document.getElementById('queryEditor').value;
+            const url = new URL(window.location.href);
+            url.searchParams.set('query', query);
+            url.searchParams.set('range', currentRange);
+
+            const shareUrl = url.toString();
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Link Copied!';
+                setTimeout(() => { btn.textContent = originalText; }, 2000);
+            }).catch(err => {
+                console.error('Share failed:', err);
+                alert(`Share URL: ${shareUrl}`);
+            });
+        }
+
+        function exportChartPNG() {
+            if (!modalChart) {
+                alert('No chart to export');
+                return;
+            }
+
+            const canvas = document.getElementById('modalChart');
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tinyobs-chart-${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        function exportChartCSV() {
+            if (!modalMetricData || !modalMetricData.data) {
+                alert('No data to export');
+                return;
+            }
+
+            let csv = 'Timestamp,Series,Value\n';
+
+            modalMetricData.data.forEach(series => {
+                const seriesLabel = series.labels && Object.keys(series.labels).length > 0
+                    ? Object.entries(series.labels).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k}=${v}`).join(',')
+                    : series.metric;
+
+                series.points.forEach(p => {
+                    const timestamp = new Date(p.t).toISOString();
+                    csv += `${timestamp},"${seriesLabel}",${p.v}\n`;
+                });
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tinyobs-data-${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportChartJSON() {
+            if (!modalMetricData) {
+                alert('No data to export');
+                return;
+            }
+
+            const json = JSON.stringify(modalMetricData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tinyobs-data-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         function refreshDashboard() {
@@ -1616,6 +2271,10 @@
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const themeToggleBtn = document.getElementById('themeToggle');
             themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+
+            // Initialize charts-per-service select
+            const chartsSelect = document.getElementById('chartsPerServiceSelect');
+            chartsSelect.value = chartsPerService.toString();
 
             // Enhanced Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
