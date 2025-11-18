@@ -92,21 +92,31 @@ func (sm *StorageMonitor) GetLimit() int64 {
 }
 
 // calculateDirSize recursively calculates directory size in bytes
-// Uses logical file size for cross-platform compatibility
-// Note: May overreport for sparse files (e.g., BadgerDB .vlog files)
+// Uses actual disk usage (not logical size) to handle sparse files correctly
 func calculateDirSize(path string) (int64, error) {
 	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() {
-			size += info.Size()
+			// Get actual disk usage, not logical file size
+			actualSize, err := getActualFileSize(filePath, info)
+			if err != nil {
+				// Fallback to logical size if we can't get actual size
+				size += info.Size()
+			} else {
+				size += actualSize
+			}
 		}
 		return nil
 	})
 	return size, err
 }
+
+// getActualFileSize is implemented in platform-specific files:
+// - filesize_unix.go (Linux/Mac): Uses syscall.Stat_t.Blocks
+// - filesize_windows.go (Windows): Uses GetCompressedFileSizeW API
 
 // handleHealth returns service health status
 func handleHealth(w http.ResponseWriter, r *http.Request) {
