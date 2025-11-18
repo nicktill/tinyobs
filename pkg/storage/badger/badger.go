@@ -47,7 +47,7 @@ func New(cfg Config) (*Storage, error) {
 	if cfg.MaxMemoryMB > 0 {
 		// User specified limit - use it
 		memTableSize = cfg.MaxMemoryMB * 1024 * 1024 / 4 // 25% for memtable
-		valueLogMaxEntries = 10000                        // Conservative value log
+		valueLogMaxEntries = 10000                       // Conservative value log
 	} else {
 		// Auto-detect: Conservative limits for local dev, higher for production
 		// Production detection: Check if running with persistent storage and not in ./data
@@ -65,11 +65,11 @@ func New(cfg Config) (*Storage, error) {
 
 	// Optimize for time-series workload
 	opts = opts.
-		WithCompression(options.Snappy).     // Compression for metrics
-		WithNumVersionsToKeep(1).            // We don't need versioning
-		WithMemTableSize(memTableSize).      // Limit memory table size
+		WithCompression(options.Snappy).                    // Compression for metrics
+		WithNumVersionsToKeep(1).                           // We don't need versioning
+		WithMemTableSize(memTableSize).                     // Limit memory table size
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
-		WithValueLogFileSize(64 << 20)       // CRITICAL: 64 MB value log files instead of default 2GB!
+		WithValueLogFileSize(64 << 20)                      // CRITICAL: 64 MB value log files instead of default 2GB!
 
 	db, err := badger.Open(opts)
 	if err != nil {

@@ -32,10 +32,10 @@ type QueryRequest struct {
 
 // QueryResponse represents the response payload
 type QueryResponse struct {
-	Status string         `json:"status"`
-	Data   *ResultData    `json:"data,omitempty"`
-	Error  string         `json:"error,omitempty"`
-	Query  string         `json:"query"` // Echo back the query
+	Status string      `json:"status"`
+	Data   *ResultData `json:"data,omitempty"`
+	Error  string      `json:"error,omitempty"`
+	Query  string      `json:"query"` // Echo back the query
 }
 
 // ResultData contains the query result in Prometheus-compatible format
@@ -51,9 +51,9 @@ type SeriesResult struct {
 }
 
 const (
-	defaultStep         = 15 * time.Second
-	defaultQueryWindow  = 1 * time.Hour
-	queryTimeout        = 30 * time.Second
+	defaultStep        = 15 * time.Second
+	defaultQueryWindow = 1 * time.Hour
+	queryTimeout       = 30 * time.Second
 )
 
 // HandleQueryExecute handles the /v1/query/execute endpoint
