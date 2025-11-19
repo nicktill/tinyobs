@@ -1635,7 +1635,7 @@
 
                     // Background for label
                     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    const labelText = edgeLatency > 0 ? `${edgeLatency.toFixed(0)}ms` : `${edge.request_rate.toFixed(0)}/s`;
+                    const labelText = edgeLatency > 100 ? `${edgeLatency.toFixed(0)}ms` : `${edge.request_rate.toFixed(0)}/s`;
                     const labelWidth = labelText.length * 5 + 8;
 
                     labelBg.setAttribute('x', midX - labelWidth / 2);
