@@ -180,10 +180,12 @@ ClientConfig supports several options:
 	client, err := sdk.New(sdk.ClientConfig{
 	    Service:    "my-app",              // Required: service name
 	    Endpoint:   "http://localhost:8080/v1/ingest",  // TinyObs server URL
-	    APIKey:     "secret-key",          // Optional: for authenticated servers
+	    APIKey:     "secret-key",          // Optional: only set this if your TinyObs server requires authentication (typically in production)
 	    FlushEvery: 5 * time.Second,       // How often to send batches
 	})
 
+	// Note: APIKey is only needed if your TinyObs server is configured to require authentication.
+	// For local development or servers without authentication, you can omit this field.
 Default values:
   - Endpoint: "http://localhost:8080/v1/ingest"
   - FlushEvery: 5 seconds
