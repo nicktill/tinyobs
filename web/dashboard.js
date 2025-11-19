@@ -1295,6 +1295,12 @@
                     switchView('explore');
                 }
 
+                // M for Service Map (Topology) view
+                if ((e.key === 'm' || e.key === 'M') && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    switchView('topology');
+                }
+
                 // R to refresh current view
                 if ((e.key === 'r' || e.key === 'R') && e.target.tagName !== 'INPUT') {
                     e.preventDefault();
@@ -1453,3 +1459,208 @@
                 }
             }
         }, 60000);
+
+        // ============================================================================
+        // TOPOLOGY VIEW - Service Dependency Map
+        // ============================================================================
+
+        let topologyData = null;
+
+        function refreshTopology() {
+            const hours = document.getElementById('topologyTimeRange').value;
+            fetch(`/v1/topology?hours=${hours}`)
+                .then(res => res.json())
+                .then(data => {
+                    topologyData = data;
+                    renderTopology(data);
+                })
+                .catch(err => {
+                    console.error('Failed to load topology:', err);
+                    document.getElementById('topologyLoading').textContent = 'Failed to load topology';
+                });
+        }
+
+        function renderTopology(data) {
+            const svg = document.getElementById('topologySvg');
+            const loadingEl = document.getElementById('topologyLoading');
+
+            loadingEl.style.display = 'none';
+
+            // Update stats
+            document.getElementById('nodeCount').textContent = `${data.nodes.length} services`;
+            document.getElementById('edgeCount').textContent = `${data.edges.length} connections`;
+
+            // Clear SVG
+            svg.innerHTML = '';
+
+            const width = svg.clientWidth || 1200;
+            const height = 600;
+
+            // Simple force-directed layout (no D3 needed!)
+            const nodes = data.nodes.map(n => ({
+                ...n,
+                x: Math.random() * width,
+                y: Math.random() * height,
+                vx: 0,
+                vy: 0
+            }));
+
+            const edges = data.edges.map(e => ({
+                ...e,
+                source: nodes.find(n => n.id === e.source),
+                target: nodes.find(n => n.id === e.target)
+            })).filter(e => e.source && e.target);
+
+            // Physics simulation
+            function simulate() {
+                const alpha = 0.3;
+                const iterations = 100;
+
+                for (let iter = 0; iter < iterations; iter++) {
+                    // Repulsion between nodes
+                    for (let i = 0; i < nodes.length; i++) {
+                        for (let j = i + 1; j < nodes.length; j++) {
+                            const dx = nodes[j].x - nodes[i].x;
+                            const dy = nodes[j].y - nodes[i].y;
+                            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                            const force = 5000 / (dist * dist);
+
+                            nodes[i].vx -= (dx / dist) * force;
+                            nodes[i].vy -= (dy / dist) * force;
+                            nodes[j].vx += (dx / dist) * force;
+                            nodes[j].vy += (dy / dist) * force;
+                        }
+                    }
+
+                    // Attraction along edges
+                    edges.forEach(edge => {
+                        const dx = edge.target.x - edge.source.x;
+                        const dy = edge.target.y - edge.source.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const force = dist / 100;
+
+                        edge.source.vx += (dx / dist) * force;
+                        edge.source.vy += (dy / dist) * force;
+                        edge.target.vx -= (dx / dist) * force;
+                        edge.target.vy -= (dy / dist) * force;
+                    });
+
+                    // Center gravity
+                    const centerX = width / 2;
+                    const centerY = height / 2;
+                    nodes.forEach(node => {
+                        node.vx += (centerX - node.x) * 0.01;
+                        node.vy += (centerY - node.y) * 0.01;
+                    });
+
+                    // Update positions
+                    nodes.forEach(node => {
+                        node.x += node.vx * alpha;
+                        node.y += node.vy * alpha;
+                        node.vx *= 0.9;
+                        node.vy *= 0.9;
+
+                        // Keep in bounds
+                        const margin = 50;
+                        node.x = Math.max(margin, Math.min(width - margin, node.x));
+                        node.y = Math.max(margin, Math.min(height - margin, node.y));
+                    });
+                }
+            }
+
+            simulate();
+
+            // Render edges
+            edges.forEach(edge => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', edge.source.x);
+                line.setAttribute('y1', edge.source.y);
+                line.setAttribute('x2', edge.target.x);
+                line.setAttribute('y2', edge.target.y);
+                line.setAttribute('stroke', 'var(--text-secondary)');
+                line.setAttribute('stroke-width', Math.max(1, edge.request_rate / 10));
+                line.setAttribute('opacity', '0.3');
+
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = `${edge.source.id} → ${edge.target.id}\n${edge.request_rate.toFixed(1)} req/s`;
+                line.appendChild(title);
+
+                svg.appendChild(line);
+
+                // Add arrow
+                const angle = Math.atan2(edge.target.y - edge.source.y, edge.target.x - edge.source.x);
+                const arrowSize = 8;
+                const arrowDist = 30; // Distance from target
+                const arrowX = edge.target.x - arrowDist * Math.cos(angle);
+                const arrowY = edge.target.y - arrowDist * Math.sin(angle);
+
+                const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                const p1x = arrowX + arrowSize * Math.cos(angle - 2.5);
+                const p1y = arrowY + arrowSize * Math.sin(angle - 2.5);
+                const p2x = arrowX;
+                const p2y = arrowY;
+                const p3x = arrowX + arrowSize * Math.cos(angle + 2.5);
+                const p3y = arrowY + arrowSize * Math.sin(angle + 2.5);
+
+                arrow.setAttribute('points', `${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y}`);
+                arrow.setAttribute('fill', 'var(--text-secondary)');
+                arrow.setAttribute('opacity', '0.5');
+                svg.appendChild(arrow);
+            });
+
+            // Render nodes
+            nodes.forEach(node => {
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${node.x},${node.y})`);
+
+                // Node circle
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', 25);
+
+                let color = 'var(--accent-blue)';
+                if (node.type === 'database') color = 'var(--accent-green)';
+                if (node.type === 'external') color = 'var(--accent-orange)';
+
+                circle.setAttribute('fill', color);
+                circle.setAttribute('stroke', 'var(--bg-primary)');
+                circle.setAttribute('stroke-width', '3');
+
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = `${node.label}\n${node.request_rate.toFixed(1)} req/s\nError rate: ${(node.error_rate * 100).toFixed(1)}%`;
+                circle.appendChild(title);
+
+                g.appendChild(circle);
+
+                // Label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('y', 40);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', 'var(--text-primary)');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('font-weight', '500');
+                text.textContent = node.label;
+                g.appendChild(text);
+
+                // Request rate badge
+                if (node.request_rate > 0) {
+                    const badge = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    badge.setAttribute('y', -30);
+                    badge.setAttribute('text-anchor', 'middle');
+                    badge.setAttribute('fill', 'var(--accent-green)');
+                    badge.setAttribute('font-size', '10');
+                    badge.textContent = `${node.request_rate.toFixed(1)} req/s`;
+                    g.appendChild(badge);
+                }
+
+                svg.appendChild(g);
+            });
+        }
+
+        // Load topology when switching to topology view
+        const originalSwitchView = switchView;
+        switchView = function(view) {
+            originalSwitchView(view);
+            if (view === 'topology' && !topologyData) {
+                refreshTopology();
+            }
+        };
