@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/export"
 	"github.com/nicktill/tinyobs/pkg/ingest"
 	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/storage"
@@ -308,6 +309,9 @@ func main() {
 	traceStorage := tracing.NewStorage()
 	tracingHandler := tracing.NewHandler(traceStorage)
 	log.Println("🔗 Distributed tracing enabled (stores up to 10k traces, 24h retention)")
+	// Create export/import handler for backup & restore
+	exportHandler := export.NewHandler(store)
+	log.Println("💾 Export/Import handler created (JSON & CSV backup support)")
 
 	// Create WebSocket hub for real-time updates
 	hub := ingest.NewMetricsHub()
@@ -350,11 +354,36 @@ func main() {
 	router := mux.NewRouter()
 
 	// CORS middleware for API access
+	// SECURITY FIX: Restrict to localhost origins only (prevents CSRF from external sites)
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			origin := r.Header.Get("Origin")
+
+			// Allow localhost origins for local development
+			allowedOrigins := []string{
+				"http://localhost:8080",
+				"http://127.0.0.1:8080",
+				"http://localhost:3000", // Common dev ports
+				"http://127.0.0.1:3000",
+			}
+
+			// Check if origin is allowed
+			allowed := false
+			for _, allowedOrigin := range allowedOrigins {
+				if origin == allowedOrigin {
+					allowed = true
+					break
+				}
+			}
+
+			// Only set CORS headers for allowed origins
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return
@@ -373,9 +402,19 @@ func main() {
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
+	api.HandleFunc("/topology", handler.HandleTopology).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
+	api.HandleFunc("/export", exportHandler.HandleExport).Methods("GET")   // Export metrics to JSON/CSV
+	api.HandleFunc("/import", exportHandler.HandleImport).Methods("POST") // Import metrics from JSON backup
+
+	// Distributed tracing routes
+	api.HandleFunc("/traces", tracingHandler.HandleQueryTraces).Methods("GET")
+	api.HandleFunc("/traces/recent", tracingHandler.HandleRecentTraces).Methods("GET")
+	api.HandleFunc("/traces/stats", tracingHandler.HandleTracingStats).Methods("GET")
+	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
+	api.HandleFunc("/trace", tracingHandler.HandleGetTrace).Methods("GET")
 
 	// Distributed tracing routes
 	api.HandleFunc("/traces", tracingHandler.HandleQueryTraces).Methods("GET")
@@ -387,10 +426,14 @@ func main() {
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 
-	// Serve static files (strip prefix to prevent path traversal)
-	fileServer := http.FileServer(http.Dir("./web/"))
-	router.PathPrefix("/").Handler(http.StripPrefix("/", fileServer))
+	// Serve all static files from ./web/ directory securely
+	// This allows access to dashboard.html, dashboard.js, traces.html, favicon.svg, logo.svg, etc.
+	router.PathPrefix("/web/").Handler(http.StripPrefix("/web/", http.FileServer(http.Dir("./web/"))))
 
+	// Optionally, keep root path serving dashboard.html for convenience
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/dashboard.html")
+	}).Methods("GET")
 	// Create server
 	server := &http.Server{
 		Addr:         ":8080",
@@ -409,6 +452,8 @@ func main() {
 		log.Println("   GET  /v1/query          - Query metrics")
 		log.Println("   GET  /v1/query/range    - Range queries")
 		log.Println("   GET  /v1/stats          - Storage statistics")
+		log.Println("   GET  /v1/export         - Export metrics (JSON/CSV)")
+		log.Println("   POST /v1/import         - Import metrics from backup")
 		log.Println("   GET  /metrics           - Prometheus endpoint")
 		log.Println("   GET  /v1/traces         - Query traces")
 		log.Println("   GET  /v1/traces/recent  - Recent traces")

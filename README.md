@@ -2,14 +2,14 @@
 
 **A metrics platform you can actually understand.**
 
-[![Go 1.21+](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
 
 I built TinyObs because I wanted to understand how observability systems work. Prometheus has 300k+ lines of code. I wanted something smaller that I could actually read and learn from.
 
-TinyObs is a metrics platform in ~2,600 lines of Go. It's small enough to read through, and works well for local development. You get metrics collection, storage, downsampling, a dashboard, and an SDK.
+TinyObs is a metrics platform in ~5,300 lines of Go (excluding tests and blank lines). It's small enough to read through in a weekend, and works well for local development. You get metrics collection, storage, downsampling, a dashboard, and an SDK.
 
 **What you get:**
 - Metrics SDK (counters, gauges, histograms)
@@ -82,11 +82,11 @@ Select and overlay multiple metrics on a single chart for comparison. Search, fi
 
 ### Key Features Shown
 - 🎨 **Light/Dark Theme Toggle** - Seamless theme switching with localStorage persistence
-- 📊 **Time Comparison** - Compare current metrics with 24h ago (dashed lines)
 - 🔍 **Smart Filtering** - Filter by service, endpoint, or metric name
 - ⌨️ **Keyboard Shortcuts** - Navigate fast with shortcuts (D, E, R, T, /, ESC, 1-4)
-- 💾 **Export/Import** - Save and restore dashboard configurations as JSON
 - 📈 **Multi-Metric Overlays** - Compare multiple time series on one chart
+- 🎯 **Auto-Downsampling** - Intelligent resolution selection based on time range
+- 📊 **Stable Colors** - Consistent color assignment across refreshes
 
 ## Dashboard Features
 
@@ -105,9 +105,9 @@ The dashboard includes powerful keyboard shortcuts for fast navigation:
 
 ### Visual Features
 - **Theme Toggle** - Click ☀️/🌙 in the header or press `T` to switch themes. Preference saved automatically.
-- **Export/Import Configs** - Use ⬇️ button to export dashboard state (filters, theme, time range) as JSON. Use ⬆️ to restore.
-- **Time Comparison** - Click "📊 Compare 24h" to overlay metrics from 24 hours ago (shown as dashed lines) for trend analysis.
 - **Auto-Downsampling** - Charts automatically select the best resolution (raw/5m/1h) based on time range for optimal performance.
+- **Multi-Metric Overlays** - Compare multiple time series on a single chart in Explore view.
+- **Smart Filtering** - Filter metrics by service, endpoint, or metric name with auto-discovery.
 
 ## Using the SDK
 
@@ -298,15 +298,16 @@ tinyobs/
 │   │   ├── interface.go     # Storage abstraction
 │   │   ├── memory/          # In-memory storage (fast, ephemeral)
 │   │   └── badger/          # BadgerDB storage (persistent, LSM)
-│   └── compaction/          # Multi-resolution downsampling
-│       ├── compactor.go     # Compaction engine
-│       └── types.go         # Aggregate types and metadata
+│   ├── compaction/          # Multi-resolution downsampling
+│   │   ├── compactor.go     # Compaction engine
+│   │   └── types.go         # Aggregate types and metadata
+│   └── query/               # Query parsing and execution
 └── web/
     ├── index.html           # Simple dashboard (legacy)
     └── dashboard.html       # Chart.js time-series dashboard
 ```
 
-**Code stats:** ~2,600 lines of production Go code (excluding tests)
+**Code stats:** ~5,300 lines of production Go code (excluding tests, comments, and blank lines)
 
 ## The 53-Day Bug
 
@@ -361,8 +362,12 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [x] Enhanced keyboard shortcuts (D, E, R, T, /, ESC, 1-4)
 - [x] Stable color assignment (no more flickering charts!)
 - [x] Auto-scroll to selected metrics in Explore view
-- [x] Export/import dashboard configurations (JSON)
-- [x] Time comparison view (compare to 24h ago)
+
+### 🚧 V2.3 - Dashboard Polish (In Progress)
+- [ ] Export/import dashboard configurations (JSON)
+- [ ] Time comparison view (compare to 24h ago)
+- [ ] Comprehensive test coverage (SDK batching: 95.7% complete)
+- [ ] Enhanced documentation (Architecture guide, package docs)
 
 ### 📅 V3.0 - Real-time & Anomaly Detection (Next 2-4 weeks)
 - [ ] WebSocket live updates (replace 30s polling)
@@ -398,7 +403,7 @@ I've used Prometheus, Datadog, and New Relic professionally. They're great tools
 
 I wanted something I could actually *understand*. So I built TinyObs with three rules:
 
-1. **Small enough to read**: ~2,600 lines of Go (excluding tests). You can read it all in one sitting.
+1. **Small enough to read**: ~5,300 lines of Go (excluding tests). You can read it all in a weekend.
 2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, professional UI.
 3. **Honest documentation**: Comments explain *why* decisions were made, not just what the code does.
 
@@ -458,7 +463,7 @@ For production scale, use Prometheus or VictoriaMetrics.
 A: TinyObs is built for local development and learning. For production, use Prometheus or similar tools.
 
 **Q: How does it compare to Prometheus?**
-A: Prometheus is production-grade with 300k+ lines. TinyObs is ~2,600 lines for learning. Use Prometheus for production.
+A: Prometheus is production-grade with 300k+ lines. TinyObs is ~5,300 lines for learning. Use Prometheus for production.
 
 **Q: Can I use it with Grafana?**
 A: Yes, TinyObs has a Prometheus-compatible `/metrics` endpoint.

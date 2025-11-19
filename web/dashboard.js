@@ -1296,34 +1296,42 @@
 
             // Enhanced Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
-                // Don't trigger shortcuts if user is typing in an input
-                if (e.target.tagName === 'INPUT' && e.key !== 'Escape') return;
+                // Don't trigger shortcuts if user is typing in an input or textarea
+                // FIXED: Include TEXTAREA (query editor) in the check
+                const isInputField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+                if (isInputField && e.key !== 'Escape') return;
 
-                // ESC to clear selection in Explore view or blur input
+                // ESC to clear selection in Explore view or blur input/textarea
                 if (e.key === 'Escape') {
                     if (currentView === 'explore') {
                         clearSelection();
                     }
-                    // Blur any focused input
-                    if (document.activeElement.tagName === 'INPUT') {
+                    // Blur any focused input or textarea
+                    if (isInputField) {
                         document.activeElement.blur();
                     }
                 }
 
                 // D for Dashboard view
-                if ((e.key === 'd' || e.key === 'D') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'd' || e.key === 'D') && !isInputField) {
                     e.preventDefault();
                     switchView('dashboard');
                 }
 
                 // E for Explore view
-                if ((e.key === 'e' || e.key === 'E') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'e' || e.key === 'E') && !isInputField) {
                     e.preventDefault();
                     switchView('explore');
                 }
 
+                // M for Service Map (Topology) view
+                if ((e.key === 'm' || e.key === 'M') && !isInputField) {
+                    e.preventDefault();
+                    switchView('topology');
+                }
+
                 // R to refresh current view
-                if ((e.key === 'r' || e.key === 'R') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'r' || e.key === 'R') && !isInputField) {
                     e.preventDefault();
                     if (currentView === 'dashboard') {
                         refreshDashboard();
@@ -1333,7 +1341,7 @@
                 }
 
                 // T to toggle theme
-                if ((e.key === 't' || e.key === 'T') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 't' || e.key === 'T') && !isInputField) {
                     e.preventDefault();
                     toggleTheme();
                 }
@@ -1345,7 +1353,7 @@
                 }
 
                 // 1-4 for quick time range selection (Dashboard only)
-                if (currentView === 'dashboard' && e.target.tagName !== 'INPUT') {
+                if (currentView === 'dashboard' && !isInputField) {
                     const timeRanges = { '1': '1h', '2': '6h', '3': '24h', '4': '7d' };
                     if (timeRanges[e.key]) {
                         e.preventDefault();
@@ -1480,3 +1488,312 @@
                 }
             }
         }, 60000);
+
+        // ============================================================================
+        // TOPOLOGY VIEW - Service Dependency Map
+        // ============================================================================
+
+        let topologyData = null;
+
+        function refreshTopology() {
+            const hours = document.getElementById('topologyTimeRange').value;
+            fetch(`/v1/topology?hours=${hours}`)
+                .then(res => res.json())
+                .then(data => {
+                    topologyData = data;
+                    renderTopology(data);
+                })
+                .catch(err => {
+                    console.error('Failed to load topology:', err);
+                    document.getElementById('topologyLoading').textContent = 'Failed to load topology';
+                });
+        }
+
+        function renderTopology(data) {
+            const svg = document.getElementById('topologySvg');
+            const loadingEl = document.getElementById('topologyLoading');
+
+            loadingEl.style.display = 'none';
+
+            // Update stats
+            document.getElementById('nodeCount').textContent = `${data.nodes.length} services`;
+            document.getElementById('edgeCount').textContent = `${data.edges.length} connections`;
+
+            // Clear SVG
+            svg.innerHTML = '';
+
+            const width = svg.clientWidth || 1200;
+            const height = 600;
+
+            // Simple force-directed layout (no D3 needed!)
+            const nodes = data.nodes.map(n => ({
+                ...n,
+                x: Math.random() * width,
+                y: Math.random() * height,
+                vx: 0,
+                vy: 0
+            }));
+
+            const edges = data.edges.map(e => ({
+                ...e,
+                source: nodes.find(n => n.id === e.source),
+                target: nodes.find(n => n.id === e.target)
+            })).filter(e => e.source && e.target);
+
+            // Physics simulation
+            function simulate() {
+                const alpha = 0.3;
+                const iterations = 100;
+
+                for (let iter = 0; iter < iterations; iter++) {
+                    // Repulsion between nodes
+                    for (let i = 0; i < nodes.length; i++) {
+                        for (let j = i + 1; j < nodes.length; j++) {
+                            const dx = nodes[j].x - nodes[i].x;
+                            const dy = nodes[j].y - nodes[i].y;
+                            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                            const force = 5000 / (dist * dist);
+
+                            nodes[i].vx -= (dx / dist) * force;
+                            nodes[i].vy -= (dy / dist) * force;
+                            nodes[j].vx += (dx / dist) * force;
+                            nodes[j].vy += (dy / dist) * force;
+                        }
+                    }
+
+                    // Attraction along edges
+                    edges.forEach(edge => {
+                        const dx = edge.target.x - edge.source.x;
+                        const dy = edge.target.y - edge.source.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const force = dist / 100;
+
+                        edge.source.vx += (dx / dist) * force;
+                        edge.source.vy += (dy / dist) * force;
+                        edge.target.vx -= (dx / dist) * force;
+                        edge.target.vy -= (dy / dist) * force;
+                    });
+
+                    // Center gravity
+                    const centerX = width / 2;
+                    const centerY = height / 2;
+                    nodes.forEach(node => {
+                        node.vx += (centerX - node.x) * 0.01;
+                        node.vy += (centerY - node.y) * 0.01;
+                    });
+
+                    // Update positions
+                    nodes.forEach(node => {
+                        node.x += node.vx * alpha;
+                        node.y += node.vy * alpha;
+                        node.vx *= 0.9;
+                        node.vy *= 0.9;
+
+                        // Keep in bounds
+                        const margin = 50;
+                        node.x = Math.max(margin, Math.min(width - margin, node.x));
+                        node.y = Math.max(margin, Math.min(height - margin, node.y));
+                    });
+                }
+            }
+
+            simulate();
+
+            // Render edges
+            edges.forEach(edge => {
+                // Calculate edge metrics
+                const edgeLatency = edge.avg_latency_ms || 0;
+                const edgeErrorRate = edge.error_rate || 0;
+                const strokeWidth = Math.max(1.5, Math.min(8, edge.request_rate / 10));
+
+                // Color based on health (error rate)
+                let edgeColor = '#58a6ff'; // blue - healthy
+                if (edgeErrorRate > 0.05) {
+                    edgeColor = '#f85149'; // red - critical
+                } else if (edgeErrorRate > 0.01) {
+                    edgeColor = '#ffa657'; // orange - warning
+                }
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', edge.source.x);
+                line.setAttribute('y1', edge.source.y);
+                line.setAttribute('x2', edge.target.x);
+                line.setAttribute('y2', edge.target.y);
+                line.setAttribute('stroke', edgeColor);
+                line.setAttribute('stroke-width', strokeWidth);
+                line.setAttribute('opacity', '0.6');
+                line.style.cursor = 'pointer';
+
+                // Enhanced edge tooltip
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = `${edge.source.id} → ${edge.target.id}\n` +
+                    `━━━━━━━━━━━━━━━━━━\n` +
+                    `📊 Traffic: ${edge.request_rate.toFixed(1)} req/s\n` +
+                    `⚠️  Error Rate: ${(edgeErrorRate * 100).toFixed(2)}%\n` +
+                    `⏱️  Avg Latency: ${edgeLatency.toFixed(0)}ms`;
+                line.appendChild(title);
+
+                svg.appendChild(line);
+
+                // Add arrow
+                const angle = Math.atan2(edge.target.y - edge.source.y, edge.target.x - edge.source.x);
+                const arrowSize = 10;
+                const arrowDist = 35; // Distance from target
+                const arrowX = edge.target.x - arrowDist * Math.cos(angle);
+                const arrowY = edge.target.y - arrowDist * Math.sin(angle);
+
+                const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                const p1x = arrowX + arrowSize * Math.cos(angle - 2.5);
+                const p1y = arrowY + arrowSize * Math.sin(angle - 2.5);
+                const p2x = arrowX;
+                const p2y = arrowY;
+                const p3x = arrowX + arrowSize * Math.cos(angle + 2.5);
+                const p3y = arrowY + arrowSize * Math.sin(angle + 2.5);
+
+                arrow.setAttribute('points', `${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y}`);
+                arrow.setAttribute('fill', edgeColor);
+                arrow.setAttribute('opacity', '0.8');
+                svg.appendChild(arrow);
+
+                // Add edge label for high-traffic or high-latency connections
+                if (edge.request_rate > 5 || edgeLatency > 100) {
+                    const midX = (edge.source.x + edge.target.x) / 2;
+                    const midY = (edge.source.y + edge.target.y) / 2;
+
+                    // Background for label
+                    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const labelText = edgeLatency > 100 ? `${edgeLatency.toFixed(0)}ms` : `${edge.request_rate.toFixed(0)}/s`;
+                    const labelWidth = labelText.length * 5 + 8;
+
+                    labelBg.setAttribute('x', midX - labelWidth / 2);
+                    labelBg.setAttribute('y', midY - 10);
+                    labelBg.setAttribute('width', labelWidth);
+                    labelBg.setAttribute('height', 14);
+                    labelBg.setAttribute('rx', 3);
+                    labelBg.setAttribute('fill', '#161b22');
+                    labelBg.setAttribute('opacity', '0.9');
+                    svg.appendChild(labelBg);
+
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', midX);
+                    label.setAttribute('y', midY);
+                    label.setAttribute('text-anchor', 'middle');
+                    label.setAttribute('fill', edgeColor);
+                    label.setAttribute('font-size', '8');
+                    label.setAttribute('font-weight', '600');
+                    label.textContent = labelText;
+                    svg.appendChild(label);
+                }
+            });
+
+            // Render nodes
+            nodes.forEach(node => {
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${node.x},${node.y})`);
+                g.style.cursor = 'pointer';
+
+                // Determine health status based on error rate
+                let healthColor, healthStatus;
+                if (node.error_rate < 0.01) { // < 1%
+                    healthColor = '#56d364'; // green
+                    healthStatus = 'Healthy';
+                } else if (node.error_rate < 0.05) { // 1-5%
+                    healthColor = '#ffa657'; // orange
+                    healthStatus = 'Warning';
+                } else {
+                    healthColor = '#f85149'; // red
+                    healthStatus = 'Critical';
+                }
+
+                // Health indicator ring
+                const healthRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                healthRing.setAttribute('r', 30);
+                healthRing.setAttribute('fill', 'none');
+                healthRing.setAttribute('stroke', healthColor);
+                healthRing.setAttribute('stroke-width', '3');
+                healthRing.setAttribute('opacity', '0.8');
+                g.appendChild(healthRing);
+
+                // Node circle with gradient
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', 25);
+
+                let color = '#58a6ff';
+                if (node.type === 'database') color = '#56d364';
+                if (node.type === 'external') color = '#ffa657';
+
+                circle.setAttribute('fill', color);
+                circle.setAttribute('fill-opacity', '0.9');
+                circle.setAttribute('stroke', '#ffffff');
+                circle.setAttribute('stroke-width', '2');
+
+                // Enhanced tooltip
+                const avgLatency = node.avg_latency_ms || 0;
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = `${node.label} [${healthStatus}]\n` +
+                    `━━━━━━━━━━━━━━━━━━\n` +
+                    `📊 Throughput: ${node.request_rate.toFixed(1)} req/s\n` +
+                    `⚠️  Error Rate: ${(node.error_rate * 100).toFixed(2)}%\n` +
+                    `⏱️  Avg Latency: ${avgLatency.toFixed(0)}ms\n` +
+                    `📦 Type: ${node.type}`;
+                circle.appendChild(title);
+
+                g.appendChild(circle);
+
+                // Service name label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('y', 48);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', 'var(--text-primary)');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('font-weight', '600');
+                text.textContent = node.label;
+                g.appendChild(text);
+
+                // Metrics display - throughput
+                if (node.request_rate > 0) {
+                    const throughput = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    throughput.setAttribute('y', -35);
+                    throughput.setAttribute('text-anchor', 'middle');
+                    throughput.setAttribute('fill', '#56d364');
+                    throughput.setAttribute('font-size', '9');
+                    throughput.setAttribute('font-weight', '600');
+                    throughput.textContent = `${node.request_rate.toFixed(1)} req/s`;
+                    g.appendChild(throughput);
+                }
+
+                // Metrics display - error rate (if > 0)
+                if (node.error_rate > 0) {
+                    const errorText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    errorText.setAttribute('y', 0);
+                    errorText.setAttribute('text-anchor', 'middle');
+                    errorText.setAttribute('fill', healthColor);
+                    errorText.setAttribute('font-size', '8');
+                    errorText.setAttribute('font-weight', '700');
+                    errorText.textContent = `${(node.error_rate * 100).toFixed(1)}%`;
+                    g.appendChild(errorText);
+                }
+
+                // Metrics display - latency (if available)
+                if (avgLatency > 0) {
+                    const latencyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    latencyText.setAttribute('y', 60);
+                    latencyText.setAttribute('text-anchor', 'middle');
+                    latencyText.setAttribute('fill', '#8b949e');
+                    latencyText.setAttribute('font-size', '9');
+                    latencyText.textContent = `${avgLatency.toFixed(0)}ms`;
+                    g.appendChild(latencyText);
+                }
+
+                svg.appendChild(g);
+            });
+        }
+
+        // Load topology when switching to topology view
+        const originalSwitchView = switchView;
+        switchView = function(view) {
+            originalSwitchView(view);
+            if (view === 'topology' && !topologyData) {
+                refreshTopology();
+            }
+        };

@@ -54,15 +54,17 @@ func (g *Gauge) Dec(labels ...string) {
 func (g *Gauge) Add(value float64, labels ...string) {
 	key := g.makeKey(labels...)
 
+	// CRITICAL FIX: Read value while holding lock to prevent race condition
 	g.mu.Lock()
 	g.values[key] += value
+	newValue := g.values[key] // Capture value before releasing lock
 	g.mu.Unlock()
 
 	// Send metric immediately for real-time updates
 	g.client.SendMetric(Metric{
 		Name:      g.name,
 		Type:      GaugeType,
-		Value:     g.values[key],
+		Value:     newValue, // Use captured value (race-free)
 		Labels:    g.makeLabels(labels...),
 		Timestamp: time.Now(),
 	})
@@ -72,15 +74,17 @@ func (g *Gauge) Add(value float64, labels ...string) {
 func (g *Gauge) Sub(value float64, labels ...string) {
 	key := g.makeKey(labels...)
 
+	// CRITICAL FIX: Read value while holding lock to prevent race condition
 	g.mu.Lock()
 	g.values[key] -= value
+	newValue := g.values[key] // Capture value before releasing lock
 	g.mu.Unlock()
 
 	// Send metric immediately for real-time updates
 	g.client.SendMetric(Metric{
 		Name:      g.name,
 		Type:      GaugeType,
-		Value:     g.values[key],
+		Value:     newValue, // Use captured value (race-free)
 		Labels:    g.makeLabels(labels...),
 		Timestamp: time.Now(),
 	})
