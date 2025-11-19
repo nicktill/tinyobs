@@ -160,7 +160,7 @@ func uploadTraces(storage *tracing.Storage) {
 	// Upload each span to TinyObs
 	client := &http.Client{Timeout: 5 * time.Second}
 	for _, trace := range traces {
-		for _, span := range trace.Spans {
+		for range trace.Spans {
 			// Send to TinyObs server
 			// In production, you'd batch these
 			// For now, we just store them locally

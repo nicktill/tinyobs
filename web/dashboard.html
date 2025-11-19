@@ -724,6 +724,12 @@
         .modal-chart-wrapper {
             height: 400px;
             margin-bottom: 2rem;
+            width: 100%;
+        }
+
+        .modal-chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
         }
 
         .modal-section {
@@ -740,6 +746,17 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
+
+        .query-editor-help {
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--accent-blue);
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
         }
 
         .query-editor {
@@ -804,6 +821,7 @@
 
             .modal-chart-wrapper {
                 height: 300px;
+                width: 100%;
             }
 
             .header-stats {
@@ -1030,7 +1048,10 @@
 
             <div class="modal-section">
                 <div class="modal-section-title">🔍 Query Editor</div>
-                <textarea id="queryEditor" class="query-editor" placeholder="Enter TinyQuery expression...&#10;&#10;Examples:&#10;  http_requests_total&#10;  rate(http_requests_total[5m])&#10;  sum by (endpoint) (http_requests_total)"></textarea>
+                <div class="query-editor-help">
+                    Write TinyQuery expressions to analyze your metrics. Supports aggregations, functions, and time-based operations.
+                </div>
+                <textarea id="queryEditor" class="query-editor" placeholder="Examples:&#10;  metric_name                                    → Get metric values&#10;  rate(http_requests[5m])                       → Calculate rate of change&#10;  sum by (endpoint) (http_requests_total)       → Aggregate by label&#10;  avg(response_time) > 100                      → Filter with conditions"></textarea>
                 <div class="query-actions">
                     <button class="primary" onclick="executeModalQuery()">Execute Query</button>
                     <button onclick="copyQuery()">📋 Copy</button>
