@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
@@ -75,24 +76,19 @@ func (h *Handler) HandleTopology(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildTopology analyzes metrics and constructs service topology
-func buildTopology(metrics []interface{}, timeRange time.Duration) TopologyResponse {
+func buildTopology(metricsList []metrics.Metric, timeRange time.Duration) TopologyResponse {
 	nodes := make(map[string]*TopologyNode)
 	edges := make(map[string]*TopologyEdge)
 
 	hours := timeRange.Hours()
 
-	for _, m := range metrics {
-		metric, ok := m.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		labels, _ := metric["labels"].(map[string]interface{})
-		name, _ := metric["name"].(string)
-		value, _ := metric["value"].(float64)
+	for _, metric := range metricsList {
+		name := metric.Name
+		value := metric.Value
+		labels := metric.Labels
 
 		// Extract service name
-		service, _ := labels["service"].(string)
+		service := labels["service"]
 		if service == "" {
 			continue
 		}
@@ -125,11 +121,11 @@ func buildTopology(metrics []interface{}, timeRange time.Duration) TopologyRespo
 		var target string
 
 		// Check for explicit target labels
-		if targetService, ok := labels["target_service"].(string); ok {
+		if targetService := labels["target_service"]; targetService != "" {
 			target = targetService
-		} else if upstream, ok := labels["upstream"].(string); ok {
+		} else if upstream := labels["upstream"]; upstream != "" {
 			target = upstream
-		} else if endpoint, ok := labels["endpoint"].(string); ok {
+		} else if endpoint := labels["endpoint"]; endpoint != "" {
 			// Try to extract service name from endpoint
 			// e.g., "/api/users-service/..." → "users-service"
 			target = extractServiceFromEndpoint(endpoint)
