@@ -354,11 +354,36 @@ func main() {
 	router := mux.NewRouter()
 
 	// CORS middleware for API access
+	// SECURITY FIX: Restrict to localhost origins only (prevents CSRF from external sites)
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			origin := r.Header.Get("Origin")
+
+			// Allow localhost origins for local development
+			allowedOrigins := []string{
+				"http://localhost:8080",
+				"http://127.0.0.1:8080",
+				"http://localhost:3000", // Common dev ports
+				"http://127.0.0.1:3000",
+			}
+
+			// Check if origin is allowed
+			allowed := false
+			for _, allowedOrigin := range allowedOrigins {
+				if origin == allowedOrigin {
+					allowed = true
+					break
+				}
+			}
+
+			// Only set CORS headers for allowed origins
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return
@@ -394,9 +419,20 @@ func main() {
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 
-	// Serve static files (strip prefix to prevent path traversal)
-	fileServer := http.FileServer(http.Dir("./web/"))
-	router.PathPrefix("/").Handler(http.StripPrefix("/", fileServer))
+	// SECURITY FIX: Serve specific files only (prevents directory traversal)
+	// Instead of serving entire ./web/ directory, explicitly serve dashboard files
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/dashboard.html")
+	}).Methods("GET")
+	router.HandleFunc("/dashboard.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/dashboard.html")
+	}).Methods("GET")
+	router.HandleFunc("/dashboard.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/dashboard.js")
+	}).Methods("GET")
+	router.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/index.html")
+	}).Methods("GET")
 
 	// Create server
 	server := &http.Server{
