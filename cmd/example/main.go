@@ -152,32 +152,48 @@ func main() {
 
 	// Start server
 	server := &http.Server{
-		Addr:    ":3001",
+		Addr:    ":3000",
 		Handler: handler,
 	}
 
+	// Channel to signal when server is ready
+	serverReady := make(chan bool)
+
 	go func() {
-		log.Println("🌐 Starting example app on http://localhost:3001")
-		log.Println("📊 TinyObs dashboard: http://localhost:8080/dashboard.html")
-		log.Println("📈 Generating simulated traffic...")
+		log.Println("🌐 Starting example app on :3000")
+		log.Println("📊 Visit http://localhost:3000 to see the app in action")
+		log.Println("📊 Visit http://localhost:8080 to see the TinyObs dashboard")
+
+		// Signal that we're starting (server takes a moment to bind)
+		time.Sleep(100 * time.Millisecond)
+		serverReady <- true
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Server failed to start: %v", err)
 		}
 	}()
 
+	// Wait for server to be ready before starting traffic
+	<-serverReady
+	log.Println("✅ Server is ready, starting traffic simulator...")
+
 	// Simulate steady, predictable traffic for demo
 	go func() {
+		// Give server a moment to fully start
+		time.Sleep(500 * time.Millisecond)
+
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 
 		endpoints := []string{"/api/users", "/api/orders", "/api/products"}
-		log.Println("🚦 Traffic simulator started (steady pattern)")
+		log.Println("🚦 Traffic simulator started - making requests every 3 seconds")
+		log.Println("💡 You should see traffic appearing in TinyObs dashboard shortly...")
 
 		reqCount := 0
 		for {
 			select {
 			case <-ctx.Done():
+				log.Println("🛑 Traffic simulator stopped")
 				return
 			case <-ticker.C:
 				reqCount++
@@ -190,15 +206,15 @@ func main() {
 				activeUsers.Set(float64(activeUserCount))
 
 				// Make request to generate metrics
-				go func(ep string) {
-					resp, err := http.Get("http://localhost:3001" + ep)
+				go func(ep string, count int) {
+					resp, err := http.Get("http://localhost:3000" + ep)
 					if err != nil {
 						log.Printf("⚠️  Traffic simulation failed for %s: %v", ep, err)
 						return
 					}
 					defer resp.Body.Close()
-					log.Printf("🔵 Request to %s - %d %s (active_users: %d)", ep, resp.StatusCode, resp.Status, activeUserCount)
-				}(endpoint)
+					log.Printf("✅ Request #%d: %s → %d %s (active_users: %d)", count, ep, resp.StatusCode, resp.Status, activeUserCount)
+				}(endpoint, reqCount)
 			}
 		}
 	}()
@@ -627,9 +643,13 @@ var statsPageTemplate = `<!DOCTYPE html>
                 </div>
             </div>
             <div class="dashboard-link">
-                <a href="http://localhost:8080/dashboard.html" class="btn primary" style="padding: 1rem 2rem; font-size: 1rem;">
-                    Open TinyObs Dashboard →
+                <a href="http://localhost:8080/dashboard.html" target="_blank" class="btn primary" style="padding: 1rem 2rem; font-size: 1rem;">
+                    📊 Open TinyObs Dashboard →
                 </a>
+                <p style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    Metrics are automatically sent to TinyObs every 5 seconds.<br>
+                    Traffic is generated every 3 seconds to demonstrate the system.
+                </p>
             </div>
         </div>
 
