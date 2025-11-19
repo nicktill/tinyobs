@@ -18,6 +18,7 @@ import (
 	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
+	"github.com/nicktill/tinyobs/pkg/tracing"
 
 	"github.com/gorilla/mux"
 )
@@ -303,6 +304,11 @@ func main() {
 	queryHandler := query.NewHandler(store)
 	log.Println("🔍 TinyQuery handler created (PromQL-compatible query engine)")
 
+	// Create distributed tracing
+	traceStorage := tracing.NewStorage()
+	tracingHandler := tracing.NewHandler(traceStorage)
+	log.Println("🔗 Distributed tracing enabled (stores up to 10k traces, 24h retention)")
+
 	// Create WebSocket hub for real-time updates
 	hub := ingest.NewMetricsHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -371,6 +377,13 @@ func main() {
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
 
+	// Distributed tracing routes
+	api.HandleFunc("/traces", tracingHandler.HandleQueryTraces).Methods("GET")
+	api.HandleFunc("/traces/recent", tracingHandler.HandleRecentTraces).Methods("GET")
+	api.HandleFunc("/traces/stats", tracingHandler.HandleTracingStats).Methods("GET")
+	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
+	api.HandleFunc("/trace", tracingHandler.HandleGetTrace).Methods("GET")
+
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 
@@ -390,12 +403,15 @@ func main() {
 	go func() {
 		log.Println("🌐 Server starting on http://localhost:8080")
 		log.Println("📊 Dashboard: http://localhost:8080/dashboard.html")
+		log.Println("🔗 Tracing UI: http://localhost:8080/traces.html")
 		log.Println("📡 API endpoints:")
 		log.Println("   POST /v1/ingest          - Ingest metrics")
 		log.Println("   GET  /v1/query          - Query metrics")
 		log.Println("   GET  /v1/query/range    - Range queries")
 		log.Println("   GET  /v1/stats          - Storage statistics")
 		log.Println("   GET  /metrics           - Prometheus endpoint")
+		log.Println("   GET  /v1/traces         - Query traces")
+		log.Println("   GET  /v1/traces/recent  - Recent traces")
 		log.Println("✅ Server ready to accept requests")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
