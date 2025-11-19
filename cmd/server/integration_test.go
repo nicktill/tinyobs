@@ -389,7 +389,7 @@ func setupRouter(handler *ingest.Handler) *mux.Router {
 	api := router.PathPrefix("/v1").Subrouter()
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
-	api.HandleFunc("/query/range", handler.HandleQueryRange).Methods("GET")
+	api.HandleFunc("/query/range", handler.HandleRangeQuery).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	return router
 }
