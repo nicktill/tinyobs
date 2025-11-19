@@ -139,6 +139,9 @@ BadgerDB backend:
   - Writes: 50k+ metrics/sec (M1 MacBook Pro)
   - Queries: <100ms for 1000 points
   - Storage: ~70 MB after 1 year (10 series, 1 sample/sec)
+    // Calculation: 10 series × 1 sample/sec × 31,536,000 sec/year = 315,360,000 samples.
+    // After 240x downsampling/compression, ~1,314,000 data points remain.
+    // The 70 MB figure includes all three resolution levels (raw, downsampled, etc.).
   - Persistence: Durable (survives restarts)
 
 # Best Practices
