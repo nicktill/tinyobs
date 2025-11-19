@@ -367,6 +367,7 @@ func main() {
 	api.HandleFunc("/metrics/list", handler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", handler.HandleCardinalityStats).Methods("GET")
+	api.HandleFunc("/topology", handler.HandleTopology).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")

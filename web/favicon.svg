@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="14" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+
+  <!-- Simple chart line -->
+  <path d="M 6 22 L 10 18 L 14 14 L 18 10 L 22 13 L 26 9"
+        stroke="#3fb950" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Tiny indicator dot -->
+  <circle cx="26" cy="9" r="3" fill="#f0883e"/>
+</svg>

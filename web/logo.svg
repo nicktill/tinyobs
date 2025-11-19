@@ -1,0 +1,27 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="90" fill="#0d1117" stroke="#58a6ff" stroke-width="4"/>
+
+  <!-- Simplified metrics chart inside -->
+  <!-- Line 1 - upward trend -->
+  <path d="M 40 140 L 60 120 L 80 100 L 100 70"
+        stroke="#3fb950" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="40" cy="140" r="4" fill="#3fb950"/>
+  <circle cx="60" cy="120" r="4" fill="#3fb950"/>
+  <circle cx="80" cy="100" r="4" fill="#3fb950"/>
+  <circle cx="100" cy="70" r="4" fill="#3fb950"/>
+
+  <!-- Line 2 - middle trend -->
+  <path d="M 100 70 L 120 90 L 140 80 L 160 60"
+        stroke="#58a6ff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="120" cy="90" r="4" fill="#58a6ff"/>
+  <circle cx="140" cy="80" r="4" fill="#58a6ff"/>
+  <circle cx="160" cy="60" r="4" fill="#58a6ff"/>
+
+  <!-- Tiny circle indicator (representing "Tiny") -->
+  <circle cx="170" cy="40" r="8" fill="#f0883e" stroke="#0d1117" stroke-width="2"/>
+
+  <!-- Text -->
+  <text x="100" y="175" font-family="Arial, sans-serif" font-size="24" font-weight="bold"
+        fill="#c9d1d9" text-anchor="middle">TinyObs</text>
+</svg>
