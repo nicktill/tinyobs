@@ -40,15 +40,17 @@ func (c *Counter) Add(value float64, labels ...string) {
 
 	key := c.makeKey(labels...)
 
+	// CRITICAL FIX: Read value while holding lock to prevent race condition
 	c.mu.Lock()
 	c.values[key] += value
+	newValue := c.values[key] // Capture value before releasing lock
 	c.mu.Unlock()
 
 	// Send metric immediately for real-time updates
 	c.client.SendMetric(Metric{
 		Name:      c.name,
 		Type:      CounterType,
-		Value:     c.values[key],
+		Value:     newValue, // Use captured value (race-free)
 		Labels:    c.makeLabels(labels...),
 		Timestamp: time.Now(),
 	})
