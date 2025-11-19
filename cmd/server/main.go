@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/export"
 	"github.com/nicktill/tinyobs/pkg/ingest"
 	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/storage"
@@ -303,6 +304,10 @@ func main() {
 	queryHandler := query.NewHandler(store)
 	log.Println("🔍 TinyQuery handler created (PromQL-compatible query engine)")
 
+	// Create export/import handler for backup & restore
+	exportHandler := export.NewHandler(store)
+	log.Println("💾 Export/Import handler created (JSON & CSV backup support)")
+
 	// Create WebSocket hub for real-time updates
 	hub := ingest.NewMetricsHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -371,6 +376,8 @@ func main() {
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
+	api.HandleFunc("/export", exportHandler.HandleExport).Methods("GET")   // Export metrics to JSON/CSV
+	api.HandleFunc("/import", exportHandler.HandleImport).Methods("POST") // Import metrics from JSON backup
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
@@ -396,6 +403,8 @@ func main() {
 		log.Println("   GET  /v1/query          - Query metrics")
 		log.Println("   GET  /v1/query/range    - Range queries")
 		log.Println("   GET  /v1/stats          - Storage statistics")
+		log.Println("   GET  /v1/export         - Export metrics (JSON/CSV)")
+		log.Println("   POST /v1/import         - Import metrics from backup")
 		log.Println("   GET  /metrics           - Prometheus endpoint")
 		log.Println("✅ Server ready to accept requests")
 
