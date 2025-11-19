@@ -81,7 +81,7 @@ func New(cfg Config) (*Storage, error) {
 		WithNumLevelZeroTables(2).      // Trigger compaction earlier (default 5)
 		WithNumLevelZeroTablesStall(4). // Hard limit before stalling writes (default 10)
 		WithValueThreshold(1024).       // Keep small values in LSM, large in vlog (default 1MB)
-		WithNumCompactors(1).           // Limit compaction threads to 1 (reduces CPU/memory)
+		WithNumCompactors(2).           // Minimum 2 compactors required by BadgerDB
 
 		// Value log configuration
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
