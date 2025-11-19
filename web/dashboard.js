@@ -1269,40 +1269,42 @@
 
             // Enhanced Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
-                // Don't trigger shortcuts if user is typing in an input
-                if (e.target.tagName === 'INPUT' && e.key !== 'Escape') return;
+                // Don't trigger shortcuts if user is typing in an input or textarea
+                // FIXED: Include TEXTAREA (query editor) in the check
+                const isInputField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+                if (isInputField && e.key !== 'Escape') return;
 
-                // ESC to clear selection in Explore view or blur input
+                // ESC to clear selection in Explore view or blur input/textarea
                 if (e.key === 'Escape') {
                     if (currentView === 'explore') {
                         clearSelection();
                     }
-                    // Blur any focused input
-                    if (document.activeElement.tagName === 'INPUT') {
+                    // Blur any focused input or textarea
+                    if (isInputField) {
                         document.activeElement.blur();
                     }
                 }
 
                 // D for Dashboard view
-                if ((e.key === 'd' || e.key === 'D') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'd' || e.key === 'D') && !isInputField) {
                     e.preventDefault();
                     switchView('dashboard');
                 }
 
                 // E for Explore view
-                if ((e.key === 'e' || e.key === 'E') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'e' || e.key === 'E') && !isInputField) {
                     e.preventDefault();
                     switchView('explore');
                 }
 
                 // M for Service Map (Topology) view
-                if ((e.key === 'm' || e.key === 'M') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'm' || e.key === 'M') && !isInputField) {
                     e.preventDefault();
                     switchView('topology');
                 }
 
                 // R to refresh current view
-                if ((e.key === 'r' || e.key === 'R') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 'r' || e.key === 'R') && !isInputField) {
                     e.preventDefault();
                     if (currentView === 'dashboard') {
                         refreshDashboard();
@@ -1312,7 +1314,7 @@
                 }
 
                 // T to toggle theme
-                if ((e.key === 't' || e.key === 'T') && e.target.tagName !== 'INPUT') {
+                if ((e.key === 't' || e.key === 'T') && !isInputField) {
                     e.preventDefault();
                     toggleTheme();
                 }
@@ -1324,7 +1326,7 @@
                 }
 
                 // 1-4 for quick time range selection (Dashboard only)
-                if (currentView === 'dashboard' && e.target.tagName !== 'INPUT') {
+                if (currentView === 'dashboard' && !isInputField) {
                     const timeRanges = { '1': '1h', '2': '6h', '3': '24h', '4': '7d' };
                     if (timeRanges[e.key]) {
                         e.preventDefault();
@@ -1572,25 +1574,44 @@
 
             // Render edges
             edges.forEach(edge => {
+                // Calculate edge metrics
+                const edgeLatency = edge.avg_latency_ms || 0;
+                const edgeErrorRate = edge.error_rate || 0;
+                const strokeWidth = Math.max(1.5, Math.min(8, edge.request_rate / 10));
+
+                // Color based on health (error rate)
+                let edgeColor = '#58a6ff'; // blue - healthy
+                if (edgeErrorRate > 0.05) {
+                    edgeColor = '#f85149'; // red - critical
+                } else if (edgeErrorRate > 0.01) {
+                    edgeColor = '#ffa657'; // orange - warning
+                }
+
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 line.setAttribute('x1', edge.source.x);
                 line.setAttribute('y1', edge.source.y);
                 line.setAttribute('x2', edge.target.x);
                 line.setAttribute('y2', edge.target.y);
-                line.setAttribute('stroke', 'var(--text-secondary)');
-                line.setAttribute('stroke-width', Math.max(1, edge.request_rate / 10));
-                line.setAttribute('opacity', '0.3');
+                line.setAttribute('stroke', edgeColor);
+                line.setAttribute('stroke-width', strokeWidth);
+                line.setAttribute('opacity', '0.6');
+                line.style.cursor = 'pointer';
 
+                // Enhanced edge tooltip
                 const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                title.textContent = `${edge.source.id} → ${edge.target.id}\n${edge.request_rate.toFixed(1)} req/s`;
+                title.textContent = `${edge.source.id} → ${edge.target.id}\n` +
+                    `━━━━━━━━━━━━━━━━━━\n` +
+                    `📊 Traffic: ${edge.request_rate.toFixed(1)} req/s\n` +
+                    `⚠️  Error Rate: ${(edgeErrorRate * 100).toFixed(2)}%\n` +
+                    `⏱️  Avg Latency: ${edgeLatency.toFixed(0)}ms`;
                 line.appendChild(title);
 
                 svg.appendChild(line);
 
                 // Add arrow
                 const angle = Math.atan2(edge.target.y - edge.source.y, edge.target.x - edge.source.x);
-                const arrowSize = 8;
-                const arrowDist = 30; // Distance from target
+                const arrowSize = 10;
+                const arrowDist = 35; // Distance from target
                 const arrowX = edge.target.x - arrowDist * Math.cos(angle);
                 const arrowY = edge.target.y - arrowDist * Math.sin(angle);
 
@@ -1603,53 +1624,138 @@
                 const p3y = arrowY + arrowSize * Math.sin(angle + 2.5);
 
                 arrow.setAttribute('points', `${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y}`);
-                arrow.setAttribute('fill', 'var(--text-secondary)');
-                arrow.setAttribute('opacity', '0.5');
+                arrow.setAttribute('fill', edgeColor);
+                arrow.setAttribute('opacity', '0.8');
                 svg.appendChild(arrow);
+
+                // Add edge label for high-traffic or high-latency connections
+                if (edge.request_rate > 5 || edgeLatency > 100) {
+                    const midX = (edge.source.x + edge.target.x) / 2;
+                    const midY = (edge.source.y + edge.target.y) / 2;
+
+                    // Background for label
+                    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const labelText = edgeLatency > 0 ? `${edgeLatency.toFixed(0)}ms` : `${edge.request_rate.toFixed(0)}/s`;
+                    const labelWidth = labelText.length * 5 + 8;
+
+                    labelBg.setAttribute('x', midX - labelWidth / 2);
+                    labelBg.setAttribute('y', midY - 10);
+                    labelBg.setAttribute('width', labelWidth);
+                    labelBg.setAttribute('height', 14);
+                    labelBg.setAttribute('rx', 3);
+                    labelBg.setAttribute('fill', '#161b22');
+                    labelBg.setAttribute('opacity', '0.9');
+                    svg.appendChild(labelBg);
+
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', midX);
+                    label.setAttribute('y', midY);
+                    label.setAttribute('text-anchor', 'middle');
+                    label.setAttribute('fill', edgeColor);
+                    label.setAttribute('font-size', '8');
+                    label.setAttribute('font-weight', '600');
+                    label.textContent = labelText;
+                    svg.appendChild(label);
+                }
             });
 
             // Render nodes
             nodes.forEach(node => {
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 g.setAttribute('transform', `translate(${node.x},${node.y})`);
+                g.style.cursor = 'pointer';
 
-                // Node circle
+                // Determine health status based on error rate
+                let healthColor, healthStatus;
+                if (node.error_rate < 0.01) { // < 1%
+                    healthColor = '#56d364'; // green
+                    healthStatus = 'Healthy';
+                } else if (node.error_rate < 0.05) { // 1-5%
+                    healthColor = '#ffa657'; // orange
+                    healthStatus = 'Warning';
+                } else {
+                    healthColor = '#f85149'; // red
+                    healthStatus = 'Critical';
+                }
+
+                // Health indicator ring
+                const healthRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                healthRing.setAttribute('r', 30);
+                healthRing.setAttribute('fill', 'none');
+                healthRing.setAttribute('stroke', healthColor);
+                healthRing.setAttribute('stroke-width', '3');
+                healthRing.setAttribute('opacity', '0.8');
+                g.appendChild(healthRing);
+
+                // Node circle with gradient
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('r', 25);
 
-                let color = 'var(--accent-blue)';
-                if (node.type === 'database') color = 'var(--accent-green)';
-                if (node.type === 'external') color = 'var(--accent-orange)';
+                let color = '#58a6ff';
+                if (node.type === 'database') color = '#56d364';
+                if (node.type === 'external') color = '#ffa657';
 
                 circle.setAttribute('fill', color);
-                circle.setAttribute('stroke', 'var(--bg-primary)');
-                circle.setAttribute('stroke-width', '3');
+                circle.setAttribute('fill-opacity', '0.9');
+                circle.setAttribute('stroke', '#ffffff');
+                circle.setAttribute('stroke-width', '2');
 
+                // Enhanced tooltip
+                const avgLatency = node.avg_latency_ms || 0;
                 const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                title.textContent = `${node.label}\n${node.request_rate.toFixed(1)} req/s\nError rate: ${(node.error_rate * 100).toFixed(1)}%`;
+                title.textContent = `${node.label} [${healthStatus}]\n` +
+                    `━━━━━━━━━━━━━━━━━━\n` +
+                    `📊 Throughput: ${node.request_rate.toFixed(1)} req/s\n` +
+                    `⚠️  Error Rate: ${(node.error_rate * 100).toFixed(2)}%\n` +
+                    `⏱️  Avg Latency: ${avgLatency.toFixed(0)}ms\n` +
+                    `📦 Type: ${node.type}`;
                 circle.appendChild(title);
 
                 g.appendChild(circle);
 
-                // Label
+                // Service name label
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('y', 40);
+                text.setAttribute('y', 48);
                 text.setAttribute('text-anchor', 'middle');
                 text.setAttribute('fill', 'var(--text-primary)');
                 text.setAttribute('font-size', '12');
-                text.setAttribute('font-weight', '500');
+                text.setAttribute('font-weight', '600');
                 text.textContent = node.label;
                 g.appendChild(text);
 
-                // Request rate badge
+                // Metrics display - throughput
                 if (node.request_rate > 0) {
-                    const badge = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    badge.setAttribute('y', -30);
-                    badge.setAttribute('text-anchor', 'middle');
-                    badge.setAttribute('fill', 'var(--accent-green)');
-                    badge.setAttribute('font-size', '10');
-                    badge.textContent = `${node.request_rate.toFixed(1)} req/s`;
-                    g.appendChild(badge);
+                    const throughput = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    throughput.setAttribute('y', -35);
+                    throughput.setAttribute('text-anchor', 'middle');
+                    throughput.setAttribute('fill', '#56d364');
+                    throughput.setAttribute('font-size', '9');
+                    throughput.setAttribute('font-weight', '600');
+                    throughput.textContent = `${node.request_rate.toFixed(1)} req/s`;
+                    g.appendChild(throughput);
+                }
+
+                // Metrics display - error rate (if > 0)
+                if (node.error_rate > 0) {
+                    const errorText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    errorText.setAttribute('y', 0);
+                    errorText.setAttribute('text-anchor', 'middle');
+                    errorText.setAttribute('fill', healthColor);
+                    errorText.setAttribute('font-size', '8');
+                    errorText.setAttribute('font-weight', '700');
+                    errorText.textContent = `${(node.error_rate * 100).toFixed(1)}%`;
+                    g.appendChild(errorText);
+                }
+
+                // Metrics display - latency (if available)
+                if (avgLatency > 0) {
+                    const latencyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    latencyText.setAttribute('y', 60);
+                    latencyText.setAttribute('text-anchor', 'middle');
+                    latencyText.setAttribute('fill', '#8b949e');
+                    latencyText.setAttribute('font-size', '9');
+                    latencyText.textContent = `${avgLatency.toFixed(0)}ms`;
+                    g.appendChild(latencyText);
                 }
 
                 svg.appendChild(g);
