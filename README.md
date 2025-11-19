@@ -7,24 +7,23 @@
 
 ![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
 
-I built TinyObs because I was tired of treating observability systems like magic boxes. Prometheus has 300k+ lines of code. Datadog is a black box. I wanted something I could read in an afternoon and actually understand.
+I built TinyObs because I wanted to understand how observability systems work. Prometheus has 300k+ lines of code. I wanted something smaller that I could actually read and learn from.
 
-TinyObs is a complete observability platform in ~2,600 lines of Go. It's small enough to read all the code, but sophisticated enough to actually use for local development. You get metrics collection, time-series storage, downsampling, a polished dashboard, and a clean SDK—all without Docker or vendor lock-in.
+TinyObs is a metrics platform in ~2,600 lines of Go. It's small enough to read through, and works well for local development. You get metrics collection, storage, downsampling, a dashboard, and an SDK.
 
 **What you get:**
-- Metrics SDK (counters, gauges, histograms) that takes 5 minutes to integrate
-- Persistent storage with BadgerDB (LSM trees + Snappy compression)
-- Automatic downsampling: raw → 5min → 1hr aggregates (240x compression)
-- Professional dashboard with light/dark themes and keyboard shortcuts
-- Query API with smart auto-downsampling based on time range
-- Prometheus-compatible `/metrics` endpoint (works with Grafana)
-- Actually readable code with comments explaining *why*, not just *what*
+- Metrics SDK (counters, gauges, histograms)
+- Persistent storage with BadgerDB
+- Automatic downsampling: raw → 5min → 1hr aggregates
+- Dashboard with light/dark themes and keyboard shortcuts
+- Query API with auto-downsampling based on time range
+- Prometheus-compatible `/metrics` endpoint
+- Readable code with comments
 
 **Why you might want this:**
-- You want to understand how Prometheus/Datadog work under the hood
-- You need local metrics during development without spinning up containers
-- You're building a portfolio and want to show you understand real systems
-- You're learning Go and want to see a complete, production-quality codebase
+- You want to learn how metrics systems work
+- You need local metrics during development
+- You're learning Go and want to see a real-world codebase
 
 ## Quick Start
 
@@ -440,6 +439,34 @@ I built this to learn, and I'd love for others to learn from it too. Contributio
 - Run `go test ./...` before submitting
 
 Fork it, break it, fix it, submit a PR. I'll do my best to review quickly and help you get it merged.
+
+## Performance
+
+TinyObs is designed for local development. Some rough numbers on a MacBook Pro:
+
+- Writes: ~50k metrics/sec
+- Queries: <500ms for typical dashboards
+- Storage: Compression reduces disk usage significantly
+- Memory: ~50 MB baseline + overhead per series
+- Default limit: 10,000 series (configurable)
+
+For production scale, use Prometheus or VictoriaMetrics.
+
+## FAQ
+
+**Q: Can I use this in production?**
+A: TinyObs is built for local development and learning. For production, use Prometheus or similar tools.
+
+**Q: How does it compare to Prometheus?**
+A: Prometheus is production-grade with 300k+ lines. TinyObs is ~2,600 lines for learning. Use Prometheus for production.
+
+**Q: Can I use it with Grafana?**
+A: Yes, TinyObs has a Prometheus-compatible `/metrics` endpoint.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) - How TinyObs works
+- [Package Docs](https://pkg.go.dev/github.com/nicktill/tinyobs) - Go package documentation
 
 ## Resources
 

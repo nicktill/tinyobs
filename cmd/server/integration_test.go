@@ -230,12 +230,166 @@ func TestE2E_InvalidRequests(t *testing.T) {
 	}
 }
 
+// TestE2E_FullPipeline tests the complete TinyObs pipeline:
+// - Write 1000 metrics
+// - Run compaction
+// - Query and verify downsampled data
+// - Restart server (close and reopen DB)
+// - Verify data persists
+func TestE2E_FullPipeline(t *testing.T) {
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "tinyobs-full-e2e-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	now := time.Now()
+
+	// Step 1: Write 1000 metrics
+	t.Log("Step 1: Writing 1000 metrics...")
+	store, err := badger.New(badger.Config{Path: tmpDir})
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+
+	metricsToWrite := make([]metrics.Metric, 1000)
+	for i := 0; i < 1000; i++ {
+		metricsToWrite[i] = metrics.Metric{
+			Name:      "test_metric",
+			Type:      "counter",
+			Value:     float64(i),
+			Timestamp: now.Add(time.Duration(i) * time.Second),
+			Labels:    map[string]string{"test": "full_pipeline"},
+		}
+	}
+
+	err = store.Write(ctx, metricsToWrite)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Verify raw metrics were written
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+	if stats.TotalMetrics != 1000 {
+		t.Errorf("Expected 1000 metrics written, got %d", stats.TotalMetrics)
+	}
+	t.Logf("✓ Wrote 1000 metrics successfully")
+
+	// Step 2: Run compaction (5min aggregates)
+	t.Log("Step 2: Running compaction...")
+	compactor := compaction.New(store)
+
+	// Compact 5min resolution
+	err = compactor.Compact5m(ctx, now.Add(-1*time.Hour), now.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("5m compaction failed: %v", err)
+	}
+
+	// Verify compacted data exists
+	statsAfterCompaction, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats after compaction failed: %v", err)
+	}
+	if statsAfterCompaction.TotalMetrics < 1000 {
+		t.Errorf("Expected at least 1000 metrics after compaction (raw + aggregates), got %d",
+			statsAfterCompaction.TotalMetrics)
+	}
+	t.Logf("✓ Compaction created aggregates (total: %d metrics)", statsAfterCompaction.TotalMetrics)
+
+	// Step 3: Query and verify downsampled data
+	t.Log("Step 3: Querying downsampled data...")
+	handler := ingest.NewHandler(store)
+	router := setupRouter(handler)
+
+	// Query for the 5min aggregates
+	queryURL := "/v1/query/range?metric=test_metric&start=" +
+		now.Add(-1*time.Hour).Format(time.RFC3339) +
+		"&end=" + now.Add(2*time.Hour).Format(time.RFC3339) +
+		"&maxPoints=100"
+
+	req := httptest.NewRequest("GET", queryURL, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Query failed with status %d: %s", w.Code, w.Body.String())
+	}
+
+	var queryResp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&queryResp); err != nil {
+		t.Fatalf("Failed to decode query response: %v", err)
+	}
+
+	// Verify we got data back
+	data, ok := queryResp["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		t.Fatalf("Expected query to return data, got: %v", queryResp)
+	}
+	t.Logf("✓ Query returned %d data points", len(data))
+
+	// Step 4: Close and reopen DB (simulates server restart)
+	t.Log("Step 4: Restarting server (close and reopen DB)...")
+	if err := store.Close(); err != nil {
+		t.Fatalf("Failed to close storage: %v", err)
+	}
+
+	store2, err := badger.New(badger.Config{Path: tmpDir})
+	if err != nil {
+		t.Fatalf("Failed to reopen storage: %v", err)
+	}
+	defer store2.Close()
+
+	// Step 5: Verify data still exists after restart
+	t.Log("Step 5: Verifying data persists after restart...")
+	statsAfterRestart, err := store2.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats after restart failed: %v", err)
+	}
+
+	if statsAfterRestart.TotalMetrics != statsAfterCompaction.TotalMetrics {
+		t.Errorf("Data loss after restart! Before: %d, After: %d",
+			statsAfterCompaction.TotalMetrics, statsAfterRestart.TotalMetrics)
+	}
+	t.Logf("✓ Data persisted correctly (%d metrics)", statsAfterRestart.TotalMetrics)
+
+	// Query again after restart to verify reads work
+	handler2 := ingest.NewHandler(store2)
+	router2 := setupRouter(handler2)
+
+	req2 := httptest.NewRequest("GET", queryURL, nil)
+	w2 := httptest.NewRecorder()
+	router2.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("Query after restart failed with status %d: %s", w2.Code, w2.Body.String())
+	}
+
+	var queryResp2 map[string]interface{}
+	if err := json.NewDecoder(w2.Body).Decode(&queryResp2); err != nil {
+		t.Fatalf("Failed to decode query response after restart: %v", err)
+	}
+
+	data2, ok := queryResp2["data"].([]interface{})
+	if !ok || len(data2) == 0 {
+		t.Fatalf("Query after restart returned no data: %v", queryResp2)
+	}
+	t.Logf("✓ Query after restart returned %d data points", len(data2))
+
+	t.Log("✅ Full E2E pipeline test PASSED")
+}
+
 // setupRouter creates a test router
 func setupRouter(handler *ingest.Handler) *mux.Router {
 	router := mux.NewRouter()
 	api := router.PathPrefix("/v1").Subrouter()
 	api.HandleFunc("/ingest", handler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", handler.HandleQuery).Methods("GET")
+	api.HandleFunc("/query/range", handler.HandleQueryRange).Methods("GET")
 	api.HandleFunc("/stats", handler.HandleStats).Methods("GET")
 	return router
 }
