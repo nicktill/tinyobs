@@ -419,21 +419,14 @@ func main() {
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 
-	// SECURITY FIX: Serve specific files only (prevents directory traversal)
-	// Instead of serving entire ./web/ directory, explicitly serve dashboard files
+	// Serve all static files from ./web/ directory securely
+	// This allows access to dashboard.html, dashboard.js, traces.html, favicon.svg, logo.svg, etc.
+	router.PathPrefix("/web/").Handler(http.StripPrefix("/web/", http.FileServer(http.Dir("./web/"))))
+
+	// Optionally, keep root path serving dashboard.html for convenience
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/dashboard.html")
 	}).Methods("GET")
-	router.HandleFunc("/dashboard.html", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./web/dashboard.html")
-	}).Methods("GET")
-	router.HandleFunc("/dashboard.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./web/dashboard.js")
-	}).Methods("GET")
-	router.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./web/index.html")
-	}).Methods("GET")
-
 	// Create server
 	server := &http.Server{
 		Addr:         ":8080",
