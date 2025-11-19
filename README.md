@@ -441,6 +441,92 @@ I built this to learn, and I'd love for others to learn from it too. Contributio
 
 Fork it, break it, fix it, submit a PR. I'll do my best to review quickly and help you get it merged.
 
+## Performance Characteristics
+
+TinyObs is designed for local development, not production scale. Here's what to expect:
+
+**Throughput:**
+- **Write:** ~50,000 metrics/sec (M1 MacBook Pro, BadgerDB)
+- **Query:** <100ms for 1,000 points (in-memory), <500ms (BadgerDB)
+- **Compaction:** ~30 seconds for 10,000 series
+
+**Storage:**
+- **Compression:** ~240x after compaction (raw → 5m → 1h)
+- **Disk usage:** ~70 MB after 1 year (10 series, 1 sample/sec)
+- **Memory:** ~50 MB baseline + ~5 KB per active series
+
+**Scalability limits:**
+- **Max series:** ~10,000 (configurable via `TINYOBS_MAX_CARDINALITY`)
+- **Max metrics/sec:** ~50,000 sustained writes
+- **Max storage:** Limited by disk space (~1 GB default)
+
+For production scale (millions of series), use Prometheus or VictoriaMetrics.
+
+## Troubleshooting
+
+### Dashboard not loading
+**Problem:** 404 error when visiting `http://localhost:8080/dashboard.html`
+
+**Solution:** Run the server from the project root directory:
+```bash
+cd /path/to/tinyobs
+go run cmd/server/main.go
+```
+
+The server expects `./web/` to exist relative to the current directory.
+
+### Metrics not appearing
+**Problem:** Metrics sent but not visible in dashboard
+
+**Common causes:**
+1. **Cardinality limit exceeded** - Check logs for "cardinality limit exceeded"
+   - Fix: Reduce label cardinality or increase `TINYOBS_MAX_CARDINALITY`
+2. **Wrong endpoint** - Verify SDK sends to `http://localhost:8080/v1/ingest`
+3. **Time range wrong** - Click "1h" or "6h" to reset dashboard time range
+
+### Server using too much memory
+**Problem:** TinyObs consuming 2+ GB RAM
+
+**Common causes:**
+1. **High cardinality** - Check series count: `curl http://localhost:8080/v1/stats`
+   - Fix: Remove high-cardinality labels (user_id, request_id, session_id)
+2. **Compaction not running** - Check logs for compaction errors
+   - Fix: Ensure disk space available and permissions correct
+
+For more issues, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+## FAQ
+
+**Q: Can I use this in production?**
+A: TinyObs is designed for local development. For production, use Prometheus, VictoriaMetrics, or Datadog. TinyObs is great for learning and understanding how these systems work.
+
+**Q: Why no PromQL support?**
+A: PromQL adds ~5,000 lines of parser code. TinyObs prioritizes readability and simplicity. PromQL-like queries are planned for V4.0.
+
+**Q: How does TinyObs compare to Prometheus?**
+A: Prometheus is production-grade with 300k+ lines of code. TinyObs is ~2,600 lines and designed to be understandable. Use Prometheus for production, TinyObs for learning.
+
+**Q: Can I query metrics from other tools like Grafana?**
+A: Yes! TinyObs exposes a Prometheus-compatible `/metrics` endpoint. Point Grafana at `http://localhost:8080/metrics`.
+
+**Q: What happens if I exceed the cardinality limit?**
+A: New metrics are rejected with HTTP 400 error. This prevents storage explosion and forces you to fix high-cardinality labels.
+
+**Q: How long does data persist?**
+A: Raw data: 14 days. 5-minute aggregates: 90 days. 1-hour aggregates: 1 year. Configurable in `cmd/server/main.go`.
+
+**Q: Can I run multiple TinyObs instances?**
+A: Yes, but each instance has its own data directory. There's no clustering or replication (designed for single-node local use).
+
+**Q: Is there a Docker image?**
+A: Not yet. TinyObs is designed to run from source with `go run cmd/server/main.go`. Docker support may come in V3.0.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) - How TinyObs works under the hood
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Package Docs](https://pkg.go.dev/github.com/nicktill/tinyobs) - Go package documentation
+
 ## Resources
 
 - [Prometheus TSDB Design](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/README.md) - Time-series internals
