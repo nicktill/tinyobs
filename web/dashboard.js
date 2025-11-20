@@ -358,6 +358,7 @@
             const selectedService = document.getElementById('serviceFilter').value;
             const selectedEndpoint = document.getElementById('endpointFilter').value;
             const selectedMetricName = document.getElementById('metricNameFilter').value;
+            const hideSystemMetrics = document.getElementById('hideSystemMetrics')?.checked ?? true;
 
             const servicesToShow = selectedService === 'all'
                 ? Object.entries(services)
@@ -371,6 +372,15 @@
             container.innerHTML = servicesToShow.map(([service, metrics]) => {
                 // Apply filters
                 let filteredMetrics = metrics;
+
+                // Filter out system metrics if checkbox is checked
+                if (hideSystemMetrics) {
+                    filteredMetrics = filteredMetrics.filter(m =>
+                        !m.name.startsWith('go_') &&
+                        !m.name.startsWith('process_') &&
+                        !m.name.startsWith('runtime_')
+                    );
+                }
 
                 if (selectedEndpoint !== 'all') {
                     filteredMetrics = filteredMetrics.filter(m =>

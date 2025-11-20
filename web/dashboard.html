@@ -918,6 +918,10 @@
                     <select id="metricNameFilter" onchange="filterDashboard()">
                         <option value="all">All Metrics</option>
                     </select>
+                    <label style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="hideSystemMetrics" onchange="filterDashboard()" checked>
+                        <span>Hide system metrics</span>
+                    </label>
                     <select id="chartsPerServiceSelect" onchange="setChartsPerService()" title="Charts per service">
                         <option value="6">6 charts/service</option>
                         <option value="12">12 charts/service</option>
