@@ -165,6 +165,7 @@ func uploadTraces(storage *tracing.Storage) {
 			// In production, you'd batch these
 			// For now, we just store them locally
 			_ = client
+			_ = span
 			// The spans are already in the storage, which is shared
 		}
 	}
