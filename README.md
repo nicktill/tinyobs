@@ -35,13 +35,13 @@ git clone https://github.com/nicktill/tinyobs.git
 cd tinyobs
 
 # Terminal 1: Start TinyObs server
-go run cmd/server/main.go
+go run ./cmd/server
 
 # Terminal 2: Run the example app (generates fake metrics)
-go run cmd/example/main.go
+go run ./cmd/example
 
 # Terminal 3: Open the dashboard
-open http://localhost:8080/dashboard.html
+open http://localhost:8080
 ```
 
 You should see charts populating with fake API traffic. The example app simulates a web service with random latencies and occasional errors. Press `T` to toggle between light and dark themes, or `?` to see all keyboard shortcuts.

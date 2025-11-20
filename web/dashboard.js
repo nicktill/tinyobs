@@ -273,10 +273,25 @@
                 const end = new Date(now).toISOString();
 
                 const response = await fetch(`/v1/query?start=${start}&end=${end}`);
-                if (!response.ok) throw new Error('Query failed');
+                if (!response.ok) throw new Error(`Query failed: ${response.status} ${response.statusText}`);
 
                 const data = await response.json();
                 metricsData = data.metrics || [];
+
+                // Check if we have any metrics at all
+                if (metricsData.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📊</div>
+                            <p>No metrics found</p>
+                            <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 0.5rem;">
+                                Start sending metrics to TinyObs or run the example app:<br>
+                                <code style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 3px; margin-top: 0.5rem; display: inline-block;">go run cmd/example/main.go</code>
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
 
                 // Extract unique services, endpoints, and metric names
                 const services = {};
@@ -303,7 +318,19 @@
                 renderDashboard(services);
             } catch (error) {
                 console.error('Dashboard error:', error);
-                container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load dashboard</p></div>';
+                const errorMsg = error.message.includes('Failed to fetch') || error.message.includes('NetworkError')
+                    ? 'Cannot connect to TinyObs server. Make sure the server is running on http://localhost:8080'
+                    : `Failed to load dashboard: ${error.message}`;
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⚠️</div>
+                        <p>${errorMsg}</p>
+                        <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 0.5rem;">
+                            Start the server with:<br>
+                            <code style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 3px; margin-top: 0.5rem; display: inline-block;">go run cmd/server/main.go</code>
+                        </p>
+                    </div>
+                `;
             }
         }
 
@@ -331,6 +358,7 @@
             const selectedService = document.getElementById('serviceFilter').value;
             const selectedEndpoint = document.getElementById('endpointFilter').value;
             const selectedMetricName = document.getElementById('metricNameFilter').value;
+            const hideSystemMetrics = document.getElementById('hideSystemMetrics')?.checked ?? true;
 
             const servicesToShow = selectedService === 'all'
                 ? Object.entries(services)
@@ -344,6 +372,15 @@
             container.innerHTML = servicesToShow.map(([service, metrics]) => {
                 // Apply filters
                 let filteredMetrics = metrics;
+
+                // Filter out system metrics if checkbox is checked
+                if (hideSystemMetrics) {
+                    filteredMetrics = filteredMetrics.filter(m =>
+                        !m.name.startsWith('go_') &&
+                        !m.name.startsWith('process_') &&
+                        !m.name.startsWith('runtime_')
+                    );
+                }
 
                 if (selectedEndpoint !== 'all') {
                     filteredMetrics = filteredMetrics.filter(m =>
