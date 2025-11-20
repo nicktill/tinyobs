@@ -439,7 +439,7 @@ func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
 			it := txn.NewIterator(opts)
 			defer it.Close()
 
-			seriesMap := make(map[string]bool)
+			seriesMap := make(map[uint64]bool)
 			var oldestTS, newestTS time.Time
 			var iterCount int
 
@@ -458,9 +458,20 @@ func (s *Storage) Stats(ctx context.Context) (*storage.Stats, error) {
 				item := it.Item()
 				stats.TotalMetrics++
 
-				// Parse key to get series and timestamp
-				seriesKey, ts := parseKey(item.Key())
-				seriesMap[seriesKey] = true
+				// Parse key to get timestamp
+				key := item.Key()
+				_, ts := parseKey(key)
+
+				// Extract series hash for unique series counting
+				// Key format: [name_len(2)][name][series_hash(8)][timestamp(8)]
+				if len(key) >= 18 {
+					nameLen := binary.BigEndian.Uint16(key[0:2])
+					if len(key) >= int(2+nameLen+16) {
+						// Extract 8-byte series hash (after name, before timestamp)
+						seriesHash := binary.BigEndian.Uint64(key[2+nameLen : 2+nameLen+8])
+						seriesMap[seriesHash] = true
+					}
+				}
 
 				if oldestTS.IsZero() || ts.Before(oldestTS) {
 					oldestTS = ts

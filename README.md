@@ -12,12 +12,12 @@ I built TinyObs because I wanted to understand how observability systems work. P
 TinyObs is a metrics platform in ~5,300 lines of Go (excluding tests and blank lines). It's small enough to read through in a weekend, and works well for local development. You get metrics collection, storage, downsampling, a dashboard, and an SDK.
 
 **What you get:**
-- Metrics SDK (counters, gauges, histograms)
+- Push-based metrics SDK (counters, gauges, histograms)
 - Persistent storage with BadgerDB
 - Automatic downsampling: raw → 5min → 1hr aggregates
 - Dashboard with light/dark themes and keyboard shortcuts
 - Query API with auto-downsampling based on time range
-- Prometheus-compatible `/metrics` endpoint
+- `/metrics` endpoint for Prometheus/Grafana to scrape FROM TinyObs
 - Readable code with comments
 
 **Why you might want this:**
@@ -175,13 +175,26 @@ duration.Observe(0.234, "endpoint", "/api/users")
 
 ## Architecture
 
+### Push-Based Model (Like Datadog/New Relic)
+
+**Important:** TinyObs uses a **push model**, not a pull model like Prometheus.
+
+- **Your apps** use the SDK to **push** metrics → TinyObs `/v1/ingest` endpoint
+- TinyObs stores metrics in BadgerDB
+- TinyObs exposes `/metrics` endpoint for Prometheus/Grafana to **pull FROM TinyObs**
+
+**This is NOT Prometheus:**
+- ❌ TinyObs does NOT scrape `/metrics` endpoints from your services
+- ✅ Your apps push metrics to TinyObs using the SDK
+- ✅ Optionally, Prometheus can scrape `/metrics` FROM TinyObs
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌──────────────────────────┐
-│   Your App      │    │   TinyObs SDK   │    │    Ingest Server         │
+│   Your App      │    │   TinyObs SDK   │    │    TinyObs Server        │
 │                 │    │                 │    │                          │
 │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌──────────────────────┐ │
 │ │  Metrics    │─┼────┼─│   Batcher   │─┼────┼─│     REST API         │ │
-│ │  Counter    │ │    │ │ (5s flush)  │ │    │ │  /v1/ingest          │ │
+│ │  Counter    │ │PUSH│ │ (5s flush)  │ │PUSH│ │  /v1/ingest          │ │
 │ │  Gauge      │ │    │ └─────────────┘ │    │ │  /v1/query/range     │ │
 │ │  Histogram  │ │    │                 │    │ └──────────────────────┘ │
 │ └─────────────┘ │    │ ┌─────────────┐ │    │                          │
@@ -203,15 +216,27 @@ duration.Observe(0.234, "endpoint", "/api/users")
                                                │ │  Chart.js Dashboard  │ │
                                                │ │  /dashboard.html     │ │
                                                │ └──────────────────────┘ │
-                                               └──────────────────────────┘
+                                               │                          │
+                                               │ ┌──────────────────────┐ │
+                                               │ │  /metrics Endpoint   │ │
+                                               │ │  (Prometheus compat) │◄─┐
+                                               │ └──────────────────────┘ │ PULL
+                                               └──────────────────────────┘ │
+                                                                            │
+                                                                  ┌─────────────┐
+                                                                  │ Prometheus/ │
+                                                                  │  Grafana    │
+                                                                  │ (Optional)  │
+                                                                  └─────────────┘
 ```
 
 **How it works:**
-1. SDK batches metrics and sends every 5s via HTTP
+1. SDK batches metrics and pushes every 5s via HTTP to TinyObs
 2. Server stores in BadgerDB (LSM tree with Snappy compression)
 3. Compaction runs hourly: raw → 5m → 1h aggregates (240x compression)
 4. Dashboard queries with auto-downsampling for performance
 5. Time-series charts update every 30s
+6. (Optional) External tools like Prometheus can scrape TinyObs's `/metrics` endpoint
 
 ## API
 
@@ -466,7 +491,7 @@ A: TinyObs is built for local development and learning. For production, use Prom
 A: Prometheus is production-grade with 300k+ lines. TinyObs is ~5,300 lines for learning. Use Prometheus for production.
 
 **Q: Can I use it with Grafana?**
-A: Yes, TinyObs has a Prometheus-compatible `/metrics` endpoint.
+A: Yes! Point Prometheus at TinyObs's `/metrics` endpoint to scrape metrics that have been pushed to TinyObs. Then connect Grafana to Prometheus as usual.
 
 ## Documentation
 

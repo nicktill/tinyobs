@@ -67,10 +67,10 @@ TinyObs is designed for **local development and learning**, where:
 
 ## What About TinyObs's `/metrics` Endpoint?
 
-TinyObs exposes a `/metrics` endpoint, but this is for **monitoring TinyObs itself**, not your services.
+TinyObs exposes a `/metrics` endpoint in Prometheus format. This endpoint exposes **all metrics that have been pushed to TinyObs**, making them available for external tools to scrape.
 
 **Use case:**
-If you want to monitor TinyObs with Prometheus (meta-monitoring):
+If you want to visualize TinyObs metrics in Prometheus/Grafana:
 
 ```
 ┌─────────────┐     push      ┌──────────────┐
