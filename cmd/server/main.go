@@ -416,13 +416,6 @@ func main() {
 	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
 	api.HandleFunc("/trace", tracingHandler.HandleGetTrace).Methods("GET")
 
-	// Distributed tracing routes
-	api.HandleFunc("/traces", tracingHandler.HandleQueryTraces).Methods("GET")
-	api.HandleFunc("/traces/recent", tracingHandler.HandleRecentTraces).Methods("GET")
-	api.HandleFunc("/traces/stats", tracingHandler.HandleTracingStats).Methods("GET")
-	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
-	api.HandleFunc("/trace", tracingHandler.HandleGetTrace).Methods("GET")
-
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
 

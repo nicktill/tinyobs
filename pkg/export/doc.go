@@ -64,7 +64,10 @@
 //	    Format: "json",
 //	}
 //
-//	file, _ := os.Create("backup.json")
+//	file, err := os.Create("backup.json")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	defer file.Close()
 //
 //	result, err := exporter.ExportToJSON(ctx, file, opts)
@@ -77,7 +80,10 @@
 //
 //	importer := export.NewImporter(storage)
 //
-//	file, _ := os.Open("backup.json")
+//	file, err := os.Open("backup.json")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	defer file.Close()
 //
 //	result, err := importer.ImportFromJSON(ctx, file)
