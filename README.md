@@ -307,6 +307,35 @@ curl "http://localhost:8080/v1/stats"
 
 Returns total metrics count, unique series count, storage size, and time range.
 
+## Configuration
+
+TinyObs can be configured via environment variables:
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `8080` |
+| `STORAGE_LIMIT_GB` | Maximum storage in GB | `1` |
+| `MEMORY_LIMIT_MB` | BadgerDB memory limit in MB | Auto (based on system) |
+
+### Data Directory
+
+By default, TinyObs stores data in `./data/` relative to where you run the server. Make sure this directory is writable.
+
+### Example Usage
+
+```bash
+# Custom port
+PORT=3000 go run cmd/server/main.go
+
+# Increase storage limit
+STORAGE_LIMIT_GB=5 go run cmd/server/main.go
+
+# Combine multiple settings
+PORT=9090 STORAGE_LIMIT_GB=10 go run cmd/server/main.go
+```
+
 ## Project Structure
 
 ```

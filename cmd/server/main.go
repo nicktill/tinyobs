@@ -30,6 +30,7 @@ const (
 	serverWriteTimeout = 10 * time.Second
 	shutdownTimeout    = 30 * time.Second
 	compactionInterval = 1 * time.Hour
+	defaultPort        = "8080" // Default server port
 
 	// SAFETY: Conservative storage limit for self-hosted laptops
 	// With compaction: ~50 MB after 30 days, ~70 MB after 1 year
@@ -231,6 +232,14 @@ func getEnvInt64(key string, defaultValue int64) int64 {
 	return defaultValue
 }
 
+// getPort gets the server port from PORT environment variable or returns default
+func getPort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
+	}
+	return defaultPort
+}
+
 // handleStorageUsage returns current storage usage
 func handleStorageUsage(monitor *StorageMonitor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -360,9 +369,10 @@ func main() {
 			origin := r.Header.Get("Origin")
 
 			// Allow localhost origins for local development
+			port := getPort()
 			allowedOrigins := []string{
-				"http://localhost:8080",
-				"http://127.0.0.1:8080",
+				"http://localhost:" + port,
+				"http://127.0.0.1:" + port,
 				"http://localhost:3000", // Common dev ports
 				"http://127.0.0.1:3000",
 			}
@@ -414,7 +424,7 @@ func main() {
 	api.HandleFunc("/traces/recent", tracingHandler.HandleRecentTraces).Methods("GET")
 	api.HandleFunc("/traces/stats", tracingHandler.HandleTracingStats).Methods("GET")
 	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
-	api.HandleFunc("/trace", tracingHandler.HandleGetTrace).Methods("GET")
+	api.HandleFunc("/traces/{trace_id}", tracingHandler.HandleGetTrace).Methods("GET")
 
 	// Prometheus-compatible metrics endpoint (standard /metrics path)
 	router.HandleFunc("/metrics", handler.HandlePrometheusMetrics).Methods("GET")
@@ -428,8 +438,9 @@ func main() {
 		http.ServeFile(w, r, "./web/dashboard.html")
 	}).Methods("GET")
 	// Create server
+	port := getPort()
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		Handler:      router,
 		ReadTimeout:  serverReadTimeout,
 		WriteTimeout: serverWriteTimeout,
@@ -437,9 +448,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Println("🌐 Server starting on http://localhost:8080")
-		log.Println("📊 Dashboard: http://localhost:8080/dashboard.html")
-		log.Println("🔗 Tracing UI: http://localhost:8080/traces.html")
+		log.Printf("🌐 Server starting on http://localhost:%s", port)
+		log.Printf("📊 Dashboard: http://localhost:%s/dashboard.html", port)
+		log.Printf("🔗 Tracing UI: http://localhost:%s/traces.html", port)
 		log.Println("📡 API endpoints:")
 		log.Println("   POST /v1/ingest          - Ingest metrics")
 		log.Println("   GET  /v1/query          - Query metrics")
