@@ -20,10 +20,13 @@ Instrument your application:
 
 	func main() {
 	    // Create TinyObs client
-	    client, _ := sdk.New(sdk.ClientConfig{
+	    client, err := sdk.New(sdk.ClientConfig{
 	        Service:  "my-app",
 	        Endpoint: "http://localhost:8080/v1/ingest",
 	    })
+	    if err != nil {
+	        log.Fatal(err)
+	    }
 
 	    // Start client (begins batching and sending metrics)
 	    client.Start(context.Background())
@@ -119,10 +122,13 @@ High cardinality kills performance. Keep unique label combinations under 10,000.
 
 The SDK batches metrics and sends them every 5 seconds (configurable):
 
-	client, _ := sdk.New(sdk.ClientConfig{
+	client, err := sdk.New(sdk.ClientConfig{
 	    Service:    "my-app",
 	    FlushEvery: 10 * time.Second,  // Custom flush interval
 	})
+	if err != nil {
+	    log.Fatal(err)
+	}
 
 Metrics are buffered in memory until:
   1. FlushEvery duration elapses (default: 5 seconds), OR

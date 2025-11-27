@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 // Handler handles tracing API endpoints
@@ -23,10 +25,9 @@ func NewHandler(storage *Storage) *Handler {
 // HandleGetTrace retrieves a specific trace by ID
 // GET /v1/traces/{trace_id}
 func (h *Handler) HandleGetTrace(w http.ResponseWriter, r *http.Request) {
-	// Extract trace ID from URL path
-	// Assuming using gorilla/mux: mux.Vars(r)["trace_id"]
-	// For now, use query parameter
-	traceIDStr := r.URL.Query().Get("trace_id")
+	// Extract trace ID from URL path using gorilla/mux
+	vars := mux.Vars(r)
+	traceIDStr := vars["trace_id"]
 	if traceIDStr == "" {
 		http.Error(w, "trace_id is required", http.StatusBadRequest)
 		return
