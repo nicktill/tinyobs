@@ -518,7 +518,7 @@ For production scale, use Prometheus or VictoriaMetrics.
 A: TinyObs is built for local development and learning. For production, use Prometheus or similar tools.
 
 **Q: How does it compare to Prometheus?**
-A: Prometheus is production-grade with 300k+ lines. TinyObs is ~5,300 lines for learning. Use Prometheus for production.
+A: Prometheus is production-grade with 300k+ lines. TinyObs is ~7,800 lines for learning. Use Prometheus for production.
 
 **Q: Can I use it with Grafana?**
 A: Yes! Point Prometheus at TinyObs's `/metrics` endpoint to scrape metrics that have been pushed to TinyObs. Then connect Grafana to Prometheus as usual.
