@@ -9,7 +9,7 @@
 
 I built TinyObs because I wanted to understand how observability systems work. Prometheus has 300k+ lines of code. I wanted something smaller that I could actually read and learn from.
 
-TinyObs is a metrics platform in ~5,300 lines of Go (excluding tests and blank lines). It's small enough to read through in a weekend, and works well for local development. You get metrics collection, storage, downsampling, a dashboard, and an SDK.
+TinyObs is an observability platform in ~7,800 lines of Go (excluding tests and blank lines). It's small enough to read through in a weekend, and works well for local development. You get metrics collection, distributed tracing, storage, downsampling, real-time dashboards, and an SDK.
 
 **What you get:**
 - Push-based metrics SDK (counters, gauges, histograms)
@@ -17,6 +17,10 @@ TinyObs is a metrics platform in ~5,300 lines of Go (excluding tests and blank l
 - Automatic downsampling: raw → 5min → 1hr aggregates
 - Dashboard with light/dark themes and keyboard shortcuts
 - Query API with auto-downsampling based on time range
+- Distributed tracing with W3C Trace Context support
+- Service topology visualization
+- WebSocket live updates (no more 30s polling)
+- Export/import metrics (JSON, CSV)
 - `/metrics` endpoint for Prometheus/Grafana to scrape FROM TinyObs
 - Readable code with comments
 
@@ -186,6 +190,7 @@ duration.Observe(0.234, "endpoint", "/api/users")
 **This is NOT Prometheus:**
 - ❌ TinyObs does NOT scrape `/metrics` endpoints from your services
 - ✅ Your apps push metrics to TinyObs using the SDK
+- ✅ TinyObs includes distributed tracing (traces flow alongside metrics)
 - ✅ Optionally, Prometheus can scrape `/metrics` FROM TinyObs
 
 ```
@@ -235,8 +240,9 @@ duration.Observe(0.234, "endpoint", "/api/users")
 2. Server stores in BadgerDB (LSM tree with Snappy compression)
 3. Compaction runs hourly: raw → 5m → 1h aggregates (240x compression)
 4. Dashboard queries with auto-downsampling for performance
-5. Time-series charts update every 30s
-6. (Optional) External tools like Prometheus can scrape TinyObs's `/metrics` endpoint
+5. Time-series charts update in real-time via WebSocket
+6. Distributed traces flow alongside metrics for full observability
+7. (Optional) External tools like Prometheus can scrape TinyObs's `/metrics` endpoint
 
 ## API
 
@@ -318,7 +324,10 @@ tinyobs/
 │   │   └── transport/       # HTTP transport layer
 │   ├── ingest/              # Server-side ingestion
 │   │   ├── handler.go       # REST API handlers
-│   │   └── dashboard.go     # Dashboard API endpoints
+│   │   ├── dashboard.go     # Dashboard API endpoints
+│   │   ├── websocket.go     # WebSocket live updates
+│   │   ├── topology.go      # Service topology graph
+│   │   └── prometheus.go    # Prometheus /metrics endpoint
 │   ├── storage/             # Pluggable storage layer
 │   │   ├── interface.go     # Storage abstraction
 │   │   ├── memory/          # In-memory storage (fast, ephemeral)
@@ -326,13 +335,22 @@ tinyobs/
 │   ├── compaction/          # Multi-resolution downsampling
 │   │   ├── compactor.go     # Compaction engine
 │   │   └── types.go         # Aggregate types and metadata
-│   └── query/               # Query parsing and execution
+│   ├── query/               # Query parsing and execution
+│   ├── tracing/             # Distributed tracing
+│   │   ├── tracer.go        # W3C Trace Context implementation
+│   │   ├── storage.go       # Trace storage (in-memory)
+│   │   ├── middleware.go    # HTTP auto-instrumentation
+│   │   └── handler.go       # Trace API endpoints
+│   └── export/              # Export/import functionality
+│       ├── export.go        # JSON/CSV export
+│       └── import.go        # Metric import
 └── web/
-    ├── index.html           # Simple dashboard (legacy)
-    └── dashboard.html       # Chart.js time-series dashboard
+    ├── dashboard.html       # Chart.js time-series dashboard
+    ├── traces.html          # Distributed tracing waterfall UI
+    └── index.html           # Simple dashboard (legacy)
 ```
 
-**Code stats:** ~5,300 lines of production Go code (excluding tests, comments, and blank lines)
+**Code stats:** ~7,800 lines of production Go code (excluding tests, comments, and blank lines)
 
 ## The 53-Day Bug
 
@@ -352,13 +370,15 @@ This bug shaped the entire V2.0 roadmap. I added BadgerDB for persistent storage
 
 TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnable.
 
-**No query language yet:** You query one metric at a time. No `rate()` or `sum()` functions. PromQL-like queries are planned for V4.0, but honestly, I'm still figuring out the best way to implement them without making the code explode.
+**No query language yet:** You query one metric at a time. No `rate()` or `sum()` functions. PromQL-like queries are planned, but honestly, I'm still figuring out the best way to implement them without making the code explode.
 
-**No alerting:** You can see your metrics, but it won't email you when things break. V3.0 will add basic threshold alerts, but for now you're on your own.
+**No alerting:** You can see your metrics and traces, but it won't email you when things break. Basic threshold alerts are planned, but for now you're on your own.
 
-**No live updates:** Dashboard refreshes every 30 seconds via polling. WebSockets would be cooler, but polling is way simpler to implement and understand. (Also on the V3.0 list.)
+**No anomaly detection:** The system doesn't automatically detect unusual patterns or performance regressions. Statistical anomaly detection is on the roadmap.
 
 **Runs locally only:** No authentication, no HTTPS, no clustering. This is a local dev tool, not a production SaaS. If you want to run this in production, you'll need to add auth yourself.
+
+**Trace storage is ephemeral:** Traces are stored in-memory with 24-hour retention. Metrics get persistent BadgerDB storage, but traces don't yet.
 
 **Path assumptions:** The server expects `./web/` and `./data/` to exist relative to where you run it. This is lazy, I know. Just run it from the project directory.
 
@@ -388,34 +408,44 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [x] Stable color assignment (no more flickering charts!)
 - [x] Auto-scroll to selected metrics in Explore view
 
-### 🚧 V2.3 - Dashboard Polish (In Progress)
-- [ ] Export/import dashboard configurations (JSON)
-- [ ] Time comparison view (compare to 24h ago)
-- [ ] Comprehensive test coverage (SDK batching: 95.7% complete)
-- [ ] Enhanced documentation (Architecture guide, package docs)
+### ✅ V2.3 - Complete!
+- [x] Export/import metrics (JSON, CSV)
+- [x] Comprehensive test coverage
+- [x] Enhanced documentation (Architecture guide, tracing guide)
+- [x] Production-quality error handling
 
-### 📅 V3.0 - Real-time & Anomaly Detection (Next 2-4 weeks)
-- [ ] WebSocket live updates (replace 30s polling)
+### ✅ V3.0 - Distributed Observability (Complete!)
+- [x] WebSocket live updates (real-time dashboard)
+- [x] Distributed tracing with W3C Trace Context
+- [x] Service topology visualization
+- [x] Trace waterfall UI
+- [x] Cross-service trace propagation
+- [x] HTTP auto-instrumentation middleware
+
+### 📅 V4.0 - Alerting & Intelligence (Next)
 - [ ] Statistical anomaly detection (2σ from moving average)
 - [ ] Visual anomaly indicators on charts (red zones)
 - [ ] Simple threshold alerts (email/webhook)
 - [ ] Alert history view
+- [ ] Alert management UI
+- [ ] Dashboard template persistence
 
-### 🎯 V4.0 - Query Language & Advanced Features (2-3 months)
+### 🎯 V5.0 - Query Language & Analytics
 - [ ] Simple PromQL-like query language
 - [ ] Functions: `avg()`, `sum()`, `rate()`, `count()`
 - [ ] Label matching: `{service="api"}`
 - [ ] Time ranges: `[5m]`, `[1h]`
 - [ ] Query builder UI in dashboard
 - [ ] Performance benchmarks
+- [ ] Trace search and filtering
 
-### 🚀 V5.0+ - Production & Scale (4-6+ months)
+### 🚀 V6.0+ - Production & Scale
 - [ ] High availability and clustering
 - [ ] Cloud storage backends (S3, GCS, MinIO)
 - [ ] Authentication & API keys
 - [ ] Multi-tenancy support
-- [ ] Distributed tracing support (OpenTelemetry)
-- [ ] Service topology visualization
+- [ ] Persistent trace storage (BadgerDB integration)
+- [ ] Trace aggregation across instances
 
 ## Why I Built This
 
@@ -428,11 +458,11 @@ I've used Prometheus, Datadog, and New Relic professionally. They're great tools
 
 I wanted something I could actually *understand*. So I built TinyObs with three rules:
 
-1. **Small enough to read**: ~5,300 lines of Go (excluding tests). You can read it all in a weekend.
-2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, professional UI.
+1. **Small enough to read**: ~7,800 lines of Go (excluding tests). You can read it all in a weekend.
+2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, distributed tracing, professional UI.
 3. **Honest documentation**: Comments explain *why* decisions were made, not just what the code does.
 
-This is what I wish existed when I was learning systems programming. If you're trying to understand how observability works, or you want a meaty portfolio project that shows real engineering thinking, this is for you.
+This is what I wish existed when I was learning systems programming. If you're trying to understand how observability works—from metrics collection to distributed tracing—or you want a meaty portfolio project that shows real engineering thinking, this is for you.
 
 ## Development
 
@@ -495,7 +525,8 @@ A: Yes! Point Prometheus at TinyObs's `/metrics` endpoint to scrape metrics that
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) - How TinyObs works
+- [Architecture](docs/ARCHITECTURE.md) - Push vs Pull model explained
+- [Distributed Tracing](docs/TRACING.md) - How to use tracing features
 - [Package Docs](https://pkg.go.dev/github.com/nicktill/tinyobs) - Go package documentation
 
 ## Resources
