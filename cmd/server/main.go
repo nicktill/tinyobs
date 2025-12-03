@@ -416,7 +416,7 @@ func main() {
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
 	api.HandleFunc("/ws", handler.HandleWebSocket(hub)).Methods("GET")
-	api.HandleFunc("/export", exportHandler.HandleExport).Methods("GET")   // Export metrics to JSON/CSV
+	api.HandleFunc("/export", exportHandler.HandleExport).Methods("GET")  // Export metrics to JSON/CSV
 	api.HandleFunc("/import", exportHandler.HandleImport).Methods("POST") // Import metrics from JSON backup
 
 	// Distributed tracing routes

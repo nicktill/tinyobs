@@ -161,50 +161,114 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 	go func() {
 		var res queryResult
 		res.err = s.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchSize = 100
+			opts := badger.DefaultIteratorOptions
+			opts.PrefetchSize = 100
 
-		// PERFORMANCE FIX: Use prefix scanning when metric names are specified
-		// This provides 100x speedup by scanning only relevant keys
-		if len(req.MetricNames) > 0 {
-			// Scan each metric name with prefix iteration
-			for _, metricName := range req.MetricNames {
-				nameBytes := []byte(metricName)
-				nameLen := uint16(len(nameBytes))
+			// PERFORMANCE FIX: Use prefix scanning when metric names are specified
+			// This provides 100x speedup by scanning only relevant keys
+			if len(req.MetricNames) > 0 {
+				// Scan each metric name with prefix iteration
+				for _, metricName := range req.MetricNames {
+					nameBytes := []byte(metricName)
+					nameLen := uint16(len(nameBytes))
 
-				// Build prefix: [name_length (2 bytes)][metric_name]
-				prefix := make([]byte, 2+len(nameBytes))
-				binary.BigEndian.PutUint16(prefix[0:2], nameLen)
-				copy(prefix[2:], nameBytes)
+					// Build prefix: [name_length (2 bytes)][metric_name]
+					prefix := make([]byte, 2+len(nameBytes))
+					binary.BigEndian.PutUint16(prefix[0:2], nameLen)
+					copy(prefix[2:], nameBytes)
 
-				opts.Prefix = prefix
+					opts.Prefix = prefix
+					it := txn.NewIterator(opts)
+
+					for it.Rewind(); it.ValidForPrefix(prefix); it.Next() {
+						iterCount++
+
+						// Check context cancellation every 1000 iterations
+						if iterCount%1000 == 0 {
+							select {
+							case <-ctx.Done():
+								it.Close()
+								elapsed := time.Since(startTime)
+								if elapsed > 5*time.Second {
+									log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+								}
+								return ctx.Err()
+							default:
+							}
+						}
+
+						item := it.Item()
+						err := item.Value(func(val []byte) error {
+							m, err := decodeMetric(val)
+							if err != nil {
+								return err
+							}
+
+							// Apply remaining filters (time range, labels)
+							if !matchesQuery(m, req) {
+								return nil
+							}
+
+							results = append(results, m)
+
+							// Limit check
+							if req.Limit > 0 && len(results) >= req.Limit {
+								return nil
+							}
+
+							return nil
+						})
+
+						if err != nil {
+							it.Close()
+							return err
+						}
+
+						// Early exit if limit reached
+						if req.Limit > 0 && len(results) >= req.Limit {
+							break
+						}
+					}
+					it.Close()
+
+					// Stop if limit reached across all metrics
+					if req.Limit > 0 && len(results) >= req.Limit {
+						break
+					}
+				}
+			} else {
+				// No metric filter: fall back to full scan
 				it := txn.NewIterator(opts)
+				defer it.Close()
 
-				for it.Rewind(); it.ValidForPrefix(prefix); it.Next() {
+				for it.Rewind(); it.Valid(); it.Next() {
 					iterCount++
 
-					// Check context cancellation every 1000 iterations
+					// CRITICAL: Check for context cancellation every 1000 iterations
+					// Prevents long-running queries from blocking shutdown or exceeding timeouts
 					if iterCount%1000 == 0 {
 						select {
 						case <-ctx.Done():
-							it.Close()
+							// Log slow query warning before returning error
 							elapsed := time.Since(startTime)
 							if elapsed > 5*time.Second {
 								log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 							}
 							return ctx.Err()
 						default:
+							// Continue processing
 						}
 					}
 
 					item := it.Item()
+
 					err := item.Value(func(val []byte) error {
 						m, err := decodeMetric(val)
 						if err != nil {
 							return err
 						}
 
-						// Apply remaining filters (time range, labels)
+						// Apply filters
 						if !matchesQuery(m, req) {
 							return nil
 						}
@@ -220,7 +284,6 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 					})
 
 					if err != nil {
-						it.Close()
 						return err
 					}
 
@@ -229,78 +292,15 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 						break
 					}
 				}
-				it.Close()
+			} // End else (full scan)
 
-				// Stop if limit reached across all metrics
-				if req.Limit > 0 && len(results) >= req.Limit {
-					break
-				}
-			}
-		} else {
-			// No metric filter: fall back to full scan
-			it := txn.NewIterator(opts)
-			defer it.Close()
-
-			for it.Rewind(); it.Valid(); it.Next() {
-			iterCount++
-
-			// CRITICAL: Check for context cancellation every 1000 iterations
-			// Prevents long-running queries from blocking shutdown or exceeding timeouts
-			if iterCount%1000 == 0 {
-				select {
-				case <-ctx.Done():
-					// Log slow query warning before returning error
-					elapsed := time.Since(startTime)
-					if elapsed > 5*time.Second {
-						log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
-					}
-					return ctx.Err()
-				default:
-					// Continue processing
-				}
+			// Log slow queries for performance monitoring
+			elapsed := time.Since(startTime)
+			if elapsed > 5*time.Second {
+				log.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 			}
 
-			item := it.Item()
-
-			err := item.Value(func(val []byte) error {
-				m, err := decodeMetric(val)
-				if err != nil {
-					return err
-				}
-
-				// Apply filters
-				if !matchesQuery(m, req) {
-					return nil
-				}
-
-				results = append(results, m)
-
-				// Limit check
-				if req.Limit > 0 && len(results) >= req.Limit {
-					return nil
-				}
-
-				return nil
-			})
-
-			if err != nil {
-				return err
-			}
-
-			// Early exit if limit reached
-			if req.Limit > 0 && len(results) >= req.Limit {
-				break
-			}
-		}
-		} // End else (full scan)
-
-		// Log slow queries for performance monitoring
-		elapsed := time.Since(startTime)
-		if elapsed > 5*time.Second {
-			log.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
-		}
-
-		return nil
+			return nil
 		})
 		res.results = results
 		done <- res
@@ -350,37 +350,37 @@ func (s *Storage) Delete(ctx context.Context, opts storage.DeleteOptions) error 
 
 				item := it.Item()
 
-			// Extract timestamp from key
-			_, ts := parseKey(item.Key())
-			if !ts.Before(opts.Before) {
-				continue // Keep metrics after cutoff
+				// Extract timestamp from key
+				_, ts := parseKey(item.Key())
+				if !ts.Before(opts.Before) {
+					continue // Keep metrics after cutoff
+				}
+
+				// If resolution filter is specified, check the metric's resolution
+				if opts.Resolution != nil {
+					var m metrics.Metric
+					if err := item.Value(func(val []byte) error {
+						return json.Unmarshal(val, &m)
+					}); err != nil {
+						return fmt.Errorf("failed to unmarshal metric: %w", err)
+					}
+
+					// Get resolution from labels
+					resolution := "" // Default for raw metrics
+					if m.Labels != nil {
+						resolution = m.Labels["__resolution__"]
+					}
+
+					// Skip if resolution doesn't match filter
+					if resolution != string(*opts.Resolution) {
+						continue
+					}
+				}
+
+				// Mark for deletion
+				key := item.KeyCopy(nil)
+				keysToDelete = append(keysToDelete, key)
 			}
-
-			// If resolution filter is specified, check the metric's resolution
-			if opts.Resolution != nil {
-				var m metrics.Metric
-				if err := item.Value(func(val []byte) error {
-					return json.Unmarshal(val, &m)
-				}); err != nil {
-					return fmt.Errorf("failed to unmarshal metric: %w", err)
-				}
-
-				// Get resolution from labels
-				resolution := "" // Default for raw metrics
-				if m.Labels != nil {
-					resolution = m.Labels["__resolution__"]
-				}
-
-				// Skip if resolution doesn't match filter
-				if resolution != string(*opts.Resolution) {
-					continue
-				}
-			}
-
-			// Mark for deletion
-			key := item.KeyCopy(nil)
-			keysToDelete = append(keysToDelete, key)
-		}
 
 			// Delete collected keys
 			for _, key := range keysToDelete {

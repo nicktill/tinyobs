@@ -33,10 +33,10 @@ type TopologyEdge struct {
 
 // TopologyResponse represents the topology graph
 type TopologyResponse struct {
-	Nodes         []TopologyNode `json:"nodes"`
-	Edges         []TopologyEdge `json:"edges"`
-	LastUpdated   string         `json:"last_updated"`
-	TimeRangeHours float64       `json:"time_range_hours"`
+	Nodes          []TopologyNode `json:"nodes"`
+	Edges          []TopologyEdge `json:"edges"`
+	LastUpdated    string         `json:"last_updated"`
+	TimeRangeHours float64        `json:"time_range_hours"`
 }
 
 // HandleTopology handles the /v1/topology endpoint

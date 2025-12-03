@@ -95,9 +95,10 @@ func InjectHeaders(r *http.Request, tc TraceContext) {
 
 // HTTPClientMiddleware wraps an HTTP RoundTripper to inject trace context
 // Usage:
-//   client := &http.Client{
-//       Transport: tracing.HTTPClientMiddleware(tracer, http.DefaultTransport),
-//   }
+//
+//	client := &http.Client{
+//	    Transport: tracing.HTTPClientMiddleware(tracer, http.DefaultTransport),
+//	}
 func HTTPClientMiddleware(tracer *Tracer, next http.RoundTripper) http.RoundTripper {
 	if next == nil {
 		next = http.DefaultTransport

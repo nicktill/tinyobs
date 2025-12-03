@@ -36,7 +36,7 @@ func TestBuildTopology(t *testing.T) {
 			Type:  metrics.CounterType,
 			Value: 75,
 			Labels: map[string]string{
-				"service": "users-service",
+				"service":  "users-service",
 				"upstream": "postgres",
 			},
 			Timestamp: now,

@@ -26,8 +26,8 @@ type Storage struct {
 func NewStorage() *Storage {
 	return &Storage{
 		traces:      make(map[TraceID][]*Span),
-		maxTraces:   10000,           // Keep up to 10k traces
-		maxAge:      24 * time.Hour,  // Keep traces for 24 hours
+		maxTraces:   10000,          // Keep up to 10k traces
+		maxAge:      24 * time.Hour, // Keep traces for 24 hours
 		lastCleanup: time.Now(),
 	}
 }

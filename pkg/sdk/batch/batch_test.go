@@ -103,7 +103,7 @@ func TestStartStop(t *testing.T) {
 func TestAddTriggersFlushWhenFull(t *testing.T) {
 	transport := &mockTransport{}
 	config := Config{
-		MaxBatchSize: 5, // Small batch size to trigger flush quickly
+		MaxBatchSize: 5,             // Small batch size to trigger flush quickly
 		FlushEvery:   1 * time.Hour, // Long interval so timer doesn't interfere
 	}
 
