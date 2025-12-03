@@ -101,7 +101,8 @@ func InjectTraceContext(ctx context.Context, tc TraceContext) context.Context {
 
 // TraceFunc is a helper that automatically creates a span for a function
 // Usage:
-//   defer tracer.TraceFunc(ctx, "my_operation", SpanKindInternal)()
+//
+//	defer tracer.TraceFunc(ctx, "my_operation", SpanKindInternal)()
 func (t *Tracer) TraceFunc(ctx context.Context, operation string, kind SpanKind) func() {
 	_, span := t.StartSpan(ctx, operation, kind)
 
@@ -113,8 +114,9 @@ func (t *Tracer) TraceFunc(ctx context.Context, operation string, kind SpanKind)
 
 // TraceFuncWithError is like TraceFunc but records errors
 // Usage:
-//   var err error
-//   defer tracer.TraceFuncWithError(ctx, "my_operation", SpanKindInternal, &err)()
+//
+//	var err error
+//	defer tracer.TraceFuncWithError(ctx, "my_operation", SpanKindInternal, &err)()
 func (t *Tracer) TraceFuncWithError(ctx context.Context, operation string, kind SpanKind, errPtr *error) func() {
 	_, span := t.StartSpan(ctx, operation, kind)
 

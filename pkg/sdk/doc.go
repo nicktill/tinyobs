@@ -103,8 +103,9 @@ Labels must be provided as key-value pairs (even number of strings).
 # Cardinality Warning
 
 NEVER use high-cardinality values as labels:
-  ❌ user_id, request_id, email, UUID, timestamp
-  ✅ service, endpoint, method, status, env, region
+
+	❌ user_id, request_id, email, UUID, timestamp
+	✅ service, endpoint, method, status, env, region
 
 Example of what NOT to do:
 
@@ -131,9 +132,9 @@ The SDK batches metrics and sends them every 5 seconds (configurable):
 	}
 
 Metrics are buffered in memory until:
-  1. FlushEvery duration elapses (default: 5 seconds), OR
-  2. Batch reaches MaxBatchSize (default: 1000 metrics), OR
-  3. You call client.Flush() manually
+ 1. FlushEvery duration elapses (default: 5 seconds), OR
+ 2. Batch reaches MaxBatchSize (default: 1000 metrics), OR
+ 3. You call client.Flush() manually
 
 Manual flush:
 
@@ -192,6 +193,7 @@ ClientConfig supports several options:
 
 	// Note: APIKey is only needed if your TinyObs server is configured to require authentication.
 	// For local development or servers without authentication, you can omit this field.
+
 Default values:
   - Endpoint: "http://localhost:8080/v1/ingest"
   - FlushEvery: 5 seconds

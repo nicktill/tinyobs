@@ -177,6 +177,41 @@ duration := client.Histogram("request_duration_seconds")
 duration.Observe(0.234, "endpoint", "/api/users")
 ```
 
+### TinyQuery: PromQL-Compatible Queries
+
+TinyObs includes a full query language for analyzing metrics:
+
+```bash
+# Rate of HTTP requests over 5 minutes
+curl -X POST http://localhost:8080/v1/query/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "rate(http_requests_total[5m])",
+    "start": "2025-01-01T00:00:00Z",
+    "end": "2025-01-01T01:00:00Z",
+    "step": "15s"
+  }'
+
+# Sum requests by service
+rate(http_requests_total[5m])
+
+# Aggregate by service
+sum by (service) (http_requests_total)
+
+# Calculate error rate percentage
+(rate(http_errors_total[5m]) / rate(http_requests_total[5m])) * 100
+
+# 95th percentile latency
+quantile(0.95, http_request_duration_seconds)
+```
+
+**Supported features:**
+- Functions: `rate()`, `increase()`, `sum()`, `avg()`, `min()`, `max()`, `count()`, `quantile()`
+- Label matching: `{method="GET", status="200"}`
+- Range selectors: `[5m]`, `[1h]`, `[24h]`
+- Arithmetic: `+`, `-`, `*`, `/`, `^`, `%`
+- Aggregations: `sum by (label)`, `avg without (label)`
+
 ## Architecture
 
 ### Push-Based Model (Like Datadog/New Relic)
@@ -379,7 +414,7 @@ tinyobs/
     └── index.html           # Simple dashboard (legacy)
 ```
 
-**Code stats:** ~7,800 lines of production Go code (excluding tests, comments, and blank lines)
+**Code stats:** ~9,500 lines of production Go code (excluding tests, comments, and blank lines)
 
 ## The 53-Day Bug
 
@@ -399,7 +434,7 @@ This bug shaped the entire V2.0 roadmap. I added BadgerDB for persistent storage
 
 TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnable.
 
-**No query language yet:** You query one metric at a time. No `rate()` or `sum()` functions. PromQL-like queries are planned, but honestly, I'm still figuring out the best way to implement them without making the code explode.
+**TinyQuery limitations:** The PromQL-compatible query language is functional with `rate()`, `sum()`, `avg()`, and aggregations, but missing some advanced features like regex label matching and subqueries. The recursive descent parser handles most real-world queries.
 
 **No alerting:** You can see your metrics and traces, but it won't email you when things break. Basic threshold alerts are planned, but for now you're on your own.
 
@@ -451,6 +486,15 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [x] Cross-service trace propagation
 - [x] HTTP auto-instrumentation middleware
 
+### ✅ V3.1 - TinyQuery (Complete!)
+- [x] PromQL-compatible query language with recursive descent parser
+- [x] Functions: `rate()`, `increase()`, `sum()`, `avg()`, `min()`, `max()`, `count()`
+- [x] Label matching: `{service="api", method="GET"}`
+- [x] Range selectors: `[5m]`, `[1h]`
+- [x] Arithmetic: `a + b`, `a * b`, operator precedence
+- [x] Aggregations: `sum by (label) (metric)`, `avg without (label) (metric)`
+- [x] Query endpoints: `/v1/query/execute`, `/v1/query/instant` (Prometheus-compatible)
+
 ### 📅 V4.0 - Alerting & Intelligence (Next)
 - [ ] Statistical anomaly detection (2σ from moving average)
 - [ ] Visual anomaly indicators on charts (red zones)
@@ -459,14 +503,13 @@ TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnab
 - [ ] Alert management UI
 - [ ] Dashboard template persistence
 
-### 🎯 V5.0 - Query Language & Analytics
-- [ ] Simple PromQL-like query language
-- [ ] Functions: `avg()`, `sum()`, `rate()`, `count()`
-- [ ] Label matching: `{service="api"}`
-- [ ] Time ranges: `[5m]`, `[1h]`
+### 🎯 V5.0 - Advanced Query Features
+- [ ] Regex label matching: `{service=~"api.*"}`
+- [ ] Subqueries and nested expressions
 - [ ] Query builder UI in dashboard
 - [ ] Performance benchmarks
 - [ ] Trace search and filtering
+- [ ] Query result caching
 
 ### 🚀 V6.0+ - Production & Scale
 - [ ] High availability and clustering
@@ -487,7 +530,7 @@ I've used Prometheus, Datadog, and New Relic professionally. They're great tools
 
 I wanted something I could actually *understand*. So I built TinyObs with three rules:
 
-1. **Small enough to read**: ~7,800 lines of Go (excluding tests). You can read it all in a weekend.
+1. **Small enough to read**: ~9,500 lines of Go (excluding tests). You can read it all in a weekend.
 2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, distributed tracing, professional UI.
 3. **Honest documentation**: Comments explain *why* decisions were made, not just what the code does.
 

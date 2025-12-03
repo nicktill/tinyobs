@@ -81,6 +81,7 @@ Why all five? Different metrics need different aggregates:
 # How Compact5m Works
 
 Input (raw metrics, 1-second intervals):
+
 	2024-11-19 10:00:00  cpu=45.2
 	2024-11-19 10:00:01  cpu=46.1
 	2024-11-19 10:00:02  cpu=44.8
@@ -89,6 +90,7 @@ Input (raw metrics, 1-second intervals):
 	2024-11-19 10:04:59  cpu=45.9
 
 Output (5-minute aggregate):
+
 	2024-11-19 10:00:00  cpu_sum=13,575  cpu_count=300  cpu_min=42.0  cpu_max=48.1  cpu_avg=45.25
 	__resolution__=5m
 
@@ -97,12 +99,14 @@ Result: 300 data points → 1 aggregate (99.7% reduction)
 # How Compact1h Works
 
 Input (5-minute aggregates):
+
 	2024-11-19 10:00:00  cpu_sum=13,575  cpu_count=300  cpu_avg=45.25
 	2024-11-19 10:05:00  cpu_sum=13,650  cpu_count=300  cpu_avg=45.50
 	2024-11-19 10:10:00  cpu_sum=13,425  cpu_count=300  cpu_avg=44.75
 	... (12 aggregates in 1 hour)
 
 Output (1-hour aggregate):
+
 	2024-11-19 10:00:00  cpu_sum=162,900  cpu_count=3,600  cpu_min=42.0  cpu_max=52.3  cpu_avg=45.25
 	__resolution__=1h
 
