@@ -1,0 +1,9 @@
+# .mailmap - Consolidates all contributors to a single identity
+# This tells git and GitHub to treat all these emails as the same person
+
+nick tillmann <57879193+nicktill@users.noreply.github.com> <ntillmann1439@gmail.com>
+nick tillmann <57879193+nicktill@users.noreply.github.com> <your-email@example.com>
+nick tillmann <57879193+nicktill@users.noreply.github.com> Nick TIllmann <ntillmann1439@gmail.com>
+nick tillmann <57879193+nicktill@users.noreply.github.com> Nick Till <your-email@example.com>
+nick tillmann <57879193+nicktill@users.noreply.github.com> nicktill <ntillmann1439@gmail.com>
+nick tillmann <57879193+nicktill@users.noreply.github.com> Claude <noreply@anthropic.com>
