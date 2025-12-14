@@ -142,7 +142,6 @@ func BroadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 			// Only broadcast if we have data
 			if len(results) > 0 {
 				// Broadcast metrics update to all connected WebSocket clients
-				// Note: WebSocket hub expects interface{} for flexibility, so we keep map here
 				update := map[string]interface{}{
 					"type":      "metrics_update",
 					"timestamp": time.Now().Unix(),

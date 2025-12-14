@@ -4,14 +4,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/nicktill/tinyobs/pkg/export"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/ingest"
 	"github.com/nicktill/tinyobs/pkg/query"
-	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/server/monitor"
-	"github.com/nicktill/tinyobs/pkg/tracing"
-
-	"github.com/gorilla/mux"
 )
 
 var startTime = time.Now()
@@ -24,10 +23,10 @@ type StorageUsage struct {
 
 // HealthResponse represents the health check response.
 type HealthResponse struct {
-	Status     string                    `json:"status"`
-	Version    string                    `json:"version"`
-	Uptime     string                    `json:"uptime"`
-	Compaction monitor.CompactionStatus  `json:"compaction"`
+	Status     string                   `json:"status"`
+	Version    string                   `json:"version"`
+	Uptime     string                   `json:"uptime"`
+	Compaction monitor.CompactionStatus `json:"compaction"`
 }
 
 // handleHealth returns service health status.
@@ -77,7 +76,6 @@ func SetupRoutes(
 	ingestHandler *ingest.Handler,
 	queryHandler *query.Handler,
 	exportHandler *export.Handler,
-	tracingHandler *tracing.Handler,
 	storageMonitor *monitor.StorageMonitor,
 	compactionMonitor *monitor.CompactionMonitor,
 	hub *ingest.MetricsHub,
@@ -88,30 +86,27 @@ func SetupRoutes(
 
 	// API routes
 	api := router.PathPrefix("/v1").Subrouter()
+
+	// Metrics ingestion and querying
 	api.HandleFunc("/ingest", ingestHandler.HandleIngest).Methods("POST")
 	api.HandleFunc("/query", ingestHandler.HandleQuery).Methods("GET")
 	api.HandleFunc("/query/range", ingestHandler.HandleRangeQuery).Methods("GET")
 	api.HandleFunc("/query/execute", queryHandler.HandleQueryExecute).Methods("POST")
 	api.HandleFunc("/query/instant", queryHandler.HandleQueryInstant).Methods("GET", "POST")
+
+	// Metadata and stats
 	api.HandleFunc("/metrics/list", ingestHandler.HandleMetricsList).Methods("GET")
 	api.HandleFunc("/stats", ingestHandler.HandleStats).Methods("GET")
 	api.HandleFunc("/cardinality", ingestHandler.HandleCardinalityStats).Methods("GET")
-	api.HandleFunc("/topology", ingestHandler.HandleTopology).Methods("GET")
 	api.HandleFunc("/storage", handleStorageUsage(storageMonitor)).Methods("GET")
 	api.HandleFunc("/health", handleHealth(compactionMonitor)).Methods("GET")
+
+	// WebSocket for real-time updates
 	api.HandleFunc("/ws", ingestHandler.HandleWebSocket(hub)).Methods("GET")
+
+	// Export/import
 	api.HandleFunc("/export", exportHandler.HandleExport).Methods("GET")
 	api.HandleFunc("/import", exportHandler.HandleImport).Methods("POST")
-
-	// Distributed tracing routes
-	api.HandleFunc("/traces", tracingHandler.HandleQueryTraces).Methods("GET")
-	api.HandleFunc("/traces/recent", tracingHandler.HandleRecentTraces).Methods("GET")
-	api.HandleFunc("/traces/stats", tracingHandler.HandleTracingStats).Methods("GET")
-	api.HandleFunc("/traces/ingest", tracingHandler.HandleIngestSpan).Methods("POST")
-	api.HandleFunc("/traces/{trace_id}", tracingHandler.HandleGetTrace).Methods("GET")
-
-	// Prometheus-compatible metrics endpoint
-	router.HandleFunc("/metrics", ingestHandler.HandlePrometheusMetrics).Methods("GET")
 
 	// Serve static files from ./web/ directory
 	router.PathPrefix("/web/").Handler(http.StripPrefix("/web/", http.FileServer(http.Dir("./web/"))))
@@ -161,4 +156,3 @@ func corsMiddleware(port string) func(http.Handler) http.Handler {
 		})
 	}
 }
-

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk"
-	"github.com/nicktill/tinyobs/pkg/sdk/httpx"
 )
 
 var (
@@ -59,7 +58,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Add TinyObs middleware
-	handler := httpx.Middleware(client)(mux)
+	handler := mux
 
 	// Stats page with live dashboard
 	mux.HandleFunc("/", serveStatsPage)

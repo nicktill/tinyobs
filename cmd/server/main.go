@@ -50,14 +50,14 @@ func main() {
 	log.Printf("Storage limit enforcement enabled: %.2f GB max", float64(maxStorageBytes)/(1024*1024*1024))
 
 	// Initialize handlers
-	ingestHandler, queryHandler, exportHandler, tracingHandler, hub := server.InitializeHandlers(store, storageMonitor)
+	ingestHandler, queryHandler, exportHandler, hub := server.InitializeHandlers(store, storageMonitor)
 
 	// Initialize compactor
 	compactor, compactionMonitor := server.InitializeCompactor(store)
 
 	// Create router
 	router := mux.NewRouter()
-	server.SetupRoutes(router, ingestHandler, queryHandler, exportHandler, tracingHandler, storageMonitor, compactionMonitor, hub, cfg.Port)
+	server.SetupRoutes(router, ingestHandler, queryHandler, exportHandler, storageMonitor, compactionMonitor, hub, cfg.Port)
 
 	// Create HTTP server
 	httpServer := &http.Server{
@@ -102,18 +102,16 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		log.Printf("Server starting on http://localhost:%s", cfg.Port)
-		log.Printf("Dashboard: http://localhost:%s/dashboard.html", cfg.Port)
-		log.Printf("Tracing UI: http://localhost:%s/traces.html", cfg.Port)
+		log.Printf("Dashboard: http://localhost:%s", cfg.Port)
 		log.Println("API endpoints:")
 		log.Println("   POST /v1/ingest          - Ingest metrics")
 		log.Println("   GET  /v1/query          - Query metrics")
 		log.Println("   GET  /v1/query/range    - Range queries")
+		log.Println("   GET  /v1/query/execute  - Execute query")
 		log.Println("   GET  /v1/stats          - Storage statistics")
 		log.Println("   GET  /v1/export         - Export metrics (JSON/CSV)")
 		log.Println("   POST /v1/import         - Import metrics from backup")
-		log.Println("   GET  /metrics           - Prometheus endpoint")
-		log.Println("   GET  /v1/traces         - Query traces")
-		log.Println("   GET  /v1/traces/recent  - Recent traces")
+		log.Println("   GET  /v1/health         - Health check")
 		log.Println("Server ready to accept requests")
 
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -128,9 +126,9 @@ func main() {
 
 	log.Println("Shutdown signal received...")
 
-	// Cancel context to stop goroutines
+	// Stop background tasks
 	log.Println("Stopping background tasks...")
-	cancel()
+	cancel() // Stop WebSocket hub and broadcaster
 	close(stopCompaction)
 	close(stopGC)
 

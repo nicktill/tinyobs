@@ -12,11 +12,10 @@ import (
 	"github.com/nicktill/tinyobs/pkg/server/monitor"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
-	"github.com/nicktill/tinyobs/pkg/tracing"
 )
 
 const (
-	defaultPort        = "8080"
+	defaultPort         = "8080"
 	defaultMaxStorageGB = 1 // 1 GB default
 )
 
@@ -70,7 +69,6 @@ func InitializeHandlers(
 	*ingest.Handler,
 	*query.Handler,
 	*export.Handler,
-	*tracing.Handler,
 	*ingest.MetricsHub,
 ) {
 	// Create ingest handler
@@ -78,14 +76,9 @@ func InitializeHandlers(
 	ingestHandler.SetStorageChecker(storageMonitor)
 	log.Println("Ingest handler created with cardinality protection & storage limits")
 
-	// Create query handler for TinyQuery (PromQL-compatible)
+	// Create query handler
 	queryHandler := query.NewHandler(store)
-	log.Println("TinyQuery handler created (PromQL-compatible query engine)")
-
-	// Create distributed tracing
-	traceStorage := tracing.NewStorage()
-	tracingHandler := tracing.NewHandler(traceStorage)
-	log.Println("Distributed tracing enabled (stores up to 10k traces, 24h retention)")
+	log.Println("Query handler created")
 
 	// Create export/import handler for backup & restore
 	exportHandler := export.NewHandler(store)
@@ -95,7 +88,7 @@ func InitializeHandlers(
 	hub := ingest.NewMetricsHub()
 	log.Println("WebSocket hub created for real-time metrics streaming")
 
-	return ingestHandler, queryHandler, exportHandler, tracingHandler, hub
+	return ingestHandler, queryHandler, exportHandler, hub
 }
 
 // InitializeCompactor creates a compactor with health monitoring.
@@ -124,4 +117,3 @@ func getPort() string {
 	}
 	return defaultPort
 }
-

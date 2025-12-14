@@ -8,7 +8,6 @@ import (
 
 	"github.com/nicktill/tinyobs/pkg/sdk/batch"
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
-	"github.com/nicktill/tinyobs/pkg/sdk/runtime"
 	"github.com/nicktill/tinyobs/pkg/sdk/transport"
 )
 
@@ -22,10 +21,9 @@ type ClientConfig struct {
 
 // Client is the main TinyObs SDK client
 type Client struct {
-	config     ClientConfig
-	transport  transport.Transport
-	batcher    *batch.Batcher
-	collectors []metrics.MetricCollector
+	config    ClientConfig
+	transport transport.Transport
+	batcher   *batch.Batcher
 
 	// Metric storage
 	counters   map[string]*metrics.Counter
@@ -71,10 +69,6 @@ func New(cfg ClientConfig) (*Client, error) {
 		gauges:     make(map[string]*metrics.Gauge),
 		histograms: make(map[string]*metrics.Histogram),
 	}
-
-	// Add runtime collector
-	runtimeCollector := runtime.NewCollector(cfg.Service)
-	client.collectors = append(client.collectors, runtimeCollector)
 
 	return client, nil
 }
@@ -135,9 +129,6 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start batcher: %w", err)
 	}
 
-	// Start runtime collection
-	go c.collectRuntimeMetrics()
-
 	// Start histogram flushing (aggregates observations into buckets)
 	go c.flushHistograms()
 
@@ -176,26 +167,6 @@ func (c *Client) SendMetric(metric metrics.Metric) {
 	metric.Labels["service"] = c.config.Service
 
 	c.batcher.Add(metric)
-}
-
-// collectRuntimeMetrics periodically collects runtime metrics
-func (c *Client) collectRuntimeMetrics() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case <-ticker.C:
-			for _, collector := range c.collectors {
-				metrics := collector.Collect(c.ctx)
-				for _, metric := range metrics {
-					c.SendMetric(metric)
-				}
-			}
-		}
-	}
 }
 
 // flushHistograms periodically flushes histogram buckets
