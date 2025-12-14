@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: tiny-obs-lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
