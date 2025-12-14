@@ -77,15 +77,15 @@ func (rw *responseWriter) WriteHeader(code int) {
 // Examples:
 //   - /api/users/123 → /api/users/{id}
 //   - /posts/456/comments → /posts/{id}/comments
-//   - /api/users/abc-123-def → /api/users/{id}
+//   - /api/users/550e8400-e29b-41d4-a716-446655440000 → /api/users/{id}
 func normalizePath(path string) string {
-	// Replace numeric IDs with {id}
+	// Replace UUIDs first (more specific pattern, case-insensitive)
+	uuidRe := regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	path = uuidRe.ReplaceAllString(path, "/{id}")
+
+	// Replace numeric IDs with {id} (after UUIDs to avoid partial matches)
 	re := regexp.MustCompile(`/\d+`)
 	path = re.ReplaceAllString(path, "/{id}")
-
-	// Replace UUIDs with {id}
-	uuidRe := regexp.MustCompile(`/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	path = uuidRe.ReplaceAllString(path, "/{id}")
 
 	return path
 }
