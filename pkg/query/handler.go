@@ -13,19 +13,20 @@ import (
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
-// Handler handles query execution requests
+// Handler handles query execution requests.
+// It provides HTTP endpoints for executing PromQL-like queries against stored metrics.
 type Handler struct {
 	executor *Executor
 }
 
-// NewHandler creates a new query handler
+// NewHandler creates a new query handler with the given storage backend.
 func NewHandler(store storage.Storage) *Handler {
 	return &Handler{
 		executor: NewExecutor(store),
 	}
 }
 
-// QueryRequest represents the request payload for /v1/query/execute
+// QueryRequest represents the request payload for /v1/query/execute.
 type QueryRequest struct {
 	Query string    `json:"query"`           // PromQL-like query string
 	Start time.Time `json:"start,omitempty"` // Start time (optional, defaults to now - 1h)
@@ -33,27 +34,28 @@ type QueryRequest struct {
 	Step  string    `json:"step,omitempty"`  // Step duration (optional, defaults to 15s)
 }
 
-// QueryResponse represents the response payload
+// QueryResponse represents the response payload for query endpoints.
 type QueryResponse struct {
-	Status string      `json:"status"`
-	Data   *ResultData `json:"data,omitempty"`
-	Error  string      `json:"error,omitempty"`
-	Query  string      `json:"query"` // Echo back the query
+	Status string      `json:"status"`          // "success" or "error"
+	Data   *ResultData `json:"data,omitempty"`  // Query results (if successful)
+	Error  string      `json:"error,omitempty"` // Error message (if failed)
+	Query  string      `json:"query"`           // Echo back the query string
 }
 
-// ResultData contains the query result in Prometheus-compatible format
+// ResultData contains the query result in Prometheus-compatible format.
 type ResultData struct {
-	ResultType string         `json:"resultType"` // "matrix" or "vector"
-	Result     []SeriesResult `json:"result"`
+	ResultType string         `json:"resultType"` // "matrix" (range) or "vector" (instant)
+	Result     []SeriesResult `json:"result"`     // Time series results
 }
 
-// SeriesResult represents a single time series result
+// SeriesResult represents a single time series result.
 type SeriesResult struct {
-	Metric map[string]string `json:"metric"` // Label set
-	Values [][]interface{}   `json:"values"` // [[timestamp, value], ...]
+	Metric map[string]string `json:"metric"` // Label set (e.g., {"service": "api", "endpoint": "/users"})
+	Values [][]interface{}   `json:"values"` // [[timestamp, value], ...] where timestamp is Unix seconds, value is string
 }
 
-// HandleQueryExecute handles the /v1/query/execute endpoint.
+// HandleQueryExecute handles POST /v1/query/execute.
+// Executes a PromQL-like query over a time range and returns time series data.
 func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -138,8 +140,9 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleQueryInstant handles the /v1/query endpoint (instant queries).
-// This is for compatibility with Prometheus query API.
+// HandleQueryInstant handles GET /v1/query/instant (instant queries).
+// Returns the most recent value for each time series matching the query.
+// Compatible with Prometheus query API.
 func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -261,13 +264,15 @@ func convertToInstantResults(result *Result) []SeriesResult {
 }
 
 // HandlePrometheusQuery handles GET /api/v1/query (Prometheus-compatible instant query).
+// This endpoint is compatible with Grafana's Prometheus data source.
 // Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryInstant.
 func (h *Handler) HandlePrometheusQuery(w http.ResponseWriter, r *http.Request) {
 	h.HandleQueryInstant(w, r)
 }
 
 // HandlePrometheusQueryRange handles GET /api/v1/query_range (Prometheus-compatible range query).
-// Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryExecute.
+// This endpoint is compatible with Grafana's Prometheus data source.
+// Accepts Prometheus query parameters (query, start, end, step) and returns time series data.
 func (h *Handler) HandlePrometheusQueryRange(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")

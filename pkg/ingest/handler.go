@@ -14,22 +14,23 @@ import (
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
-// Handler handles metric ingestion
+// Handler handles metric ingestion via HTTP endpoints.
+// Validates metrics, enforces cardinality limits, and stores them.
 type Handler struct {
 	storage        storage.Storage
 	cardinality    *CardinalityTracker
 	storageChecker StorageLimitChecker
 }
 
-// StorageLimitChecker provides storage usage information for limit enforcement
+// StorageLimitChecker provides storage usage information for limit enforcement.
 type StorageLimitChecker interface {
-	// GetUsage returns current storage usage in bytes
+	// GetUsage returns current storage usage in bytes.
 	GetUsage() (int64, error)
-	// GetLimit returns the configured storage limit in bytes
+	// GetLimit returns the configured storage limit in bytes.
 	GetLimit() int64
 }
 
-// NewHandler creates a new ingest handler
+// NewHandler creates a new ingest handler with the given storage backend.
 func NewHandler(store storage.Storage) *Handler {
 	return &Handler{
 		storage:        store,
@@ -38,24 +39,26 @@ func NewHandler(store storage.Storage) *Handler {
 	}
 }
 
-// SetStorageChecker configures storage limit checking
+// SetStorageChecker configures storage limit checking for the handler.
+// If set, HandleIngest will reject metrics when storage limit is exceeded.
 func (h *Handler) SetStorageChecker(checker StorageLimitChecker) {
 	h.storageChecker = checker
 }
 
-// IngestRequest represents the request payload
+// IngestRequest represents the request payload for POST /v1/ingest.
 type IngestRequest struct {
-	Metrics []metrics.Metric `json:"metrics"`
+	Metrics []metrics.Metric `json:"metrics"` // Array of metrics to ingest
 }
 
-// IngestResponse represents the response payload
+// IngestResponse represents the response payload for ingestion endpoints.
 type IngestResponse struct {
-	Status  string `json:"status"`
-	Count   int    `json:"count"`
-	Message string `json:"message,omitempty"`
+	Status  string `json:"status"`           // "success" or "error"
+	Count   int    `json:"count"`            // Number of metrics ingested
+	Message string `json:"message,omitempty"` // Optional error or info message
 }
 
-// HandleIngest handles the /v1/ingest endpoint.
+// HandleIngest handles POST /v1/ingest.
+// Validates metrics, checks cardinality and storage limits, then stores them.
 func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")

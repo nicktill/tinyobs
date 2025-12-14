@@ -481,6 +481,14 @@
                     // Apply the same filters when rendering charts
                     let filteredMetrics = metrics;
 
+                    if (hideSystemMetrics) {
+                        filteredMetrics = filteredMetrics.filter(m =>
+                            !m.name.startsWith('go_') &&
+                            !m.name.startsWith('process_') &&
+                            !m.name.startsWith('runtime_')
+                        );
+                    }
+
                     if (selectedEndpoint !== 'all') {
                         filteredMetrics = filteredMetrics.filter(m =>
                             m.labels?.endpoint === selectedEndpoint || m.labels?.path === selectedEndpoint

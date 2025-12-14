@@ -15,15 +15,15 @@ import (
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 )
 
-// Config holds server configuration.
+// Config holds server configuration loaded from environment variables.
 type Config struct {
-	MaxStorageGB int64
-	MaxMemoryMB  int64
-	DataDir      string
-	Port         string
+	MaxStorageGB int64  // Maximum storage in GB (from TINYOBS_MAX_STORAGE_GB)
+	MaxMemoryMB  int64  // BadgerDB memory limit in MB (from TINYOBS_MAX_MEMORY_MB)
+	DataDir      string // Data directory path (default: ./data/tinyobs)
+	Port         string // Server port (from PORT, default: 8080)
 }
 
-// LoadConfig loads configuration from environment variables.
+// LoadConfig loads configuration from environment variables with sensible defaults.
 func LoadConfig() Config {
 	maxStorageGB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", config.DefaultMaxStorageGB)
 	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", config.DefaultMaxMemoryMB)
@@ -44,6 +44,7 @@ func LoadConfig() Config {
 }
 
 // InitializeStorage initializes BadgerDB storage with the given configuration.
+// Returns an error if storage cannot be initialized.
 func InitializeStorage(cfg Config) (storage.Storage, error) {
 	log.Println("Initializing BadgerDB storage with Snappy compression...")
 	store, err := badger.New(badger.Config{
@@ -57,7 +58,8 @@ func InitializeStorage(cfg Config) (storage.Storage, error) {
 	return store, nil
 }
 
-// InitializeHandlers creates and configures all request handlers.
+// InitializeHandlers creates and configures all HTTP request handlers.
+// Returns handlers for ingestion, querying, export/import, and the WebSocket hub.
 func InitializeHandlers(
 	store storage.Storage,
 	storageMonitor *monitor.StorageMonitor,
@@ -88,6 +90,7 @@ func InitializeHandlers(
 }
 
 // InitializeCompactor creates a compactor with health monitoring.
+// The compactor downsamples old metrics (raw → 5m → 1h aggregates) to save storage.
 func InitializeCompactor(store storage.Storage) (*compaction.Compactor, *monitor.CompactionMonitor) {
 	compactor := compaction.New(store)
 	compactionMonitor := &monitor.CompactionMonitor{}

@@ -14,11 +14,20 @@ TinyObs is a metrics platform in ~5,000 lines of Go (excluding tests). Small eno
 ### Option 1: Docker
 
 ```bash
-# Start server
-docker-compose up -d
+# Start server only
+make docker-up
+
+# Or start server + example app (generates demo metrics)
+make docker-demo
 
 # View dashboard
 open http://localhost:8080
+```
+
+**Alternative (without Make):**
+```bash
+docker-compose up -d                    # Server only
+docker-compose --profile example up -d  # Server + example app
 ```
 
 ### Option 2: Local Development
@@ -170,15 +179,20 @@ PORT=3000 TINYOBS_MAX_STORAGE_GB=5 go run ./cmd/server
 
 ### Docker
 
+**Recommended (using Make):**
 ```bash
-# Build and start
-docker-compose up -d --build
+make docker-up      # Start server only
+make docker-demo    # Start server + example app
+make docker-down    # Stop all services
+make docker-logs    # View logs
+```
 
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
+**Alternative (direct docker-compose):**
+```bash
+docker-compose up -d --build                    # Server only
+docker-compose --profile example up -d --build  # Server + example app
+docker-compose --profile example down           # Stop all services
+docker-compose logs -f                          # View logs
 ```
 
 See [QUICK_START.md](QUICK_START.md) for detailed instructions.

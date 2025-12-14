@@ -71,6 +71,8 @@ func handleStorageUsage(monitor *monitor.StorageMonitor) http.HandlerFunc {
 }
 
 // SetupRoutes configures all HTTP routes for the server.
+// Registers both TinyObs-specific endpoints (/v1/*) and Prometheus-compatible endpoints (/api/v1/*).
+// The Prometheus endpoints enable Grafana integration.
 func SetupRoutes(
 	router *mux.Router,
 	ingestHandler *ingest.Handler,

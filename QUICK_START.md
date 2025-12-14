@@ -7,8 +7,11 @@ Get TinyObs running in minutes.
 ### Option 1: Docker
 
 ```bash
-# Start server
-docker-compose up -d --build
+# Start server only
+make docker-up
+
+# Or start server + example app (generates demo metrics)
+make docker-demo
 
 # Wait a few seconds, then test
 curl http://localhost:8080/v1/health
@@ -17,7 +20,13 @@ curl http://localhost:8080/v1/health
 open http://localhost:8080
 ```
 
-Data persists in a Docker volume. To run the example app, use Option 2 (local development).
+**Alternative (without Make):**
+```bash
+docker-compose up -d --build                    # Server only
+docker-compose --profile example up -d --build  # Server + example app
+```
+
+Data persists in a Docker volume. The example app runs on port 3000 and sends metrics to the server.
 
 ### Option 2: Local Development (3 Steps)
 
