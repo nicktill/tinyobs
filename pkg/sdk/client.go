@@ -8,6 +8,7 @@ import (
 
 	"github.com/nicktill/tinyobs/pkg/sdk/batch"
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk/runtime"
 	"github.com/nicktill/tinyobs/pkg/sdk/transport"
 )
 
@@ -32,9 +33,10 @@ type Client struct {
 	mu         sync.RWMutex
 
 	// Runtime tracking
-	started bool
-	ctx     context.Context
-	cancel  context.CancelFunc
+	started   bool
+	ctx       context.Context
+	cancel    context.CancelFunc
+	collector *runtime.Collector
 }
 
 // New creates a new TinyObs client
@@ -131,6 +133,10 @@ func (c *Client) Start(ctx context.Context) error {
 
 	// Start histogram flushing (aggregates observations into buckets)
 	go c.flushHistograms()
+
+	// Start runtime metrics collection
+	c.collector = runtime.NewCollector(c, 15*time.Second)
+	go c.collector.Start(c.ctx)
 
 	return nil
 }

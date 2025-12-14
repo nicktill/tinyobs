@@ -14,7 +14,9 @@ import (
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 )
 
-// RunCompaction runs the compaction job periodically.
+// RunCompaction runs the compaction job periodically in the background.
+// Downsamples old metrics (raw → 5m → 1h) to save storage space.
+// Uses exponential backoff retry on failures and reports health via monitor.
 func RunCompaction(compactor *compaction.Compactor, monitor *monitor.CompactionMonitor, stop chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -84,6 +86,7 @@ func RunCompaction(compactor *compaction.Compactor, monitor *monitor.CompactionM
 }
 
 // BroadcastMetrics periodically fetches and broadcasts metrics to WebSocket clients.
+// Queries recent metrics (last 1 minute) and sends updates to all connected clients.
 // Uses exponential backoff on errors to prevent log spam during outages.
 func BroadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.MetricsHub) {
 	ticker := time.NewTicker(5 * time.Second)
@@ -116,7 +119,11 @@ func BroadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 
 				// Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s (max 5m)
 				// Prevents log spam during persistent errors or outages
-				backoff := time.Duration(1<<uint(min(consecutiveErrors-1, 8))) * time.Second
+				exp := consecutiveErrors - 1
+				if exp > 8 {
+					exp = 8
+				}
+				backoff := time.Duration(1<<uint(exp)) * time.Second
 				if backoff > maxBackoff {
 					backoff = maxBackoff
 				}
@@ -155,8 +162,8 @@ func BroadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 }
 
 // RunBadgerGC runs BadgerDB garbage collection periodically to reclaim disk space.
-// BadgerDB uses LSM trees which accumulate deleted data in value log.
-// GC is essential to prevent unbounded disk growth.
+// BadgerDB uses LSM trees which accumulate deleted data in value logs.
+// GC is essential to prevent unbounded disk growth. Runs every 10 minutes by default.
 func RunBadgerGC(store storage.Storage, stop chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -193,12 +200,4 @@ func RunBadgerGC(store storage.Storage, stop chan bool, wg *sync.WaitGroup) {
 			return
 		}
 	}
-}
-
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

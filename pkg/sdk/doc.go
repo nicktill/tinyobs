@@ -149,7 +149,7 @@ Manual flush:
 The SDK automatically collects Go runtime metrics every 15 seconds:
 
   - go_goroutines: Number of goroutines
-  - go_threads: Number of OS threads
+  - go_cpu_count: Number of CPU cores
   - go_memory_heap_bytes: Heap memory usage
   - go_memory_stack_bytes: Stack memory usage
   - go_memory_sys_bytes: Total memory from OS

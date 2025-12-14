@@ -103,11 +103,14 @@ Auto-tracks:
 
 ## Runtime Metrics
 
-Automatically collected every 10s:
-- `go_memstats_heap_alloc_bytes`
-- `go_goroutines`
-- `go_gc_cycles_total`
-- `go_memstats_gc_duration_seconds`
+Automatically collected every 15s:
+- `go_goroutines` - Number of goroutines
+- `go_cpu_count` - Number of CPU cores
+- `go_memory_heap_bytes` - Heap memory usage
+- `go_memory_stack_bytes` - Stack memory usage
+- `go_memory_sys_bytes` - Total memory from OS
+- `go_gc_count` - Total GC runs
+- `go_gc_pause_seconds` - GC pause duration
 
 ## Performance
 
