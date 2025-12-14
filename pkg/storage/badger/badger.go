@@ -88,6 +88,9 @@ func New(cfg Config) (*Storage, error) {
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
 		WithValueLogFileSize(64 << 20)                      // CRITICAL: 64 MB value log files instead of default 2GB!
 
+	// Suppress BadgerDB INFO logs (block cache metrics are too verbose)
+	opts = opts.WithLogger(nil) // nil logger suppresses INFO logs, only shows WARN/ERROR
+
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open badger: %w", err)

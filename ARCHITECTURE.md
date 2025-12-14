@@ -3,69 +3,65 @@
 ## System Overview
 
 ```
-                    ┌─────────────────────────────────────┐
-                    │      Applications (with SDK)        │
-                    │  ┌──────┐  ┌──────┐  ┌──────┐      │
-                    │  │ App 1│  │ App 2│  │ App N│      │
-                    │  └──┬───┘  └──┬───┘  └──┬───┘      │
-                    │     │         │         │           │
-                    │     └─────────┴─────────┘           │
-                    └───────────────┬─────────────────────┘
-                                    │
-                            POST /v1/ingest
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │      Ingest Handler           │
-                    │  • Validates metrics          │
-                    │  • Cardinality checks         │
-                    │  • Storage limit enforcement  │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │                               │
-                    ▼                               ▼
-        ┌───────────────────────┐    ┌───────────────────────┐
-        │    BadgerDB Storage    │    │   WebSocket Hub       │
-        │                       │    │   (Real-time updates) │
-        │  • Raw data           │    └───────────┬───────────┘
-        │  • 5-min aggregates   │                │
-        │  • 1-hour aggregates  │                │
-        └───────────┬───────────┘                │
-                    │                            │
-                    │                            │
-                    ▼                            ▼
-        ┌───────────────────────┐    ┌───────────────────────┐
-        │    Query Handler      │    │     Dashboard UI      │
-        │                       │    │                       │
-        │  • PromQL-like queries│    │  • Interactive charts │
-        │  • Range queries      │    │  • Live metric updates│
-        │  • Aggregations       │    │  • Query interface    │
-        └───────────┬───────────┘    └───────────────────────┘
-                    │
-            GET /v1/query
+    Applications (with SDK)
+    ┌──────┐  ┌──────┐  ┌──────┐
+    │ App1 │  │ App2 │  │ AppN │
+    └──┬───┘  └──┬───┘  └──┬───┘
+       │         │         │
+       └─────────┴─────────┘
+              │
+       POST /v1/ingest
+              │
+              ▼
+     ┌──────────────────┐
+     │  Ingest Handler  │
+     │  • Validates     │
+     │  • Cardinality   │
+     │  • Storage limits│
+     └────────┬─────────┘
+              │
+     ┌────────┴────────┐
+     │                 │
+     ▼                 ▼
+     ┌──────────┐    ┌──────────────┐
+     │ BadgerDB │    │ WebSocket    │
+     │ Storage  │    │ Hub          │
+     │          │    └──────┬───────┘
+     │ • Raw    │           │
+     │ • 5m agg │           │
+     │ • 1h agg │           │
+     └────┬─────┘           │
+          │                 │
+          │                 │
+          ▼                 ▼
+     ┌──────────┐    ┌──────────────┐
+     │  Query   │    │  Dashboard   │
+     │  Handler │    │  UI          │
+     │          │    │  • Charts    │
+     │ • PromQL │    │  • Live      │
+     │ • Range  │    │    updates   │
+     └────┬─────┘    └──────────────┘
+          │
+     GET /v1/query
+          │
+          ▼
+     ┌──────────────┐
+     │ Compaction   │
+     │ Engine       │
+     │ (Background) │
+     │ • Downsample │
+     └─────┬───────-┘
+           │
+           └────────┐
                     │
                     ▼
-        ┌───────────────────────┐
-        │   Compaction Engine    │
-        │   (Background job)    │
-        │                       │
-        │  • Downsampling       │
-        │  • Data compression   │
-        │  • Retention cleanup  │
-        └───────────┬───────────┘
-                    │
-                    └───────────────┐
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │      Export Handler            │
-                    │                               │
-                    │  • JSON export                │
-                    │  • CSV export                 │
-                    │  • Backup/restore             │
-                    └───────────────────────────────┘
-```
+          ┌──────────────┐
+          │ Export       │
+          │ Handler      │
+          │ • JSON/CSV   │
+          │ • Backup     │
+          └──────────────┘
+     ```
 
 ### Components
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
@@ -39,7 +40,11 @@ func startTrafficSimulator(ctx context.Context, activeUsers metrics.GaugeInterfa
 
 			// Make request to generate metrics
 			go func(ep string, count int) {
-				resp, err := http.Get("http://localhost:3000" + ep)
+				baseURL := os.Getenv("EXAMPLE_APP_URL")
+				if baseURL == "" {
+					baseURL = "http://localhost:3000"
+				}
+				resp, err := http.Get(baseURL + ep)
 				if err != nil {
 					log.Printf("⚠️  Traffic simulation failed for %s: %v", ep, err)
 					return

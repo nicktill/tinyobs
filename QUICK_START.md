@@ -2,7 +2,24 @@
 
 Get TinyObs running in minutes.
 
-## Quick Start (3 Steps)
+## Quick Start Options
+
+### Option 1: Docker
+
+```bash
+# Start server
+docker-compose up -d --build
+
+# Wait a few seconds, then test
+curl http://localhost:8080/v1/health
+
+# View dashboard
+open http://localhost:8080
+```
+
+Data persists in a Docker volume. To run the example app, use Option 2 (local development).
+
+### Option 2: Local Development (3 Steps)
 
 ### 1. Start the Server
 ```bash
@@ -89,6 +106,8 @@ go test ./pkg/ingest/...
 
 ## Building
 
+### Local Build
+
 ```bash
 # Build binary
 go build -o tinyobs ./cmd/server
@@ -98,6 +117,17 @@ go build -o tinyobs ./cmd/server
 
 # Or with custom port
 PORT=3000 ./tinyobs
+```
+
+### Docker Build
+
+```bash
+# Build and run with docker-compose
+docker-compose up -d --build
+
+# Or build manually
+docker build -t tinyobs:latest .
+docker run -d -p 8080:8080 -v tinyobs-data:/app/data tinyobs:latest
 ```
 
 ## WebSocket Testing

@@ -84,6 +84,11 @@ func SetupRoutes(
 	// CORS middleware for API access
 	router.Use(corsMiddleware(port))
 
+	// Prometheus-compatible API routes (for Grafana integration)
+	promAPI := router.PathPrefix("/api/v1").Subrouter()
+	promAPI.HandleFunc("/query", queryHandler.HandlePrometheusQuery).Methods("GET", "POST")
+	promAPI.HandleFunc("/query_range", queryHandler.HandlePrometheusQueryRange).Methods("GET", "POST")
+
 	// API routes
 	api := router.PathPrefix("/v1").Subrouter()
 

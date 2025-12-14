@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/config"
@@ -257,4 +258,100 @@ func convertToInstantResults(result *Result) []SeriesResult {
 		}
 	}
 	return results
+}
+
+// HandlePrometheusQuery handles GET /api/v1/query (Prometheus-compatible instant query).
+// Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryInstant.
+func (h *Handler) HandlePrometheusQuery(w http.ResponseWriter, r *http.Request) {
+	h.HandleQueryInstant(w, r)
+}
+
+// HandlePrometheusQueryRange handles GET /api/v1/query_range (Prometheus-compatible range query).
+// Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryExecute.
+func (h *Handler) HandlePrometheusQueryRange(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	query := r.URL.Query()
+	queryStr := query.Get("query")
+	if queryStr == "" {
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
+		return
+	}
+
+	// Parse Prometheus time parameters (Unix timestamps)
+	now := time.Now()
+	start := parsePrometheusTime(query.Get("start"), now.Add(-config.QueryDefaultWindow))
+	end := parsePrometheusTime(query.Get("end"), now)
+	step := parsePrometheusDuration(query.Get("step"), config.QueryDefaultStep)
+
+	// Build query object and execute directly
+	parser := NewParser(queryStr)
+	expr, err := parser.Parse()
+	if err != nil {
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
+		return
+	}
+
+	queryObj := &Query{
+		Expr:  expr,
+		Start: start,
+		End:   end,
+		Step:  step,
+	}
+
+	ctx := r.Context()
+	result, err := h.executor.Execute(ctx, queryObj)
+	if err != nil {
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
+		return
+	}
+	defer result.Close()
+
+	response := QueryResponse{
+		Status: "success",
+		Query:  queryStr,
+		Data: &ResultData{
+			ResultType: "matrix",
+			Result:     convertToSeriesResults(result),
+		},
+	}
+
+	httpx.RespondJSON(w, http.StatusOK, response)
+}
+
+// parsePrometheusTime parses Prometheus time parameter (Unix timestamp or RFC3339).
+func parsePrometheusTime(param string, defaultTime time.Time) time.Time {
+	if param == "" {
+		return defaultTime
+	}
+
+	// Try Unix timestamp first (Prometheus default - float64 seconds since epoch)
+	if unix, err := strconv.ParseFloat(param, 64); err == nil {
+		sec := int64(unix)
+		nsec := int64((unix - float64(sec)) * 1e9)
+		return time.Unix(sec, nsec)
+	}
+
+	// Try RFC3339
+	if t, err := time.Parse(time.RFC3339, param); err == nil {
+		return t
+	}
+
+	return defaultTime
+}
+
+// parsePrometheusDuration parses Prometheus duration string (e.g., "15s", "1m").
+func parsePrometheusDuration(param string, defaultDuration time.Duration) time.Duration {
+	if param == "" {
+		return defaultDuration
+	}
+
+	if d, err := time.ParseDuration(param); err == nil {
+		return d
+	}
+
+	return defaultDuration
 }

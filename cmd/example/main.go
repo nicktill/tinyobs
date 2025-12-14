@@ -23,10 +23,14 @@ func main() {
 
 	// Initialize TinyObs client
 	log.Println("🚀 Initializing TinyObs client...")
+	endpoint := os.Getenv("TINYOBS_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "http://localhost:8080/v1/ingest"
+	}
 	client, err := sdk.New(sdk.ClientConfig{
 		Service:    "example-app",
 		APIKey:     "demo-key",
-		Endpoint:   "http://localhost:8080/v1/ingest",
+		Endpoint:   endpoint,
 		FlushEvery: 5 * time.Second,
 	})
 	if err != nil {

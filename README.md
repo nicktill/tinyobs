@@ -11,6 +11,18 @@ TinyObs is a metrics platform in ~5,000 lines of Go (excluding tests). Small eno
 
 ## Quick Start
 
+### Option 1: Docker
+
+```bash
+# Start server
+docker-compose up -d
+
+# View dashboard
+open http://localhost:8080
+```
+
+### Option 2: Local Development
+
 ```bash
 # Terminal 1: Start server
 go run ./cmd/server
@@ -88,6 +100,10 @@ func main() {
 - `GET /v1/health` - Health check
 - `GET /v1/ws` - WebSocket for real-time updates
 
+**Prometheus-compatible endpoints (for Grafana):**
+- `GET /api/v1/query` - Instant queries (Prometheus-compatible)
+- `GET /api/v1/query_range` - Range queries (Prometheus-compatible)
+
 See [QUICK_START.md](QUICK_START.md) for detailed API examples.
 
 ## Configuration
@@ -139,6 +155,8 @@ I built this to understand how metrics systems work. Prometheus has 300k+ lines.
 
 ## Development
 
+### Local Development
+
 ```bash
 # Run tests
 go test ./...
@@ -149,6 +167,21 @@ go build ./cmd/server
 # Run with custom config
 PORT=3000 TINYOBS_MAX_STORAGE_GB=5 go run ./cmd/server
 ```
+
+### Docker
+
+```bash
+# Build and start
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 
 ## License
 
