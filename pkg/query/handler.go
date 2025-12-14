@@ -287,6 +287,12 @@ func (h *Handler) HandlePrometheusQueryRange(w http.ResponseWriter, r *http.Requ
 	end := parsePrometheusTime(query.Get("end"), now)
 	step := parsePrometheusDuration(query.Get("step"), config.QueryDefaultStep)
 
+	// Validate time range
+	if !start.Before(end) {
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
+		return
+	}
+
 	// Build query object and execute directly
 	parser := NewParser(queryStr)
 	expr, err := parser.Parse()
