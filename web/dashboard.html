@@ -1,1147 +1,1036 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TinyObs - Observability Dashboard</title>
-    <link rel="icon" type="image/svg+xml" href="/web/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/web/favicon.svg">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      :root {
-        --bg-primary: #0d1117;
-        --bg-secondary: #161b22;
-        --bg-tertiary: #21262d;
-        --border-color: #30363d;
-        --text-primary: #c9d1d9;
-        --text-secondary: #8b949e;
-        --accent-blue: #58a6ff;
-        --accent-green: #3fb950;
-        --accent-orange: #f0883e;
-        --accent-red: #f85149;
-        --accent-purple: #bc8cff;
-        --chart-grid: #30363d;
-        --chart-text: #8b949e;
-        --shadow: rgba(0, 0, 0, 0.3);
-      }
-
-      [data-theme="light"] {
-        --bg-primary: #f8f9fa;
-        --bg-secondary: #ffffff;
-        --bg-tertiary: #f1f3f5;
-        --border-color: #dee2e6;
-        --text-primary: #212529;
-        --text-secondary: #6c757d;
-        --accent-blue: #0d6efd;
-        --accent-green: #198754;
-        --accent-orange: #fd7e14;
-        --accent-red: #dc3545;
-        --accent-purple: #6f42c1;
-        --chart-grid: #e9ecef;
-        --chart-text: #6c757d;
-        --shadow: rgba(0, 0, 0, 0.08);
-      }
-
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica,
-          Arial, sans-serif;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        line-height: 1.6;
-      }
-
-      .header {
-        background: var(--bg-secondary);
-        border-bottom: 1px solid var(--border-color);
-        position: sticky;
-        top: 0;
-        z-index: 100;
-      }
-
-      .header-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem 2rem;
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .logo {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .logo-icon {
-        color: var(--accent-blue);
-        font-size: 1.5rem;
-      }
-
-      .header-stats {
-        display: flex;
-        gap: 2rem;
-        font-size: 0.875rem;
-      }
-
-      .stat-item {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .stat-label {
-        color: var(--text-secondary);
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .stat-value {
-        color: var(--text-primary);
-        font-weight: 600;
-        margin-top: 0.25rem;
-      }
-
-      .nav-tabs {
-        display: flex;
-        gap: 0;
-        padding: 0 2rem;
-      }
-
-      .nav-tab {
-        padding: 0.75rem 1.5rem;
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        font-size: 0.875rem;
-        font-weight: 500;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s;
-      }
-
-      .nav-tab:hover {
-        color: var(--text-primary);
-        background: rgba(255, 255, 255, 0.02);
-      }
-
-      .nav-tab.active {
-        color: var(--accent-blue);
-        border-bottom-color: var(--accent-blue);
-      }
-
-      .container {
-        max-width: 1600px;
-        margin: 0 auto;
-        padding: 2rem;
-      }
-
-      .view {
-        display: none;
-      }
-
-      .view.active {
-        display: block;
-      }
-
-      .toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-        padding: 1rem 1.5rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-      }
-
-      .toolbar-left {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-
-      .toolbar-right {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-      }
-
-      input,
-      select,
-      button {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-primary);
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        font-size: 0.875rem;
-        outline: none;
-      }
-
-      input:focus,
-      select:focus,
-      button:focus {
-        border-color: var(--accent-blue);
-        outline: 2px solid var(--accent-blue);
-        outline-offset: 2px;
-      }
-
-      button {
-        cursor: pointer;
-        font-weight: 500;
-        transition: all 0.2s ease;
-      }
-
-      button:hover {
-        background: var(--border-color);
-        transform: translateY(-1px);
-      }
-
-      button:active {
-        transform: translateY(0);
-      }
-
-      button.primary {
-        background: var(--accent-blue);
-        border-color: var(--accent-blue);
-        color: #ffffff;
-        box-shadow: 0 2px 4px rgba(88, 166, 255, 0.2);
-      }
-
-      button.primary:hover {
-        opacity: 0.9;
-        box-shadow: 0 4px 8px rgba(88, 166, 255, 0.3);
-      }
-
-      button.primary:active {
-        box-shadow: 0 1px 2px rgba(88, 166, 255, 0.2);
-      }
-
-      select {
-        min-width: 150px;
-        cursor: pointer;
-      }
-
-      select:hover {
-        border-color: var(--accent-blue);
-      }
-
-      .time-range-selector {
-        display: flex;
-        gap: 0.5rem;
-      }
-
-      .time-btn {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.8125rem;
-      }
-
-      .time-btn.active {
-        background: var(--accent-blue);
-        border-color: var(--accent-blue);
-        color: #ffffff;
-        font-weight: 600;
-      }
-
-      .compare-toggle {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.8125rem;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-
-      .compare-toggle:hover {
-        border-color: var(--accent-purple);
-        color: var(--accent-purple);
-      }
-
-      .compare-toggle.active {
-        background: var(--accent-purple);
-        border-color: var(--accent-purple);
-        color: #ffffff;
-        font-weight: 600;
-      }
-
-      .dashboard-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-        gap: 1.5rem;
-      }
-
-      .chart-card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px var(--shadow);
-        transition: all 0.2s ease;
-        cursor: pointer;
-      }
-
-      .chart-card:hover {
-        box-shadow: 0 4px 12px var(--shadow);
-        border-color: var(--accent-blue);
-        transform: translateY(-2px);
-      }
-
-      .chart-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .chart-title {
-        font-size: 0.9375rem;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .chart-subtitle {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-      }
-
-      .chart-status {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 2rem;
-        font-weight: 600;
-        transition: transform 0.2s;
-      }
-
-      .chart-card:hover .chart-status {
-        transform: scale(1.2);
-      }
-
-      .chart-actions {
-        display: flex;
-        gap: 0.5rem;
-      }
-
-      .icon-btn {
-        background: none;
-        border: 1px solid var(--border-color);
-        padding: 0.375rem 0.5rem;
-        font-size: 0.875rem;
-        cursor: pointer;
-        border-radius: 4px;
-      }
-
-      .icon-btn:hover {
-        background: var(--bg-tertiary);
-      }
-
-      .chart-wrapper {
-        position: relative;
-        height: 300px;
-      }
-
-      .metrics-browser {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
-      }
-
-      .metric-row {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        padding: 1rem;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 2px var(--shadow);
-        cursor: pointer;
-        position: relative;
-      }
-
-      .metric-row::before {
-        content: "○";
-        position: absolute;
-        left: 0.75rem;
-        top: 1rem;
-        color: var(--text-secondary);
-        font-size: 1rem;
-      }
-
-      .metric-row.selected::before {
-        content: "●";
-        color: var(--accent-blue);
-      }
-
-      .metric-row:hover {
-        border-color: var(--accent-blue);
-        background: rgba(88, 166, 255, 0.05);
-      }
-
-      .metric-row.selected {
-        border-color: var(--accent-blue);
-        background: rgba(88, 166, 255, 0.1);
-      }
-
-      .metric-content {
-        margin-left: 1.5rem;
-      }
-
-      .metric-name {
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        font-size: 0.9375rem;
-        color: var(--accent-blue);
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-      }
-
-      .metric-labels {
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-
-      .label {
-        background: var(--bg-secondary);
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        border: 1px solid var(--border-color);
-      }
-
-      .label-key {
-        color: var(--accent-green);
-      }
-
-      .label-value {
-        color: var(--accent-orange);
-      }
-
-      .metric-value {
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        font-size: 0.875rem;
-        color: var(--text-primary);
-        margin-top: 0.5rem;
-        padding-top: 0.5rem;
-        border-top: 1px solid var(--border-color);
-        display: flex;
-        gap: 1.5rem;
-      }
-
-      .value-label {
-        color: var(--text-secondary);
-        margin-right: 0.25rem;
-      }
-
-      .empty-state {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: var(--text-secondary);
-      }
-
-      .empty-icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-        opacity: 0.5;
-      }
-
-      .loading {
-        color: var(--text-secondary);
-        padding: 2rem;
-        text-align: center;
-      }
-
-      .loading::after {
-        content: "...";
-        animation: dots 1.5s steps(4, end) infinite;
-      }
-
-      @keyframes dots {
-        0%,
-        20% {
-          content: ".";
-        }
-        40% {
-          content: "..";
-        }
-        60%,
-        100% {
-          content: "...";
-        }
-      }
-
-      .badge {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 500;
-      }
-
-      .badge.success {
-        background: rgba(63, 185, 80, 0.1);
-        border-color: var(--accent-green);
-        color: var(--accent-green);
-      }
-
-      .service-section {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 2px 8px var(--shadow);
-        transition: all 0.2s ease;
-      }
-
-      .service-section:hover {
-        box-shadow: 0 4px 16px var(--shadow);
-      }
-
-      .service-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        cursor: pointer;
-        padding: 0.75rem;
-        border-radius: 6px;
-        transition: background 0.2s ease;
-      }
-
-      .service-header:hover {
-        background: var(--bg-tertiary);
-      }
-
-      .service-header h3 {
-        font-size: 1rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .service-icon {
-        font-size: 1.25rem;
-      }
-
-      .collapse-icon {
-        transition: transform 0.2s;
-      }
-
-      .service-section.collapsed .collapse-icon {
-        transform: rotate(-90deg);
-      }
-
-      .service-section.collapsed .service-charts {
-        display: none;
-      }
-
-      .service-charts {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
-      }
-
-      .header-controls {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .theme-toggle {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-      }
-
-      .theme-toggle:hover {
-        color: var(--accent-blue);
-        border-color: var(--accent-blue);
-        background: var(--bg-secondary);
-      }
-
-      .config-btn {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 0.875rem;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-      }
-
-      .config-btn:hover {
-        color: var(--accent-blue);
-        border-color: var(--accent-blue);
-        background: var(--bg-secondary);
-      }
-
-      .help-btn {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        cursor: help;
-        font-size: 0.875rem;
-        position: relative;
-        transition: all 0.2s;
-      }
-
-      .help-btn:hover {
-        color: var(--accent-blue);
-        border-color: var(--accent-blue);
-        background: var(--bg-secondary);
-      }
-
-      .help-tooltip {
-        display: none;
-        position: absolute;
-        top: 100%;
-        right: 0;
-        margin-top: 0.5rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--accent-blue);
-        border-radius: 6px;
-        padding: 1rem;
-        min-width: 280px;
-        z-index: 1000;
-        box-shadow: 0 8px 24px var(--shadow);
-      }
-
-      .help-btn:hover .help-tooltip {
-        display: block;
-      }
-
-      .help-tooltip h4 {
-        margin: 0 0 0.5rem 0;
-        color: var(--accent-blue);
-        font-size: 0.875rem;
-      }
-
-      .help-tooltip ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-      }
-
-      .help-tooltip li {
-        padding: 0.25rem 0;
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-      }
-
-      .help-tooltip kbd {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        border-radius: 3px;
-        padding: 0.125rem 0.375rem;
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        font-size: 0.75rem;
-        color: var(--accent-green);
-      }
-
-      /* Chart Modal */
-      #chartModal {
-        border: none;
-        border-radius: 12px;
-        padding: 0;
-        max-width: 1200px;
-        width: 90vw;
-        max-height: 90vh;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      }
-
-      #chartModal::backdrop {
-        background: rgba(0, 0, 0, 0.75);
-        backdrop-filter: blur(4px);
-      }
-
-      .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1.5rem 2rem;
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .modal-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        color: var(--accent-blue);
-      }
-
-      .modal-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: var(--text-secondary);
-        padding: 0.5rem;
-        border-radius: 4px;
-        transition: all 0.2s;
-      }
-
-      .modal-close:hover {
-        background: var(--bg-tertiary);
-        color: var(--text-primary);
-      }
-
-      .modal-body {
-        padding: 2rem;
-        overflow-y: auto;
-        max-height: calc(90vh - 200px);
-      }
-
-      .modal-chart-wrapper {
-        height: 400px;
-        margin-bottom: 2rem;
-        width: 100%;
-      }
-
-      .modal-chart-wrapper canvas {
-        width: 100% !important;
-        height: 100% !important;
-      }
-
-      .modal-section {
-        margin-bottom: 2rem;
-      }
-
-      .modal-section-title {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .query-editor-help {
-        background: var(--bg-tertiary);
-        border-left: 3px solid var(--accent-blue);
-        padding: 0.75rem 1rem;
-        margin-bottom: 1rem;
-        border-radius: 4px;
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        line-height: 1.5;
-      }
-
-      .query-editor {
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        padding: 1rem;
-        font-family: "Monaco", "Menlo", "Consolas", monospace;
-        font-size: 0.875rem;
-        color: var(--text-primary);
-        width: 100%;
-        min-height: 80px;
-        resize: vertical;
-      }
-
-      .query-actions {
-        display: flex;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-      }
-
-      .metric-info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-      }
-
-      .info-item {
-        background: var(--bg-tertiary);
-        padding: 1rem;
-        border-radius: 6px;
-        border: 1px solid var(--border-color);
-      }
-
-      .info-label {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        margin-bottom: 0.25rem;
-      }
-
-      .info-value {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .export-buttons {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-      }
-
-      @media (max-width: 768px) {
-        #chartModal {
-          width: 95vw;
-          max-height: 95vh;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        .modal-body {
-          padding: 1rem;
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #f0883e;
+            --accent-red: #f85149;
+            --accent-purple: #bc8cff;
+            --chart-grid: #30363d;
+            --chart-text: #8b949e;
+            --shadow: rgba(0, 0, 0, 0.3);
         }
 
-        .modal-chart-wrapper {
-          height: 300px;
-          width: 100%;
+        [data-theme="light"] {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f1f3f5;
+            --border-color: #dee2e6;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --accent-blue: #0d6efd;
+            --accent-green: #198754;
+            --accent-orange: #fd7e14;
+            --accent-red: #dc3545;
+            --accent-purple: #6f42c1;
+            --chart-grid: #e9ecef;
+            --chart-text: #6c757d;
+            --shadow: rgba(0, 0, 0, 0.08);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            color: var(--accent-blue);
+            font-size: 1.5rem;
         }
 
         .header-stats {
-          display: none;
+            display: flex;
+            gap: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 2rem;
+        }
+
+        .nav-tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .nav-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
         }
 
         .toolbar {
-          flex-direction: column;
-          align-items: stretch;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
         }
 
-        .toolbar-left,
+        .toolbar-left {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         .toolbar-right {
-          flex-direction: column;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        input, select, button {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            outline: none;
+        }
+
+        input:focus, select:focus, button:focus {
+            border-color: var(--accent-blue);
+            outline: 2px solid var(--accent-blue);
+            outline-offset: 2px;
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.primary {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(88, 166, 255, 0.2);
+        }
+
+        button.primary:hover {
+            opacity: 0.9;
+            box-shadow: 0 4px 8px rgba(88, 166, 255, 0.3);
+        }
+
+        button.primary:active {
+            box-shadow: 0 1px 2px rgba(88, 166, 255, 0.2);
+        }
+
+        select {
+            min-width: 150px;
+            cursor: pointer;
+        }
+
+        select:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .time-range-selector {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .time-btn {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+        }
+
+        .time-btn.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .compare-toggle {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .compare-toggle:hover {
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+        }
+
+        .compare-toggle.active {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+            color: #ffffff;
+            font-weight: 600;
         }
 
         .dashboard-grid {
-          grid-template-columns: 1fr;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .chart-card:hover {
+            box-shadow: 0 4px 12px var(--shadow);
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chart-title {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-subtitle {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .chart-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2rem;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .chart-card:hover .chart-status {
+            transform: scale(1.2);
+        }
+
+        .chart-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            padding: 0.375rem 0.5rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .metrics-browser {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+
+        .metric-row {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px var(--shadow);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .metric-row::before {
+            content: '○';
+            position: absolute;
+            left: 0.75rem;
+            top: 1rem;
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .metric-row.selected::before {
+            content: '●';
+            color: var(--accent-blue);
+        }
+
+        .metric-row:hover {
+            border-color: var(--accent-blue);
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .metric-row.selected {
+            border-color: var(--accent-blue);
+            background: rgba(88, 166, 255, 0.1);
+        }
+
+        .metric-content {
+            margin-left: 1.5rem;
+        }
+
+        .metric-name {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.9375rem;
+            color: var(--accent-blue);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .metric-labels {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .label {
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .label-key {
+            color: var(--accent-green);
+        }
+
+        .label-value {
+            color: var(--accent-orange);
+        }
+
+        .metric-value {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .value-label {
+            color: var(--text-secondary);
+            margin-right: 0.25rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .loading {
+            color: var(--text-secondary);
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        .badge {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge.success {
+            background: rgba(63, 185, 80, 0.1);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .service-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .service-section:hover {
+            box-shadow: 0 4px 16px var(--shadow);
+        }
+
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            padding: 0.75rem;
+            border-radius: 6px;
+            transition: background 0.2s ease;
+        }
+
+        .service-header:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .service-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .service-icon {
+            font-size: 1.25rem;
+        }
+
+        .collapse-icon {
+            transition: transform 0.2s;
+        }
+
+        .service-section.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .service-section.collapsed .service-charts {
+            display: none;
         }
 
         .service-charts {
-          grid-template-columns: 1fr;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
         }
-      }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .theme-toggle:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
+        .config-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .config-btn:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
+        .help-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: help;
+            font-size: 0.875rem;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .help-btn:hover {
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+
+        .help-tooltip {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-blue);
+            border-radius: 6px;
+            padding: 1rem;
+            min-width: 280px;
+            z-index: 1000;
+            box-shadow: 0 8px 24px var(--shadow);
+        }
+
+        .help-btn:hover .help-tooltip {
+            display: block;
+        }
+
+        .help-tooltip h4 {
+            margin: 0 0 0.5rem 0;
+            color: var(--accent-blue);
+            font-size: 0.875rem;
+        }
+
+        .help-tooltip ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .help-tooltip li {
+            padding: 0.25rem 0;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .help-tooltip kbd {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 0.125rem 0.375rem;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-green);
+        }
+
+        /* Chart Modal */
+        #chartModal {
+            border: none;
+            border-radius: 12px;
+            padding: 0;
+            max-width: 1200px;
+            width: 90vw;
+            max-height: 90vh;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        #chartModal::backdrop {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            color: var(--accent-blue);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            max-height: calc(90vh - 200px);
+        }
+
+        .modal-chart-wrapper {
+            height: 400px;
+            margin-bottom: 2rem;
+            width: 100%;
+        }
+
+        .modal-chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .modal-section {
+            margin-bottom: 2rem;
+        }
+
+        .modal-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .query-editor-help {
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--accent-blue);
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .query-editor {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .query-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .metric-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .info-item {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            #chartModal {
+                width: 95vw;
+                max-height: 95vh;
+            }
+
+            .modal-body {
+                padding: 1rem;
+            }
+
+            .modal-chart-wrapper {
+                height: 300px;
+                width: 100%;
+            }
+
+            .header-stats {
+                display: none;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .toolbar-left, .toolbar-right {
+                flex-direction: column;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .service-charts {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <div class="header">
-      <div class="header-top">
-        <div class="logo">
-          <span class="logo-icon">●</span>
-          <span>TinyObs</span>
-        </div>
-        <div class="header-stats">
-          <div class="stat-item">
-            <div class="stat-label">Total Metrics</div>
-            <div class="stat-value" id="totalMetrics">-</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Series</div>
-            <div class="stat-value" id="totalSeries">-</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Storage</div>
-            <div class="stat-value" id="storageSize">-</div>
-          </div>
-          <div class="header-controls">
-            <button
-              class="config-btn"
-              onclick="exportConfig()"
-              title="Export dashboard config"
-            >
-              ⬇️
-            </button>
-            <button
-              class="config-btn"
-              onclick="document.getElementById('configFileInput').click()"
-              title="Import dashboard config"
-            >
-              ⬆️
-            </button>
-            <input
-              type="file"
-              id="configFileInput"
-              accept=".json"
-              style="display: none"
-              onchange="importConfig(event)"
-            />
-            <button
-              class="theme-toggle"
-              onclick="toggleTheme()"
-              title="Toggle theme (T)"
-              id="themeToggle"
-            >
-              ☀️
-            </button>
-            <div class="help-btn">
-              ?
-              <div class="help-tooltip">
-                <h4>Keyboard Shortcuts</h4>
-                <ul>
-                  <li><kbd>D</kbd> Dashboard view</li>
-                  <li><kbd>E</kbd> Explore view</li>
-                  <li><kbd>R</kbd> Refresh current view</li>
-                  <li><kbd>T</kbd> Toggle theme</li>
-                  <li><kbd>/</kbd> Focus search (Explore)</li>
-                  <li><kbd>ESC</kbd> Clear selection (Explore)</li>
-                  <li><kbd>1</kbd>-<kbd>4</kbd> Quick time ranges</li>
-                </ul>
-              </div>
+        <div class="header-top">
+            <div class="logo">
+                <span class="logo-icon">●</span>
+                <span>TinyObs</span>
             </div>
-          </div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <div class="stat-label">Total Metrics</div>
+                    <div class="stat-value" id="totalMetrics">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Series</div>
+                    <div class="stat-value" id="totalSeries">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Storage</div>
+                    <div class="stat-value" id="storageSize">-</div>
+                </div>
+                <div class="header-controls">
+                    <button class="config-btn" onclick="exportConfig()" title="Export dashboard config">
+                        ⬇️
+                    </button>
+                    <button class="config-btn" onclick="document.getElementById('configFileInput').click()" title="Import dashboard config">
+                        ⬆️
+                    </button>
+                    <input type="file" id="configFileInput" accept=".json" style="display: none;" onchange="importConfig(event)">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme (T)" id="themeToggle">
+                        ☀️
+                    </button>
+                    <div class="help-btn">
+                        ?
+                        <div class="help-tooltip">
+                            <h4>Keyboard Shortcuts</h4>
+                            <ul>
+                                <li><kbd>D</kbd> Dashboard view</li>
+                                <li><kbd>E</kbd> Explore view</li>
+                                <li><kbd>R</kbd> Refresh current view</li>
+                                <li><kbd>T</kbd> Toggle theme</li>
+                                <li><kbd>/</kbd> Focus search (Explore)</li>
+                                <li><kbd>ESC</kbd> Clear selection (Explore)</li>
+                                <li><kbd>1</kbd>-<kbd>4</kbd> Quick time ranges</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-      <nav class="nav-tabs">
-        <button
-          class="nav-tab active"
-          onclick="switchView('dashboard')"
-          id="dashboardTab"
-        >
-          Dashboard
-        </button>
-        <button class="nav-tab" onclick="switchView('explore')" id="exploreTab">
-          Explore Metrics
-        </button>
-      </nav>
+        <nav class="nav-tabs">
+            <button class="nav-tab active" onclick="switchView('dashboard')" id="dashboardTab">Dashboard</button>
+            <button class="nav-tab" onclick="switchView('explore')" id="exploreTab">Explore Metrics</button>
+        </nav>
     </div>
 
     <div class="container">
-      <!-- Dashboard View -->
-      <div id="dashboard-view" class="view active">
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <select id="serviceFilter" onchange="filterDashboard()">
-              <option value="all">All Services</option>
-            </select>
-            <select id="endpointFilter" onchange="filterDashboard()">
-              <option value="all">All Endpoints</option>
-            </select>
-            <select id="metricNameFilter" onchange="filterDashboard()">
-              <option value="all">All Metrics</option>
-            </select>
-            <label
-              style="
-                display: inline-flex;
-                align-items: center;
-                gap: 0.5rem;
-                padding: 0 0.75rem;
-                cursor: pointer;
-              "
-            >
-              <input
-                type="checkbox"
-                id="hideSystemMetrics"
-                onchange="filterDashboard()"
-                checked
-              />
-              <span>Hide system metrics</span>
-            </label>
-            <select
-              id="chartsPerServiceSelect"
-              onchange="setChartsPerService()"
-              title="Charts per service"
-            >
-              <option value="6">6 charts/service</option>
-              <option value="12">12 charts/service</option>
-              <option value="999">Show all</option>
-            </select>
-            <div class="time-range-selector">
-              <button
-                class="time-btn"
-                data-range="1h"
-                onclick="setTimeRange('1h')"
-              >
-                1h
-              </button>
-              <button
-                class="time-btn"
-                data-range="6h"
-                onclick="setTimeRange('6h')"
-              >
-                6h
-              </button>
-              <button
-                class="time-btn active"
-                data-range="24h"
-                onclick="setTimeRange('24h')"
-              >
-                24h
-              </button>
-              <button
-                class="time-btn"
-                data-range="7d"
-                onclick="setTimeRange('7d')"
-              >
-                7d
-              </button>
-              <button
-                class="compare-toggle"
-                id="compareToggle"
-                onclick="toggleComparison()"
-                title="Compare with 24h ago"
-              >
-                <span>📊</span> Compare 24h
-              </button>
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view active">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <select id="serviceFilter" onchange="filterDashboard()">
+                        <option value="all">All Services</option>
+                    </select>
+                    <select id="endpointFilter" onchange="filterDashboard()">
+                        <option value="all">All Endpoints</option>
+                    </select>
+                    <select id="metricNameFilter" onchange="filterDashboard()">
+                        <option value="all">All Metrics</option>
+                    </select>
+                    <label style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="hideSystemMetrics" onchange="filterDashboard()" checked>
+                        <span>Hide system metrics</span>
+                    </label>
+                    <select id="chartsPerServiceSelect" onchange="setChartsPerService()" title="Charts per service">
+                        <option value="6">6 charts/service</option>
+                        <option value="12">12 charts/service</option>
+                        <option value="999">Show all</option>
+                    </select>
+                    <div class="time-range-selector">
+                        <button class="time-btn" data-range="1h" onclick="setTimeRange('1h')">1h</button>
+                        <button class="time-btn" data-range="6h" onclick="setTimeRange('6h')">6h</button>
+                        <button class="time-btn active" data-range="24h" onclick="setTimeRange('24h')">24h</button>
+                        <button class="time-btn" data-range="7d" onclick="setTimeRange('7d')">7d</button>
+                        <button class="compare-toggle" id="compareToggle" onclick="toggleComparison()" title="Compare with 24h ago">
+                            <span>📊</span> Compare 24h
+                        </button>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button class="primary" onclick="refreshDashboard()">↻ Refresh</button>
+                </div>
             </div>
-          </div>
-          <div class="toolbar-right">
-            <button class="primary" onclick="refreshDashboard()">
-              ↻ Refresh
-            </button>
-          </div>
-        </div>
 
-        <div id="dashboardContent">
-          <div class="loading">Loading dashboard</div>
-        </div>
-      </div>
-
-      <!-- Explore View -->
-      <div id="explore-view" class="view">
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <input
-              type="text"
-              id="searchBox"
-              placeholder="Search metrics..."
-              style="width: 300px"
-            />
-            <select id="metricTypeFilter" onchange="filterMetrics()">
-              <option value="all">All Types</option>
-              <option value="counter">Counters</option>
-              <option value="gauge">Gauges</option>
-              <option value="histogram">Histograms</option>
-            </select>
-            <select id="exploreServiceFilter" onchange="filterMetrics()">
-              <option value="all">All Services</option>
-            </select>
-          </div>
-          <div class="toolbar-right">
-            <span class="badge success" id="selectedCount">0 selected</span>
-            <button onclick="clearSelection()">Clear</button>
-            <button class="primary" onclick="refreshMetrics()">
-              ↻ Refresh
-            </button>
-          </div>
-        </div>
-
-        <div id="metricsBrowser" class="metrics-browser">
-          <div class="loading">Loading metrics</div>
-        </div>
-
-        <div id="selectedChart" style="display: none; margin-top: 1.5rem">
-          <div class="chart-card">
-            <div class="chart-header">
-              <div>
-                <div class="chart-title">Selected Metrics</div>
-                <div class="chart-subtitle">Time series comparison</div>
-              </div>
+            <div id="dashboardContent">
+                <div class="loading">Loading dashboard</div>
             </div>
-            <div class="chart-wrapper">
-              <canvas id="exploreChart"></canvas>
-            </div>
-          </div>
         </div>
-      </div>
+
+        <!-- Explore View -->
+        <div id="explore-view" class="view">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <input type="text" id="searchBox" placeholder="Search metrics..." style="width: 300px;">
+                    <select id="metricTypeFilter" onchange="filterMetrics()">
+                        <option value="all">All Types</option>
+                        <option value="counter">Counters</option>
+                        <option value="gauge">Gauges</option>
+                        <option value="histogram">Histograms</option>
+                    </select>
+                    <select id="exploreServiceFilter" onchange="filterMetrics()">
+                        <option value="all">All Services</option>
+                    </select>
+                </div>
+                <div class="toolbar-right">
+                    <span class="badge success" id="selectedCount">0 selected</span>
+                    <button onclick="clearSelection()">Clear</button>
+                    <button class="primary" onclick="refreshMetrics()">↻ Refresh</button>
+                </div>
+            </div>
+
+            <div id="metricsBrowser" class="metrics-browser">
+                <div class="loading">Loading metrics</div>
+            </div>
+
+            <div id="selectedChart" style="display: none; margin-top: 1.5rem;">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Selected Metrics</div>
+                            <div class="chart-subtitle">Time series comparison</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="exploreChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Chart Drill-Down Modal -->
     <dialog id="chartModal" aria-labelledby="modalTitle" aria-modal="true">
-      <div class="modal-header">
-        <div class="modal-title" id="modalTitle">Chart Details</div>
-        <button
-          class="modal-close"
-          onclick="closeChartModal()"
-          aria-label="Close modal"
-          title="Close (ESC)"
-        >
-          ×
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-section">
-          <div class="modal-chart-wrapper">
-            <canvas id="modalChart"></canvas>
-          </div>
+        <div class="modal-header">
+            <div class="modal-title" id="modalTitle">Chart Details</div>
+            <button class="modal-close" onclick="closeChartModal()" aria-label="Close modal" title="Close (ESC)">×</button>
         </div>
+        <div class="modal-body">
+            <div class="modal-section">
+                <div class="modal-chart-wrapper">
+                    <canvas id="modalChart"></canvas>
+                </div>
+            </div>
 
-        <div class="modal-section">
-          <div class="modal-section-title">🔍 Query Editor</div>
-          <div class="query-editor-help">
-            Write TinyQuery expressions to analyze your metrics. Supports
-            aggregations, functions, and time-based operations.
-          </div>
-          <textarea
-            id="queryEditor"
-            class="query-editor"
-            placeholder="Examples:&#10;  metric_name                                    → Get metric values&#10;  rate(http_requests[5m])                       → Calculate rate of change&#10;  sum by (endpoint) (http_requests_total)       → Aggregate by label&#10;  avg(response_time) > 100                      → Filter with conditions"
-          ></textarea>
-          <div class="query-actions">
-            <button class="primary" onclick="executeModalQuery()">
-              Execute Query
-            </button>
-            <button onclick="copyQuery()">📋 Copy</button>
-            <button onclick="shareQuery()">🔗 Share</button>
-          </div>
-        </div>
+            <div class="modal-section">
+                <div class="modal-section-title">🔍 Query Editor</div>
+                <div class="query-editor-help">
+                    Write TinyQuery expressions to analyze your metrics. Supports aggregations, functions, and time-based operations.
+                </div>
+                <textarea id="queryEditor" class="query-editor" placeholder="Examples:&#10;  metric_name                                    → Get metric values&#10;  rate(http_requests[5m])                       → Calculate rate of change&#10;  sum by (endpoint) (http_requests_total)       → Aggregate by label&#10;  avg(response_time) > 100                      → Filter with conditions"></textarea>
+                <div class="query-actions">
+                    <button class="primary" onclick="executeModalQuery()">Execute Query</button>
+                    <button onclick="copyQuery()">📋 Copy</button>
+                    <button onclick="shareQuery()">🔗 Share</button>
+                </div>
+            </div>
 
-        <div class="modal-section">
-          <div class="modal-section-title">📋 Metric Info</div>
-          <div class="metric-info-grid" id="metricInfoGrid">
-            <!-- Populated dynamically -->
-          </div>
-        </div>
+            <div class="modal-section">
+                <div class="modal-section-title">📋 Metric Info</div>
+                <div class="metric-info-grid" id="metricInfoGrid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
 
-        <div class="modal-section">
-          <div class="modal-section-title">💾 Export</div>
-          <div class="export-buttons">
-            <button onclick="exportChartPNG()">📊 Export PNG</button>
-            <button onclick="exportChartCSV()">📄 Export CSV</button>
-            <button onclick="exportChartJSON()">📦 Export JSON</button>
-          </div>
+            <div class="modal-section">
+                <div class="modal-section-title">💾 Export</div>
+                <div class="export-buttons">
+                    <button onclick="exportChartPNG()">📊 Export PNG</button>
+                    <button onclick="exportChartCSV()">📄 Export CSV</button>
+                    <button onclick="exportChartJSON()">📦 Export JSON</button>
+                </div>
+            </div>
         </div>
-      </div>
     </dialog>
 
     <script src="/web/dashboard.js"></script>
-  </body>
+</body>
 </html>

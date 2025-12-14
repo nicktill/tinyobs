@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk/batch"
@@ -33,7 +34,7 @@ type Client struct {
 	mu         sync.RWMutex
 
 	// Runtime tracking
-	started   bool
+	started   atomic.Bool
 	ctx       context.Context
 	cancel    context.CancelFunc
 	collector *runtime.Collector
@@ -119,15 +120,15 @@ func (c *Client) Histogram(name string) metrics.HistogramInterface {
 
 // Start starts the client and begins collecting metrics
 func (c *Client) Start(ctx context.Context) error {
-	if c.started {
+	if !c.started.CompareAndSwap(false, true) {
 		return fmt.Errorf("client already started")
 	}
 
 	c.ctx, c.cancel = context.WithCancel(ctx)
-	c.started = true
 
 	// Start the batcher
 	if err := c.batcher.Start(c.ctx); err != nil {
+		c.started.Store(false)
 		return fmt.Errorf("failed to start batcher: %w", err)
 	}
 
@@ -143,7 +144,7 @@ func (c *Client) Start(ctx context.Context) error {
 
 // Stop stops the client and flushes remaining metrics
 func (c *Client) Stop() error {
-	if !c.started {
+	if !c.started.Load() {
 		return nil
 	}
 
@@ -156,13 +157,13 @@ func (c *Client) Stop() error {
 		return fmt.Errorf("failed to flush metrics: %w", err)
 	}
 
-	c.started = false
+	c.started.Store(false)
 	return nil
 }
 
 // SendMetric sends a metric to the batcher (implements metrics.ClientInterface)
 func (c *Client) SendMetric(metric metrics.Metric) {
-	if !c.started {
+	if !c.started.Load() {
 		return
 	}
 

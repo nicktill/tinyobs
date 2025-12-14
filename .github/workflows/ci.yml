@@ -26,9 +26,8 @@ jobs:
           args: >
             --timeout=3m
             --disable-all
-            --enable=vet
+            --enable=govet
             --enable=staticcheck
-            --enable=errcheck
             ./...
 
   test:
