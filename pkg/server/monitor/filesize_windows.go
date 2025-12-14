@@ -38,4 +38,3 @@ func getActualFileSize(path string, info os.FileInfo) (int64, error) {
 	size := int64(high)<<32 + int64(low)
 	return size, nil
 }
-

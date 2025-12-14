@@ -3,6 +3,7 @@ package query
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -160,16 +161,24 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	timeParam := r.URL.Query().Get("time")
 	queryTime := time.Now()
 	if timeParam != "" {
-		if t, err := time.Parse(time.RFC3339, timeParam); err == nil {
+		if t, err := time.Parse(time.RFC3339, timeParam); err != nil {
+			// Invalid time format - log and use default (now)
+			log.Printf("Invalid time parameter %q, using current time: %v", timeParam, err)
+		} else {
 			queryTime = t
 		}
 	}
 
-	// For instant queries, start and end are the same
+	// For instant queries, we need a small time window to find the latest values
+	// Counters are stored with timestamps, so we look back 5 minutes to ensure we get data
+	// The aggregation will take the most recent value from each series
+	startTime := queryTime.Add(-5 * time.Minute)
+	endTime := queryTime
+
 	req := QueryRequest{
 		Query: query,
-		Start: queryTime,
-		End:   queryTime,
+		Start: startTime,
+		End:   endTime,
 		Step:  "1s", // Minimal step for instant query
 	}
 
@@ -254,4 +263,3 @@ func convertToInstantResults(result *Result) []SeriesResult {
 	}
 	return results
 }
-

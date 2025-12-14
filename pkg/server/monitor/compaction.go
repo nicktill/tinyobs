@@ -58,12 +58,12 @@ func (cm *CompactionMonitor) IsHealthy() bool {
 
 // Status returns current compaction status for health checks.
 type CompactionStatus struct {
-	Healthy           bool    `json:"healthy"`
-	LastSuccess       string  `json:"last_success,omitempty"`
-	TimeSinceSuccess  string  `json:"time_since_success,omitempty"`
-	LastAttempt       string  `json:"last_attempt,omitempty"`
-	ConsecutiveErrors int     `json:"consecutive_errors,omitempty"`
-	LastError         string  `json:"last_error,omitempty"`
+	Healthy           bool   `json:"healthy"`
+	LastSuccess       string `json:"last_success,omitempty"`
+	TimeSinceSuccess  string `json:"time_since_success,omitempty"`
+	LastAttempt       string `json:"last_attempt,omitempty"`
+	ConsecutiveErrors int    `json:"consecutive_errors,omitempty"`
+	LastError         string `json:"last_error,omitempty"`
 }
 
 // Status returns current compaction status for health checks.
@@ -91,4 +91,3 @@ func (cm *CompactionMonitor) Status() CompactionStatus {
 
 	return status
 }
-

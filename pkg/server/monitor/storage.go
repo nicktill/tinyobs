@@ -79,4 +79,3 @@ func calculateDirSize(path string) (int64, error) {
 // getActualFileSize is implemented in platform-specific files:
 // - filesize_unix.go (Linux/Mac): Uses syscall.Stat_t.Blocks
 // - filesize_windows.go (Windows): Uses GetCompressedFileSizeW API
-

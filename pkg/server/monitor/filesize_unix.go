@@ -25,4 +25,3 @@ func getActualFileSize(path string, info os.FileInfo) (int64, error) {
 	// This gives actual disk usage, not logical size
 	return stat.Blocks * 512, nil
 }
-
