@@ -2,40 +2,61 @@ package httpx
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
-	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
+	"github.com/nicktill/tinyobs/pkg/sdk"
 )
 
-// Middleware creates HTTP middleware for request metrics
-func Middleware(client metrics.ClientInterface) func(http.Handler) http.Handler {
-	requestCounter := metrics.NewCounter("http_requests_total", client)
-	requestDuration := metrics.NewHistogram("http_request_duration_seconds", client)
+// Middleware returns HTTP middleware that automatically tracks metrics.
+// It tracks:
+//   - http_requests_total (counter): by method, path, status
+//   - http_request_duration_seconds (histogram): request latency
+//
+// Usage:
+//
+//	client, _ := sdk.New(sdk.ClientConfig{...})
+//	client.Start(ctx)
+//	defer client.Stop()
+//
+//	mux := http.NewServeMux()
+//	mux.HandleFunc("/", handler)
+//	handler := httpx.Middleware(client)(mux)
+//	http.ListenAndServe(":8080", handler)
+func Middleware(client *sdk.Client) func(http.Handler) http.Handler {
+	// Create metrics once (reused for all requests)
+	requestCounter := client.Counter("http_requests_total")
+	requestDuration := client.Histogram("http_request_duration_seconds")
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			// Wrap the response writer to capture status code
-			wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			// Wrap ResponseWriter to capture status code
+			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-			// Call the next handler
-			next.ServeHTTP(wrapped, r)
+			// Call the actual handler
+			next.ServeHTTP(rw, r)
 
-			// Record metrics
+			// Calculate duration
 			duration := time.Since(start).Seconds()
 
+			// Normalize path to avoid cardinality explosion
+			normalizedPath := normalizePath(r.URL.Path)
+
+			// Track metrics automatically
+			statusStr := strconv.Itoa(rw.statusCode)
 			requestCounter.Inc(
 				"method", r.Method,
-				"path", r.URL.Path,
-				"status", strconv.Itoa(wrapped.statusCode),
+				"path", normalizedPath,
+				"status", statusStr,
 			)
-
-			requestDuration.Observe(duration,
+			requestDuration.Observe(
+				duration,
 				"method", r.Method,
-				"path", r.URL.Path,
-				"status", strconv.Itoa(wrapped.statusCode),
+				"path", normalizedPath,
+				"status", statusStr,
 			)
 		})
 	}
@@ -50,4 +71,21 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// normalizePath normalizes paths to avoid cardinality explosion.
+// Examples:
+//   - /api/users/123 → /api/users/{id}
+//   - /posts/456/comments → /posts/{id}/comments
+//   - /api/users/550e8400-e29b-41d4-a716-446655440000 → /api/users/{id}
+func normalizePath(path string) string {
+	// Replace UUIDs first (more specific pattern, case-insensitive)
+	uuidRe := regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	path = uuidRe.ReplaceAllString(path, "/{id}")
+
+	// Replace numeric IDs with {id} (after UUIDs to avoid partial matches)
+	re := regexp.MustCompile(`/\d+`)
+	path = re.ReplaceAllString(path, "/{id}")
+
+	return path
 }

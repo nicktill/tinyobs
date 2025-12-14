@@ -380,7 +380,7 @@ func TestE2E_FullPipeline(t *testing.T) {
 	}
 	t.Logf("✓ Query after restart returned %d data points", len(data2))
 
-	t.Log("✅ Full E2E pipeline test PASSED")
+	t.Log("Full E2E pipeline test PASSED")
 }
 
 // setupRouter creates a test router

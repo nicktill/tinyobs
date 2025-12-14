@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
@@ -53,22 +55,22 @@ type IngestResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-// HandleIngest handles the /v1/ingest endpoint
+// HandleIngest handles the /v1/ingest endpoint.
 func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	var req IngestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
 		return
 	}
 
 	// Check request size limit
 	if len(req.Metrics) > MaxMetricsPerRequest {
-		http.Error(w, ErrTooManyMetrics.Error(), http.StatusBadRequest)
+		httpx.RespondError(w, http.StatusBadRequest, ErrTooManyMetrics)
 		return
 	}
 
@@ -76,17 +78,17 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 	if h.storageChecker != nil {
 		currentUsage, err := h.storageChecker.GetUsage()
 		if err != nil {
-			log.Printf("⚠️  Failed to check storage usage: %v", err)
+			log.Printf("Failed to check storage usage: %v", err)
 			// Continue anyway - don't block ingestion on monitoring failure
 		} else {
 			limit := h.storageChecker.GetLimit()
 			if currentUsage >= limit {
 				// 507 Insufficient Storage (WebDAV standard, appropriate for storage limits)
-				w.WriteHeader(507)
-				http.Error(w, fmt.Sprintf("Storage limit exceeded: %d/%d bytes used (%.1f%%). Please free up space or increase limit.",
-					currentUsage, limit, float64(currentUsage)/float64(limit)*100), 507)
-				log.Printf("🚨 STORAGE LIMIT EXCEEDED: %d/%d bytes (%.1f%%) - rejecting ingest",
+				message := fmt.Sprintf("Storage limit exceeded: %d/%d bytes used (%.1f%%). Please free up space or increase limit.",
 					currentUsage, limit, float64(currentUsage)/float64(limit)*100)
+				log.Printf("STORAGE LIMIT EXCEEDED: %d/%d bytes (%.1f%%) - rejecting ingest",
+					currentUsage, limit, float64(currentUsage)/float64(limit)*100)
+				httpx.RespondErrorString(w, 507, message)
 				return
 			}
 		}
@@ -102,23 +104,23 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 
 		// Validate metric format
 		if err := ValidateMetric(req.Metrics[i]); err != nil {
-			http.Error(w, fmt.Sprintf("Invalid metric at index %d: %v", i, err), http.StatusBadRequest)
+			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid metric at index %d: %w", i, err))
 			return
 		}
 
 		// Check cardinality limits
 		if err := h.cardinality.Check(req.Metrics[i]); err != nil {
-			http.Error(w, fmt.Sprintf("Cardinality limit exceeded for metric %q: %v", req.Metrics[i].Name, err), http.StatusTooManyRequests)
+			httpx.RespondError(w, http.StatusTooManyRequests, fmt.Errorf("cardinality limit exceeded for metric %q: %w", req.Metrics[i].Name, err))
 			return
 		}
 	}
 
 	// Store metrics
-	ctx, cancel := context.WithTimeout(r.Context(), ingestTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestTimeout)
 	defer cancel()
 
 	if err := h.storage.Write(ctx, req.Metrics); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to store metrics: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to store metrics: %w", err))
 		return
 	}
 
@@ -133,16 +135,19 @@ func (h *Handler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		Count:  len(req.Metrics),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode ingest response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleQuery handles the /v1/query endpoint
+// QueryResponse represents the response for a query request.
+type QueryResponse struct {
+	Metrics []metrics.Metric `json:"metrics"`
+	Count   int              `json:"count"`
+}
+
+// HandleQuery handles the /v1/query endpoint.
 func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -151,13 +156,13 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Build storage query
 	req := storage.QueryRequest{
-		Start: parseTimeParam(query.Get("start"), time.Now().Add(-defaultQueryWindow)),
+		Start: parseTimeParam(query.Get("start"), time.Now().Add(-config.IngestDefaultQueryWindow)),
 		End:   parseTimeParam(query.Get("end"), time.Now()),
 	}
 
 	// Validate time range
 	if !req.Start.Before(req.End) {
-		http.Error(w, "start must be before end", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
 		return
 	}
 
@@ -166,50 +171,42 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		req.MetricNames = []string{metricName}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestQueryTimeout)
 	defer cancel()
 
 	results, err := h.storage.Query(ctx, req)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"metrics": results,
-		"count":   len(results),
-	}); err != nil {
-		log.Printf("❌ Failed to encode query response: %v", err)
+	response := QueryResponse{
+		Metrics: results,
+		Count:   len(results),
 	}
+
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleStats handles the /v1/stats endpoint
+// HandleStats handles the /v1/stats endpoint.
 func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), statsTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestStatsTimeout)
 	defer cancel()
 
 	stats, err := h.storage.Stats(ctx)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get stats: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to get stats: %w", err))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
-		log.Printf("❌ Failed to encode stats response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, stats)
 }
 
-// HandleCardinalityStats handles the /v1/cardinality endpoint
-// Returns cardinality usage statistics for monitoring
+// HandleCardinalityStats handles the /v1/cardinality endpoint.
+// Returns cardinality usage statistics for monitoring.
 func (h *Handler) HandleCardinalityStats(w http.ResponseWriter, r *http.Request) {
 	stats := h.cardinality.Stats()
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
-		log.Printf("❌ Failed to encode cardinality stats response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, stats)
 }
 
 // parseTimeParam parses a time parameter or returns default
@@ -229,6 +226,6 @@ func parseTimeParam(param string, defaultTime time.Time) time.Time {
 	}
 
 	// Log warning about invalid format
-	log.Printf("⚠️  Invalid time format %q, using default. Expected RFC3339 or 2006-01-02T15:04:05", param)
+	log.Printf("Invalid time format %q, using default. Expected RFC3339 or 2006-01-02T15:04:05", param)
 	return defaultTime
 }

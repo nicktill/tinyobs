@@ -88,6 +88,9 @@ func New(cfg Config) (*Storage, error) {
 		WithValueLogMaxEntries(uint32(valueLogMaxEntries)). // Limit value log entries
 		WithValueLogFileSize(64 << 20)                      // CRITICAL: 64 MB value log files instead of default 2GB!
 
+	// Suppress BadgerDB INFO logs (block cache metrics are too verbose)
+	opts = opts.WithLogger(nil) // nil logger suppresses INFO logs, only shows WARN/ERROR
+
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open badger: %w", err)
@@ -190,7 +193,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 								it.Close()
 								elapsed := time.Since(startTime)
 								if elapsed > 5*time.Second {
-									log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+									log.Printf("Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 								}
 								return ctx.Err()
 							default:
@@ -252,7 +255,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 							// Log slow query warning before returning error
 							elapsed := time.Since(startTime)
 							if elapsed > 5*time.Second {
-								log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+								log.Printf("Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 							}
 							return ctx.Err()
 						default:
@@ -297,7 +300,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 			// Log slow queries for performance monitoring
 			elapsed := time.Since(startTime)
 			if elapsed > 5*time.Second {
-				log.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+				log.Printf("Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 			}
 
 			return nil

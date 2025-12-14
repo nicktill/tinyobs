@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
@@ -50,46 +53,40 @@ type SeriesResult struct {
 	Values [][]interface{}   `json:"values"` // [[timestamp, value], ...]
 }
 
-const (
-	defaultStep        = 15 * time.Second
-	defaultQueryWindow = 1 * time.Hour
-	queryTimeout       = 30 * time.Second
-)
-
-// HandleQueryExecute handles the /v1/query/execute endpoint
+// HandleQueryExecute handles the /v1/query/execute endpoint.
 func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	var req QueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid JSON: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
 		return
 	}
 
 	// Validate query
 	if req.Query == "" {
-		respondError(w, http.StatusBadRequest, "query parameter is required")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
 		return
 	}
 
 	// Set defaults
 	now := time.Now()
 	if req.Start.IsZero() {
-		req.Start = now.Add(-defaultQueryWindow)
+		req.Start = now.Add(-config.QueryDefaultWindow)
 	}
 	if req.End.IsZero() {
 		req.End = now
 	}
 
 	// Parse step duration
-	step := defaultStep
+	step := config.QueryDefaultStep
 	if req.Step != "" {
 		parsedStep, err := time.ParseDuration(req.Step)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid step duration: %v", err))
+			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid step duration: %w", err))
 			return
 		}
 		step = parsedStep
@@ -97,7 +94,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 
 	// Validate time range
 	if !req.Start.Before(req.End) {
-		respondError(w, http.StatusBadRequest, "start must be before end")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
 		return
 	}
 
@@ -105,7 +102,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	parser := NewParser(req.Query)
 	expr, err := parser.Parse()
 	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Query parse error: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
 		return
 	}
 
@@ -122,7 +119,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.executor.Execute(ctx, query)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
 		return
 	}
 	// CRITICAL: Always close result to free memory
@@ -138,24 +135,21 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleQueryInstant handles the /v1/query endpoint (instant queries)
-// This is for compatibility with Prometheus query API
+// HandleQueryInstant handles the /v1/query endpoint (instant queries).
+// This is for compatibility with Prometheus query API.
 func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	// Parse query parameters
 	query := r.URL.Query().Get("query")
 	if query == "" {
-		respondError(w, http.StatusBadRequest, "query parameter is required")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
 		return
 	}
 
@@ -163,16 +157,24 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	timeParam := r.URL.Query().Get("time")
 	queryTime := time.Now()
 	if timeParam != "" {
-		if t, err := time.Parse(time.RFC3339, timeParam); err == nil {
+		if t, err := time.Parse(time.RFC3339, timeParam); err != nil {
+			// Invalid time format - log and use default (now)
+			log.Printf("Invalid time parameter %q, using current time: %v", timeParam, err)
+		} else {
 			queryTime = t
 		}
 	}
 
-	// For instant queries, start and end are the same
+	// For instant queries, we need a small time window to find the latest values
+	// Counters are stored with timestamps, so we look back 5 minutes to ensure we get data
+	// The aggregation will take the most recent value from each series
+	startTime := queryTime.Add(-5 * time.Minute)
+	endTime := queryTime
+
 	req := QueryRequest{
 		Query: query,
-		Start: queryTime,
-		End:   queryTime,
+		Start: startTime,
+		End:   endTime,
 		Step:  "1s", // Minimal step for instant query
 	}
 
@@ -180,7 +182,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	parser := NewParser(req.Query)
 	expr, err := parser.Parse()
 	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Query parse error: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
 		return
 	}
 
@@ -196,7 +198,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result, err := h.executor.Execute(ctx, queryObj)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
 		return
 	}
 	// CRITICAL: Always close result to free memory
@@ -212,10 +214,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
 // convertToSeriesResults converts executor result to API response format
@@ -261,15 +260,104 @@ func convertToInstantResults(result *Result) []SeriesResult {
 	return results
 }
 
-// respondError sends an error response
-func respondError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
+// HandlePrometheusQuery handles GET /api/v1/query (Prometheus-compatible instant query).
+// Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryInstant.
+func (h *Handler) HandlePrometheusQuery(w http.ResponseWriter, r *http.Request) {
+	h.HandleQueryInstant(w, r)
+}
+
+// HandlePrometheusQueryRange handles GET /api/v1/query_range (Prometheus-compatible range query).
+// Maps Prometheus query parameters to TinyObs format and delegates to HandleQueryExecute.
+func (h *Handler) HandlePrometheusQueryRange(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	query := r.URL.Query()
+	queryStr := query.Get("query")
+	if queryStr == "" {
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
+		return
+	}
+
+	// Parse Prometheus time parameters (Unix timestamps)
+	now := time.Now()
+	start := parsePrometheusTime(query.Get("start"), now.Add(-config.QueryDefaultWindow))
+	end := parsePrometheusTime(query.Get("end"), now)
+	step := parsePrometheusDuration(query.Get("step"), config.QueryDefaultStep)
+
+	// Validate time range
+	if !start.Before(end) {
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
+		return
+	}
+
+	// Build query object and execute directly
+	parser := NewParser(queryStr)
+	expr, err := parser.Parse()
+	if err != nil {
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
+		return
+	}
+
+	queryObj := &Query{
+		Expr:  expr,
+		Start: start,
+		End:   end,
+		Step:  step,
+	}
+
+	ctx := r.Context()
+	result, err := h.executor.Execute(ctx, queryObj)
+	if err != nil {
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
+		return
+	}
+	defer result.Close()
+
 	response := QueryResponse{
-		Status: "error",
-		Error:  message,
+		Status: "success",
+		Query:  queryStr,
+		Data: &ResultData{
+			ResultType: "matrix",
+			Result:     convertToSeriesResults(result),
+		},
 	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode error response: %v", err)
+
+	httpx.RespondJSON(w, http.StatusOK, response)
+}
+
+// parsePrometheusTime parses Prometheus time parameter (Unix timestamp or RFC3339).
+func parsePrometheusTime(param string, defaultTime time.Time) time.Time {
+	if param == "" {
+		return defaultTime
 	}
+
+	// Try Unix timestamp first (Prometheus default - float64 seconds since epoch)
+	if unix, err := strconv.ParseFloat(param, 64); err == nil {
+		sec := int64(unix)
+		nsec := int64((unix - float64(sec)) * 1e9)
+		return time.Unix(sec, nsec)
+	}
+
+	// Try RFC3339
+	if t, err := time.Parse(time.RFC3339, param); err == nil {
+		return t
+	}
+
+	return defaultTime
+}
+
+// parsePrometheusDuration parses Prometheus duration string (e.g., "15s", "1m").
+func parsePrometheusDuration(param string, defaultDuration time.Duration) time.Duration {
+	if param == "" {
+		return defaultDuration
+	}
+
+	if d, err := time.ParseDuration(param); err == nil {
+		return d
+	}
+
+	return defaultDuration
 }

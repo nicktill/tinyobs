@@ -1,129 +1,49 @@
 # TinyObs
 
-**A metrics platform you can actually understand.**
+**A lightweight metrics platform you can actually understand.**
 
 [![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
 
-I built TinyObs because I wanted to understand how observability systems work. Prometheus has 300k+ lines of code. I wanted something smaller that I could actually read and learn from.
-
-TinyObs is an observability platform in ~7,800 lines of Go (excluding tests and blank lines). It's small enough to read through in a weekend, and works well for local development. You get metrics collection, distributed tracing, storage, downsampling, real-time dashboards, and an SDK.
-
-**What you get:**
-- Push-based metrics SDK (counters, gauges, histograms)
-- Persistent storage with BadgerDB
-- Automatic downsampling: raw → 5min → 1hr aggregates
-- Dashboard with light/dark themes and keyboard shortcuts
-- Query API with auto-downsampling based on time range
-- Distributed tracing with W3C Trace Context support
-- Service topology visualization
-- WebSocket live updates (no more 30s polling)
-- Export/import metrics (JSON, CSV)
-- `/metrics` endpoint for Prometheus/Grafana to scrape FROM TinyObs
-- Readable code with comments
-
-**Why you might want this:**
-- You want to learn how metrics systems work
-- You need local metrics during development
-- You're learning Go and want to see a real-world codebase
+TinyObs is a metrics platform in ~5,000 lines of Go (excluding tests). Small enough to read in a weekend, useful enough for local development.
 
 ## Quick Start
 
-Get it running in 30 seconds:
+### Option 1: Docker
 
 ```bash
-# Clone the repo
-git clone https://github.com/nicktill/tinyobs.git
-cd tinyobs
+# Start server
+docker-compose up -d
 
-# Terminal 1: Start TinyObs server
-go run ./cmd/server
-
-# Terminal 2: Run the example app (generates fake metrics)
-go run ./cmd/example
-
-# Terminal 3: Open the dashboard
+# View dashboard
 open http://localhost:8080
 ```
 
-You should see charts populating with fake API traffic. The example app simulates a web service with random latencies and occasional errors. Press `T` to toggle between light and dark themes, or `?` to see all keyboard shortcuts.
-
-## Screenshots
-
-### Dashboard View
-The main dashboard automatically groups metrics by service and displays time-series charts with auto-downsampling.
-
-<table>
-  <tr>
-    <td width="50%">
-      <b>Dark Theme</b><br/>
-      <img src="screenshots/dashboard-dark-theme-view.png" alt="Dashboard - Dark Theme"/>
-    </td>
-    <td width="50%">
-      <b>Light Theme</b><br/>
-      <img src="screenshots/dashboard-light-theme-view.png" alt="Dashboard - Light Theme"/>
-    </td>
-  </tr>
-</table>
-
-### Explore View
-Select and overlay multiple metrics on a single chart for comparison. Search, filter, and compare any combination of time series.
-
-<table>
-  <tr>
-    <td width="50%">
-      <b>Metric Selection</b><br/>
-      <img src="screenshots/explore-dark-view.png" alt="Explore View - Metric Selection"/>
-    </td>
-    <td width="50%">
-      <b>Multi-Metric Overlay</b><br/>
-      <img src="screenshots/explore-light-view-with-graph.png" alt="Explore View - Multi-Metric Chart"/>
-    </td>
-  </tr>
-</table>
-
-### Key Features Shown
-- 🎨 **Light/Dark Theme Toggle** - Seamless theme switching with localStorage persistence
-- 🔍 **Smart Filtering** - Filter by service, endpoint, or metric name
-- ⌨️ **Keyboard Shortcuts** - Navigate fast with shortcuts (D, E, R, T, /, ESC, 1-4)
-- 📈 **Multi-Metric Overlays** - Compare multiple time series on one chart
-- 🎯 **Auto-Downsampling** - Intelligent resolution selection based on time range
-- 📊 **Stable Colors** - Consistent color assignment across refreshes
-
-## Dashboard Features
-
-### Keyboard Shortcuts
-The dashboard includes powerful keyboard shortcuts for fast navigation:
-
-| Key | Action |
-|-----|--------|
-| `D` | Switch to Dashboard view |
-| `E` | Switch to Explore view |
-| `R` | Refresh current view |
-| `T` | Toggle light/dark theme |
-| `/` | Focus search (Explore view) |
-| `ESC` | Clear selection or unfocus input |
-| `1-4` | Quick time range selection (1h, 6h, 24h, 7d) |
-
-### Visual Features
-- **Theme Toggle** - Click ☀️/🌙 in the header or press `T` to switch themes. Preference saved automatically.
-- **Auto-Downsampling** - Charts automatically select the best resolution (raw/5m/1h) based on time range for optimal performance.
-- **Multi-Metric Overlays** - Compare multiple time series on a single chart in Explore view.
-- **Smart Filtering** - Filter metrics by service, endpoint, or metric name with auto-discovery.
-
-## Using the SDK
-
-### Installation
+### Option 2: Local Development
 
 ```bash
-go get github.com/nicktill/tinyobs
+# Terminal 1: Start server
+go run ./cmd/server
+
+# Terminal 2: Run example app (generates metrics)
+go run ./cmd/example
+
+# Terminal 3: Open dashboard
+open http://localhost:8080
 ```
 
-### Basic Usage
+## What You Get
 
-Here's how to add TinyObs to your own Go app:
+- **Push-based metrics SDK** (counters, gauges, histograms)
+- **Persistent storage** with BadgerDB
+- **Automatic downsampling**: raw → 5min → 1hr aggregates (240x compression)
+- **Real-time dashboard** with WebSocket updates
+- **Query API** with time-range filtering and aggregations
+- **Export/Import** metrics (JSON, CSV)
+
+## Using the SDK
 
 ```go
 package main
@@ -131,481 +51,137 @@ package main
 import (
     "context"
     "net/http"
-
+    "time"
     "github.com/nicktill/tinyobs/pkg/sdk"
     "github.com/nicktill/tinyobs/pkg/sdk/httpx"
 )
 
 func main() {
-    // Create a TinyObs client
+    // Initialize TinyObs client
     client, _ := sdk.New(sdk.ClientConfig{
-        Service:  "my-app",
-        Endpoint: "http://localhost:8080/v1/ingest",
+        Service:    "my-app",
+        Endpoint:   "http://localhost:8080/v1/ingest",
+        FlushEvery: 5 * time.Second,
     })
-
-    client.Start(context.Background())
+    
+    ctx := context.Background()
+    client.Start(ctx)
     defer client.Stop()
-
-    // Wrap your HTTP handlers to get automatic metrics
+    
+    // Create HTTP server
     mux := http.NewServeMux()
-    mux.HandleFunc("/", homeHandler)
-
+    mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("OK"))
+    })
+    
+    // Add TinyObs middleware - automatically tracks:
+    //   - http_requests_total (counter): by method, path, status
+    //   - http_request_duration_seconds (histogram): request latency
     handler := httpx.Middleware(client)(mux)
+    
     http.ListenAndServe(":8080", handler)
+    
+    // You can also create custom metrics for business logic:
+    activeUsers := client.Gauge("active_users")
+    activeUsers.Set(42.0) // Set current active users
+    
+    errors := client.Counter("errors_total")
+    errors.Inc("type", "api_error", "endpoint", "/api/users")
 }
 ```
 
-This automatically tracks:
-- Request counts by endpoint, method, and status
-- Request duration histograms
-- Go runtime metrics (memory, goroutines, GC stats)
+## API Endpoints
 
-### Creating Custom Metrics
+- `POST /v1/ingest` - Ingest metrics
+- `GET /v1/query/range` - Query metrics with time range
+- `POST /v1/query/execute` - Execute query language queries
+- `GET /v1/export` - Export metrics (JSON/CSV)
+- `POST /v1/import` - Import metrics from backup
+- `GET /v1/health` - Health check
+- `GET /v1/ws` - WebSocket for real-time updates
 
-```go
-// Counter - for things that only go up
-requests := client.Counter("http_requests_total")
-requests.Inc("endpoint", "/api/users", "method", "GET")
+**Prometheus-compatible endpoints (for Grafana):**
+- `GET /api/v1/query` - Instant queries (Prometheus-compatible)
+- `GET /api/v1/query_range` - Range queries (Prometheus-compatible)
 
-// Gauge - for values that go up and down
-connections := client.Gauge("active_connections")
-connections.Inc()  // connection opened
-connections.Dec()  // connection closed
-
-// Histogram - for measuring distributions
-duration := client.Histogram("request_duration_seconds")
-duration.Observe(0.234, "endpoint", "/api/users")
-```
-
-### TinyQuery: PromQL-Compatible Queries
-
-TinyObs includes a full query language for analyzing metrics:
-
-```bash
-# Rate of HTTP requests over 5 minutes
-curl -X POST http://localhost:8080/v1/query/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "rate(http_requests_total[5m])",
-    "start": "2025-01-01T00:00:00Z",
-    "end": "2025-01-01T01:00:00Z",
-    "step": "15s"
-  }'
-
-# Sum requests by service
-rate(http_requests_total[5m])
-
-# Aggregate by service
-sum by (service) (http_requests_total)
-
-# Calculate error rate percentage
-(rate(http_errors_total[5m]) / rate(http_requests_total[5m])) * 100
-
-# 95th percentile latency
-quantile(0.95, http_request_duration_seconds)
-```
-
-**Supported features:**
-- Functions: `rate()`, `increase()`, `sum()`, `avg()`, `min()`, `max()`, `count()`, `quantile()`
-- Label matching: `{method="GET", status="200"}`
-- Range selectors: `[5m]`, `[1h]`, `[24h]`
-- Arithmetic: `+`, `-`, `*`, `/`, `^`, `%`
-- Aggregations: `sum by (label)`, `avg without (label)`
-
-## Architecture
-
-### Push-Based Model (Like Datadog/New Relic)
-
-**Important:** TinyObs uses a **push model**, not a pull model like Prometheus.
-
-- **Your apps** use the SDK to **push** metrics → TinyObs `/v1/ingest` endpoint
-- TinyObs stores metrics in BadgerDB
-- TinyObs exposes `/metrics` endpoint for Prometheus/Grafana to **pull FROM TinyObs**
-
-**This is NOT Prometheus:**
-- ❌ TinyObs does NOT scrape `/metrics` endpoints from your services
-- ✅ Your apps push metrics to TinyObs using the SDK
-- ✅ TinyObs includes distributed tracing (traces flow alongside metrics)
-- ✅ Optionally, Prometheus can scrape `/metrics` FROM TinyObs
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌──────────────────────────┐
-│   Your App      │    │   TinyObs SDK   │    │    TinyObs Server        │
-│                 │    │                 │    │                          │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌──────────────────────┐ │
-│ │  Metrics    │─┼────┼─│   Batcher   │─┼────┼─│     REST API         │ │
-│ │  Counter    │ │PUSH│ │ (5s flush)  │ │PUSH│ │  /v1/ingest          │ │
-│ │  Gauge      │ │    │ └─────────────┘ │    │ │  /v1/query/range     │ │
-│ │  Histogram  │ │    │                 │    │ └──────────────────────┘ │
-│ └─────────────┘ │    │ ┌─────────────┐ │    │                          │
-│                 │    │ │HTTP Transport│─┼────┼─│ ┌──────────────────┐ │
-│ ┌─────────────┐ │    │ └─────────────┘ │    │ │  Storage Layer    │ │
-│ │ Middleware  │ │    │                 │    │ │  ┌──────────────┐ │ │
-│ │Auto-metrics │ │    │ ┌─────────────┐ │    │ │  │ Memory       │ │ │
-│ └─────────────┘ │    │ │Runtime Stats│ │    │ │  │ BadgerDB LSM │ │ │
-│                 │    │ └─────────────┘ │    │ │  └──────────────┘ │ │
-└─────────────────┘    └─────────────────┘    │ └──────────────────┘ │
-                                               │                          │
-                                               │ ┌──────────────────────┐ │
-                                               │ │  Compaction Engine   │ │
-                                               │ │  Raw → 5m → 1h       │ │
-                                               │ │  (240x reduction)    │ │
-                                               │ └──────────────────────┘ │
-                                               │                          │
-                                               │ ┌──────────────────────┐ │
-                                               │ │  Chart.js Dashboard  │ │
-                                               │ │  /dashboard.html     │ │
-                                               │ └──────────────────────┘ │
-                                               │                          │
-                                               │ ┌──────────────────────┐ │
-                                               │ │  /metrics Endpoint   │ │
-                                               │ │  (Prometheus compat) │◄─┐
-                                               │ └──────────────────────┘ │ PULL
-                                               └──────────────────────────┘ │
-                                                                            │
-                                                                  ┌─────────────┐
-                                                                  │ Prometheus/ │
-                                                                  │  Grafana    │
-                                                                  │ (Optional)  │
-                                                                  └─────────────┘
-```
-
-**How it works:**
-1. SDK batches metrics and pushes every 5s via HTTP to TinyObs
-2. Server stores in BadgerDB (LSM tree with Snappy compression)
-3. Compaction runs hourly: raw → 5m → 1h aggregates (240x compression)
-4. Dashboard queries with auto-downsampling for performance
-5. Time-series charts update in real-time via WebSocket
-6. Distributed traces flow alongside metrics for full observability
-7. (Optional) External tools like Prometheus can scrape TinyObs's `/metrics` endpoint
-
-## API
-
-TinyObs provides a REST API for ingesting and querying metrics:
-
-### POST /v1/ingest
-Ingest metrics from your application.
-
-```json
-{
-  "metrics": [
-    {
-      "name": "http_requests_total",
-      "type": "counter",
-      "value": 42,
-      "timestamp": "2025-11-16T01:30:00Z",
-      "labels": {
-        "service": "api-server",
-        "endpoint": "/users",
-        "status": "200"
-      }
-    }
-  ]
-}
-```
-
-### GET /v1/query
-Query metrics with optional filtering.
-
-```bash
-curl "http://localhost:8080/v1/query?metric=cpu_usage&start=2025-11-16T00:00:00Z"
-```
-
-### GET /v1/query/range
-Query metrics with time-range and auto-downsampling.
-
-```bash
-curl "http://localhost:8080/v1/query/range?metric=cpu_usage&start=2025-11-16T00:00:00Z&end=2025-11-16T23:59:59Z&maxPoints=1000"
-```
-
-**Parameters:**
-- `metric` (required): Metric name to query
-- `start` (optional): Start time (RFC3339 or 2006-01-02T15:04:05)
-- `end` (optional): End time (RFC3339 or 2006-01-02T15:04:05)
-- `maxPoints` (optional): Maximum data points to return (default: 1000, max: 5000)
-
-Returns downsampled time-series data with automatic resolution selection (raw/5m/1h).
-
-### GET /v1/metrics/list
-List all available metric names from the last 24 hours.
-
-```bash
-curl "http://localhost:8080/v1/metrics/list"
-```
-
-### GET /v1/stats
-Get storage statistics.
-
-```bash
-curl "http://localhost:8080/v1/stats"
-```
-
-Returns total metrics count, unique series count, storage size, and time range.
+See [QUICK_START.md](QUICK_START.md) for detailed API examples.
 
 ## Configuration
 
-TinyObs can be configured via environment variables:
-
-### Environment Variables
+Environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `8080` |
-| `STORAGE_LIMIT_GB` | Maximum storage in GB | `1` |
-| `MEMORY_LIMIT_MB` | BadgerDB memory limit in MB | Auto (based on system) |
-
-### Data Directory
-
-By default, TinyObs stores data in `./data/` relative to where you run the server. Make sure this directory is writable.
-
-### Example Usage
-
-```bash
-# Custom port
-PORT=3000 go run cmd/server/main.go
-
-# Increase storage limit
-STORAGE_LIMIT_GB=5 go run cmd/server/main.go
-
-# Combine multiple settings
-PORT=9090 STORAGE_LIMIT_GB=10 go run cmd/server/main.go
-```
+| `TINYOBS_MAX_STORAGE_GB` | Max storage in GB | `1` |
+| `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory limit | `48` |
 
 ## Project Structure
 
 ```
 tinyobs/
 ├── cmd/
-│   ├── server/              # Ingest server (main.go + tests)
-│   └── example/             # Example app that generates metrics
+│   ├── server/     # Main server
+│   └── example/    # Example app
 ├── pkg/
-│   ├── sdk/                 # Client SDK for instrumenting apps
-│   │   ├── client.go        # Main SDK client
-│   │   ├── batch/           # Batching logic (5s flush)
-│   │   ├── metrics/         # Counter, Gauge, Histogram types
-│   │   ├── httpx/           # HTTP middleware for auto-metrics
-│   │   ├── runtime/         # Runtime metrics collector (Go stats)
-│   │   └── transport/       # HTTP transport layer
-│   ├── ingest/              # Server-side ingestion
-│   │   ├── handler.go       # REST API handlers
-│   │   ├── dashboard.go     # Dashboard API endpoints
-│   │   ├── websocket.go     # WebSocket live updates
-│   │   ├── topology.go      # Service topology graph
-│   │   └── prometheus.go    # Prometheus /metrics endpoint
-│   ├── storage/             # Pluggable storage layer
-│   │   ├── interface.go     # Storage abstraction
-│   │   ├── memory/          # In-memory storage (fast, ephemeral)
-│   │   └── badger/          # BadgerDB storage (persistent, LSM)
-│   ├── compaction/          # Multi-resolution downsampling
-│   │   ├── compactor.go     # Compaction engine
-│   │   └── types.go         # Aggregate types and metadata
-│   ├── query/               # Query parsing and execution
-│   ├── tracing/             # Distributed tracing
-│   │   ├── tracer.go        # W3C Trace Context implementation
-│   │   ├── storage.go       # Trace storage (in-memory)
-│   │   ├── middleware.go    # HTTP auto-instrumentation
-│   │   └── handler.go       # Trace API endpoints
-│   └── export/              # Export/import functionality
-│       ├── export.go        # JSON/CSV export
-│       └── import.go        # Metric import
-└── web/
-    ├── dashboard.html       # Chart.js time-series dashboard
-    ├── traces.html          # Distributed tracing waterfall UI
-    └── index.html           # Simple dashboard (legacy)
+│   ├── sdk/        # Client SDK
+│   ├── ingest/     # Metrics ingestion
+│   ├── query/       # Query engine
+│   ├── storage/     # BadgerDB storage
+│   ├── compaction/ # Downsampling
+│   └── export/     # Backup/restore
+└── web/            # Dashboard UI
 ```
 
-**Code stats:** ~9,500 lines of production Go code (excluding tests, comments, and blank lines)
+## Why TinyObs?
 
-## The 53-Day Bug
+I built this to understand how metrics systems work. Prometheus has 300k+ lines. TinyObs is ~5,000 lines of core code you can actually read and learn from.
 
-Early in development, I forgot to kill the server. I left it running on my laptop for 53 days.
+**Perfect for:**
+- Learning how metrics systems work
+- Local development metrics
+- Understanding Go systems programming
 
-When I finally noticed, TinyObs had collected 2.9 million metrics and was eating 4.5 GB of RAM. The example app had been dutifully sending fake API metrics every 2 seconds, through sleep cycles, OS updates, and countless lid closes. macOS just... kept it alive.
-
-**Lessons learned the hard way:**
-- In-memory storage without retention = your RAM becomes a black hole
-- Memory leaks are silent killers. Things just get slower until you notice
-- Even side projects need production patterns (retention policies, cardinality limits)
-- macOS is *really* good at keeping background processes alive
-
-This bug shaped the entire V2.0 roadmap. I added BadgerDB for persistent storage, retention policies, cardinality protection, and downsampling. The 53-day bug forced me to build a real system instead of a toy.
-
-## What's Missing (And Why)
-
-TinyObs is opinionated. I left stuff out on purpose to keep the codebase learnable.
-
-**TinyQuery limitations:** The PromQL-compatible query language is functional with `rate()`, `sum()`, `avg()`, and aggregations, but missing some advanced features like regex label matching and subqueries. The recursive descent parser handles most real-world queries.
-
-**No alerting:** You can see your metrics and traces, but it won't email you when things break. Basic threshold alerts are planned, but for now you're on your own.
-
-**No anomaly detection:** The system doesn't automatically detect unusual patterns or performance regressions. Statistical anomaly detection is on the roadmap.
-
-**Runs locally only:** No authentication, no HTTPS, no clustering. This is a local dev tool, not a production SaaS. If you want to run this in production, you'll need to add auth yourself.
-
-**Trace storage is ephemeral:** Traces are stored in-memory with 24-hour retention. Metrics get persistent BadgerDB storage, but traces don't yet.
-
-**Path assumptions:** The server expects `./web/` and `./data/` to exist relative to where you run it. This is lazy, I know. Just run it from the project directory.
-
-
-## Roadmap
-
-### ✅ V2.0 - Completed
-- [x] Time-series charts with Chart.js
-- [x] BadgerDB integration (LSM-based storage with Snappy compression)
-- [x] Query API with time-range filtering (`/v1/query/range`)
-- [x] Downsampling (raw → 5m → 1h aggregates, 240x compression)
-- [x] Production-quality dashboard with auto-downsampling
-
-### ✅ V2.1 - Polish (Completed)
-- [x] Resolution-aware data retention (enable cleanup)
-- [x] Cardinality protection (prevent label explosion)
-- [x] Prometheus `/metrics` endpoint (Grafana compatibility)
-- [x] Enhanced .gitignore for build artifacts
-
-### ✅ V2.2 - Smart Dashboard (Complete!)
-- [x] Multi-metric overlay charts (compare metrics on same chart)
-- [x] Dashboard templates (Go Runtime, HTTP API, Database presets)
-- [x] Label-based filtering UI with auto-discovery
-- [x] Modern gradient UI with improved UX
-- [x] Light/dark theme toggle with localStorage persistence
-- [x] Enhanced keyboard shortcuts (D, E, R, T, /, ESC, 1-4)
-- [x] Stable color assignment (no more flickering charts!)
-- [x] Auto-scroll to selected metrics in Explore view
-
-### ✅ V2.3 - Complete!
-- [x] Export/import metrics (JSON, CSV)
-- [x] Comprehensive test coverage
-- [x] Enhanced documentation (Architecture guide, tracing guide)
-- [x] Production-quality error handling
-
-### ✅ V3.0 - Distributed Observability (Complete!)
-- [x] WebSocket live updates (real-time dashboard)
-- [x] Distributed tracing with W3C Trace Context
-- [x] Service topology visualization
-- [x] Trace waterfall UI
-- [x] Cross-service trace propagation
-- [x] HTTP auto-instrumentation middleware
-
-### ✅ V3.1 - TinyQuery (Complete!)
-- [x] PromQL-compatible query language with recursive descent parser
-- [x] Functions: `rate()`, `increase()`, `sum()`, `avg()`, `min()`, `max()`, `count()`
-- [x] Label matching: `{service="api", method="GET"}`
-- [x] Range selectors: `[5m]`, `[1h]`
-- [x] Arithmetic: `a + b`, `a * b`, operator precedence
-- [x] Aggregations: `sum by (label) (metric)`, `avg without (label) (metric)`
-- [x] Query endpoints: `/v1/query/execute`, `/v1/query/instant` (Prometheus-compatible)
-
-### 📅 V4.0 - Alerting & Intelligence (Next)
-- [ ] Statistical anomaly detection (2σ from moving average)
-- [ ] Visual anomaly indicators on charts (red zones)
-- [ ] Simple threshold alerts (email/webhook)
-- [ ] Alert history view
-- [ ] Alert management UI
-- [ ] Dashboard template persistence
-
-### 🎯 V5.0 - Advanced Query Features
-- [ ] Regex label matching: `{service=~"api.*"}`
-- [ ] Subqueries and nested expressions
-- [ ] Query builder UI in dashboard
-- [ ] Performance benchmarks
-- [ ] Trace search and filtering
-- [ ] Query result caching
-
-### 🚀 V6.0+ - Production & Scale
-- [ ] High availability and clustering
-- [ ] Cloud storage backends (S3, GCS, MinIO)
-- [ ] Authentication & API keys
-- [ ] Multi-tenancy support
-- [ ] Persistent trace storage (BadgerDB integration)
-- [ ] Trace aggregation across instances
-
-## Why I Built This
-
-I've used Prometheus, Datadog, and New Relic professionally. They're great tools, but they're also black boxes. When something breaks or behaves weirdly, you're stuck Googling instead of actually understanding what's happening.
-
-**The learning problem:**
-- Prometheus: 300k+ lines of C++ and Go with gnarly TSDB internals
-- Datadog/New Relic: Closed source, can't even look
-- VictoriaMetrics: Production-focused, optimized to hell, hard to follow
-
-I wanted something I could actually *understand*. So I built TinyObs with three rules:
-
-1. **Small enough to read**: ~9,500 lines of Go (excluding tests). You can read it all in a weekend.
-2. **Real enough to use**: Not a toy. Persistent storage, compression, downsampling, distributed tracing, professional UI.
-3. **Honest documentation**: Comments explain *why* decisions were made, not just what the code does.
-
-This is what I wish existed when I was learning systems programming. If you're trying to understand how observability works—from metrics collection to distributed tracing—or you want a meaty portfolio project that shows real engineering thinking, this is for you.
-
-## Development
-
-```bash
-# Run from source
-go run cmd/server/main.go
-
-# Run tests
-make test
-go test ./... -v
-
-# Build binaries
-make build
-```
-
-## Contributing
-
-I built this to learn, and I'd love for others to learn from it too. Contributions are welcome, especially from people who are new to Go or systems programming.
-
-**If you're a beginner:**
-- Look for issues labeled `good first issue` - these are specifically designed to be approachable
-- Don't worry about making mistakes. I'll help you through the PR process
-- Ask questions in issues. There are no dumb questions
-
-**If you're experienced:**
-- Look for `help wanted` issues where I could use design input
-- Feel free to suggest architectural improvements, but keep in mind the goal is readability over optimization
-- Documentation improvements are always appreciated
-
-**General guidelines:**
-- Write tests for new features
-- Add comments explaining *why*, not just *what*
-- Keep the codebase small - if a feature adds >500 lines, let's discuss first
-- Run `go test ./...` before submitting
-
-Fork it, break it, fix it, submit a PR. I'll do my best to review quickly and help you get it merged.
-
-## Performance
-
-TinyObs is designed for local development. Some rough numbers on a MacBook Pro:
-
-- Writes: ~50k metrics/sec
-- Queries: <500ms for typical dashboards
-- Storage: Compression reduces disk usage significantly
-- Memory: ~50 MB baseline + overhead per series
-- Default limit: 10,000 series (configurable)
-
-For production scale, use Prometheus or VictoriaMetrics.
-
-## FAQ
-
-**Q: Can I use this in production?**
-A: TinyObs is built for local development and learning. For production, use Prometheus or similar tools.
-
-**Q: How does it compare to Prometheus?**
-A: Prometheus is production-grade with 300k+ lines. TinyObs is ~7,800 lines for learning. Use Prometheus for production.
-
-**Q: Can I use it with Grafana?**
-A: Yes! Point Prometheus at TinyObs's `/metrics` endpoint to scrape metrics that have been pushed to TinyObs. Then connect Grafana to Prometheus as usual.
+**Not for:**
+- Production deployments (use Prometheus)
+- Distributed tracing (use Jaeger/Zipkin)
+- Large-scale deployments
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) - Push vs Pull model explained
-- [Distributed Tracing](docs/TRACING.md) - How to use tracing features
-- [Package Docs](https://pkg.go.dev/github.com/nicktill/tinyobs) - Go package documentation
+- [Quick Start Guide](QUICK_START.md) - Detailed setup and testing
+- [Architecture](docs/ARCHITECTURE.md) - System design
+- [Testing Guide](TESTING.md) - How to test
 
-## Resources
+## Development
 
-- [Prometheus TSDB Design](https://github.com/prometheus/prometheus/blob/main/tsdb/docs/format/README.md) - Time-series internals
-- [Gorilla Paper](http://www.vldb.org/pvldb/vol8/p1816-teller.pdf) - Compression algorithm
-- [Systems Performance](http://www.brendangregg.com/systems-performance-2nd-edition-book.html) - Observability fundamentals
+### Local Development
+
+```bash
+# Run tests
+go test ./...
+
+# Build
+go build ./cmd/server
+
+# Run with custom config
+PORT=3000 TINYOBS_MAX_STORAGE_GB=5 go run ./cmd/server
+```
+
+### Docker
+
+```bash
+# Build and start
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 
 ## License
 

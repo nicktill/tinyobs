@@ -885,7 +885,6 @@
                             <ul>
                                 <li><kbd>D</kbd> Dashboard view</li>
                                 <li><kbd>E</kbd> Explore view</li>
-                                <li><kbd>M</kbd> Service Map (Topology)</li>
                                 <li><kbd>R</kbd> Refresh current view</li>
                                 <li><kbd>T</kbd> Toggle theme</li>
                                 <li><kbd>/</kbd> Focus search (Explore)</li>
@@ -900,7 +899,6 @@
         <nav class="nav-tabs">
             <button class="nav-tab active" onclick="switchView('dashboard')" id="dashboardTab">Dashboard</button>
             <button class="nav-tab" onclick="switchView('explore')" id="exploreTab">Explore Metrics</button>
-            <button class="nav-tab" onclick="switchView('topology')" id="topologyTab">Service Map</button>
         </nav>
     </div>
 
@@ -986,53 +984,6 @@
                         <canvas id="exploreChart"></canvas>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Topology View -->
-        <div id="topology-view" class="view">
-            <div class="toolbar">
-                <div class="toolbar-left">
-                    <select id="topologyTimeRange" onchange="refreshTopology()">
-                        <option value="1">Last 1 hour</option>
-                        <option value="6">Last 6 hours</option>
-                        <option value="24" selected>Last 24 hours</option>
-                        <option value="168">Last 7 days</option>
-                    </select>
-                    <span class="badge" id="nodeCount">0 services</span>
-                    <span class="badge" id="edgeCount">0 connections</span>
-                </div>
-                <div class="toolbar-right">
-                    <button class="primary" onclick="refreshTopology()">↻ Refresh</button>
-                </div>
-            </div>
-
-            <div id="topologyLegend" style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem;">
-                <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.875rem;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent-blue);"></div>
-                        <span>Service</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent-green);"></div>
-                        <span>Database</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent-orange);"></div>
-                        <span>External</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <div style="width: 20px; height: 2px; background: var(--text-secondary);"></div>
-                        <span>Calls</span>
-                    </div>
-                </div>
-            </div>
-
-            <div id="topologyCanvas" style="background: var(--bg-secondary); border-radius: 8px; min-height: 600px; position: relative;">
-                <div id="topologyLoading" class="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-                    Loading topology...
-                </div>
-                <svg id="topologySvg" width="100%" height="600"></svg>
             </div>
         </div>
     </div>

@@ -7,7 +7,6 @@ Server-side metric ingestion and query API.
 - REST API endpoints (`/v1/ingest`, `/v1/query`, `/v1/stats`)
 - WebSocket hub for real-time metric streaming
 - Cardinality protection (prevents label explosion)
-- Prometheus `/metrics` endpoint (Grafana compatible)
 
 ## Quick Start
 
@@ -41,8 +40,6 @@ curl "http://localhost:8080/v1/query?metric=http_requests_total&start=2025-11-18
 **GET /v1/stats** - Storage statistics
 
 **GET /v1/cardinality** - Cardinality usage
-
-**GET /metrics** - Prometheus export (for Grafana)
 
 ## WebSocket Real-Time
 

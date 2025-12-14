@@ -20,6 +20,17 @@ curl -X POST http://localhost:8080/v1/query/execute \
 curl "http://localhost:8080/v1/query/instant?query=http_requests_total"
 ```
 
+**Prometheus API endpoints (Grafana-compatible):**
+```bash
+# Instant query
+curl "http://localhost:8080/api/v1/query?query=http_requests_total"
+
+# Range query
+curl "http://localhost:8080/api/v1/query_range?query=http_requests_total&start=2025-01-01T00:00:00Z&end=2025-01-01T01:00:00Z&step=15s"
+```
+
+These endpoints are compatible with Grafana's Prometheus data source.
+
 ## Supported Queries
 
 ### Vector Selectors

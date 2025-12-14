@@ -6,19 +6,14 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
-const (
-	// DefaultMaxMetrics is the default maximum number of metrics to store
-	// ~5 MB memory at 100 bytes per metric
-	DefaultMaxMetrics = 50000
-)
-
 var (
 	// ErrMemoryLimitExceeded is returned when storage limit is reached
-	ErrMemoryLimitExceeded = fmt.Errorf("memory storage limit exceeded (max %d metrics)", DefaultMaxMetrics)
+	ErrMemoryLimitExceeded = fmt.Errorf("memory storage limit exceeded (max %d metrics)", config.DefaultMaxMetrics)
 )
 
 // Storage stores metrics in memory. Data is lost on restart.
@@ -34,7 +29,7 @@ type Storage struct {
 func New() *Storage {
 	return &Storage{
 		metrics:    make([]metrics.Metric, 0, 10000),
-		MaxMetrics: DefaultMaxMetrics,
+		MaxMetrics: config.DefaultMaxMetrics,
 	}
 }
 
@@ -46,7 +41,7 @@ func (s *Storage) Write(ctx context.Context, metrics []metrics.Metric) error {
 
 	maxMetrics := s.MaxMetrics
 	if maxMetrics == 0 {
-		maxMetrics = DefaultMaxMetrics
+		maxMetrics = config.DefaultMaxMetrics
 	}
 
 	// Check if adding these metrics would exceed limit

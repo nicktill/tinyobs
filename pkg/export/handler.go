@@ -1,21 +1,14 @@
 package export
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
-)
-
-const (
-	// DefaultExportWindow is the default time range for exports (last 24 hours)
-	DefaultExportWindow = 24 * time.Hour
-
-	// MaxExportWindow is the maximum allowed export time range (30 days)
-	MaxExportWindow = 30 * 24 * time.Hour
 )
 
 // Handler handles export/import HTTP endpoints
@@ -40,7 +33,7 @@ func NewHandler(store storage.Storage) *Handler {
 //   - metric: metric name filter (optional)
 func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -53,23 +46,23 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 		format = "json"
 	}
 	if format != "json" && format != "csv" {
-		http.Error(w, "Invalid format. Must be 'json' or 'csv'", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "Invalid format. Must be 'json' or 'csv'")
 		return
 	}
 
 	// Parse time range
 	end := parseTimeParam(query.Get("end"), time.Now())
-	start := parseTimeParam(query.Get("start"), end.Add(-DefaultExportWindow))
+	start := parseTimeParam(query.Get("start"), end.Add(-config.DefaultExportWindow))
 
 	// Validate time range
 	if !start.Before(end) {
-		http.Error(w, "start must be before end", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
 		return
 	}
 
 	// Check if time range is too large
-	if end.Sub(start) > MaxExportWindow {
-		http.Error(w, fmt.Sprintf("Time range too large. Maximum is %v", MaxExportWindow), http.StatusBadRequest)
+	if end.Sub(start) > config.MaxExportWindow {
+		httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("Time range too large. Maximum is %v", config.MaxExportWindow))
 		return
 	}
 
@@ -107,26 +100,26 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("❌ Export failed: %v", err)
-		http.Error(w, fmt.Sprintf("Export failed: %v", err), http.StatusInternalServerError)
+		log.Printf("Export failed: %v", err)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("export failed: %w", err))
 		return
 	}
 
-	log.Printf("✅ Exported %d metrics (%s) from %s", result.MetricsExported, format, result.TimeRange)
+	log.Printf("Exported %d metrics (%s) from %s", result.MetricsExported, format, result.TimeRange)
 }
 
 // HandleImport handles POST /v1/import
 // Accepts JSON backup files and imports metrics into storage
 func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	// Check content type
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
-		http.Error(w, "Content-Type must be application/json", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "Content-Type must be application/json")
 		return
 	}
 
@@ -134,14 +127,14 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result, err := h.importer.ImportFromJSON(ctx, r.Body)
 	if err != nil {
-		log.Printf("❌ Import failed: %v", err)
-		http.Error(w, fmt.Sprintf("Import failed: %v", err), http.StatusInternalServerError)
+		log.Printf("Import failed: %v", err)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("import failed: %w", err))
 		return
 	}
 
 	// Log warnings if there were validation errors
 	if len(result.Errors) > 0 {
-		log.Printf("⚠️  Import completed with %d validation errors", len(result.Errors))
+		log.Printf("Import completed with %d validation errors", len(result.Errors))
 		for i, err := range result.Errors {
 			if i < 10 { // Log first 10 errors
 				log.Printf("   - %s", err)
@@ -152,14 +145,10 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("✅ Imported %d metrics in %d batches from %s", result.MetricsImported, result.BatchesWritten, result.TimeRange)
+	log.Printf("Imported %d metrics in %d batches from %s", result.MetricsImported, result.BatchesWritten, result.TimeRange)
 
 	// Return result
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		log.Printf("❌ Failed to encode import response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, result)
 }
 
 // parseTimeParam parses a time parameter or returns default

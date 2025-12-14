@@ -2,31 +2,15 @@ package ingest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
-)
-
-const (
-	// API timeouts
-	ingestTimeout = 5 * time.Second
-	queryTimeout  = 10 * time.Second
-	statsTimeout  = 5 * time.Second
-	listTimeout   = 5 * time.Second
-
-	// Query defaults and limits
-	defaultQueryWindow    = 1 * time.Hour
-	defaultMaxPoints      = 1000
-	maxPointsLimit        = 5000
-	metricsListLimit      = 10000
-	metricsListTimeWindow = 24 * time.Hour
-	maxQueryWindow        = 90 * 24 * time.Hour // 90 days max
 )
 
 // MetricsListResponse returns available metric names
@@ -54,24 +38,24 @@ type Point struct {
 	Value     float64 `json:"v"`
 }
 
-// HandleMetricsList returns list of available metrics
+// HandleMetricsList returns list of available metrics.
 func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), listTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestListTimeout)
 	defer cancel()
 
 	// Query last 24h to find active metrics
 	results, err := h.storage.Query(ctx, storage.QueryRequest{
-		Start: time.Now().Add(-metricsListTimeWindow),
+		Start: time.Now().Add(-config.IngestMetricsListTimeWindow),
 		End:   time.Now(),
-		Limit: metricsListLimit,
+		Limit: config.IngestMetricsListLimit,
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
 		return
 	}
 
@@ -92,19 +76,17 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(metrics)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(MetricsListResponse{
+	response := MetricsListResponse{
 		Metrics: metrics,
 		Count:   len(metrics),
-	}); err != nil {
-		log.Printf("❌ Failed to encode metrics list response: %v", err)
 	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleRangeQuery returns time-series data with smart downsampling
+// HandleRangeQuery returns time-series data with smart downsampling.
 func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -113,13 +95,13 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	// Required parameter
 	metricName := query.Get("metric")
 	if metricName == "" {
-		http.Error(w, "metric parameter required", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "metric parameter required")
 		return
 	}
 
 	// Basic validation: ensure metric name is reasonable
 	if len(metricName) > 256 {
-		http.Error(w, "metric name too long (max 256 chars)", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "metric name too long (max 256 chars)")
 		return
 	}
 
@@ -129,33 +111,33 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Validate time range
 	if end.Before(start) {
-		http.Error(w, "end must be after start", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "end must be after start")
 		return
 	}
 
 	// Prevent queries that are too large
 	queryWindow := end.Sub(start)
-	if queryWindow > maxQueryWindow {
-		http.Error(w, "query window too large (max 90 days)", http.StatusBadRequest)
+	if queryWindow > config.IngestMaxQueryWindow {
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query window too large (max 90 days)")
 		return
 	}
 
 	// Parse max points (default: 1000 for performance)
-	maxPoints := defaultMaxPoints
+	maxPoints := config.IngestDefaultMaxPoints
 	if mp := query.Get("maxPoints"); mp != "" {
 		parsed, err := strconv.Atoi(mp)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("invalid maxPoints: %q is not an integer", mp), http.StatusBadRequest)
+			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid maxPoints: %q is not an integer", mp))
 			return
 		}
-		if parsed <= 0 || parsed > maxPointsLimit {
-			http.Error(w, fmt.Sprintf("maxPoints must be between 1 and %d", maxPointsLimit), http.StatusBadRequest)
+		if parsed <= 0 || parsed > config.IngestMaxPointsLimit {
+			httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("maxPoints must be between 1 and %d", config.IngestMaxPointsLimit))
 			return
 		}
 		maxPoints = parsed
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestQueryTimeout)
 	defer cancel()
 
 	// Query metrics
@@ -165,7 +147,7 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		MetricNames: []string{metricName},
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
 		return
 	}
 
@@ -234,11 +216,8 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		response.Data = append(response.Data, *series)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode range query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
 // makeSeriesKey creates a unique key for a series
