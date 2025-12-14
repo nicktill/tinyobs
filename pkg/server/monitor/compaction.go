@@ -56,7 +56,7 @@ func (cm *CompactionMonitor) IsHealthy() bool {
 	return true
 }
 
-// Status returns current compaction status for health checks.
+// CompactionStatus represents compaction health status for health checks.
 type CompactionStatus struct {
 	Healthy           bool   `json:"healthy"`
 	LastSuccess       string `json:"last_success,omitempty"`

@@ -29,6 +29,7 @@ func RespondError(w http.ResponseWriter, status int, err error) {
 	}
 	RespondJSON(w, status, response)
 }
+
 // RespondErrorString writes an error response with the given status code and error message string.
 func RespondErrorString(w http.ResponseWriter, status int, message string) {
 	response := ErrorResponse{

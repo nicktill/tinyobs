@@ -7,21 +7,18 @@ import (
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/ingest"
 	"github.com/nicktill/tinyobs/pkg/server/monitor"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
 )
 
-const (
-	compactionInterval = 1 * time.Hour
-)
-
 // RunCompaction runs the compaction job periodically.
 func RunCompaction(compactor *compaction.Compactor, monitor *monitor.CompactionMonitor, stop chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	ticker := time.NewTicker(compactionInterval)
+	ticker := time.NewTicker(config.CompactionInterval)
 	defer ticker.Stop()
 
 	// Helper function to run compaction with retry and exponential backoff
@@ -163,8 +160,7 @@ func BroadcastMetrics(ctx context.Context, store storage.Storage, hub *ingest.Me
 func RunBadgerGC(store storage.Storage, stop chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// GC runs every 10 minutes
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(config.BadgerGCInterval)
 	defer ticker.Stop()
 
 	// Type assert to get underlying BadgerDB

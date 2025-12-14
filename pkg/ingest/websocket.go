@@ -9,17 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-)
-
-const (
-	// WebSocket configuration
-	wsReadBufferSize  = 1024
-	wsWriteBufferSize = 1024
-	wsBroadcastBuffer = 256
-	wsChannelBuffer   = 10 // Buffer for register/unregister to prevent blocking
-	wsWriteDeadline   = 10 * time.Second
-	wsReadDeadline    = 60 * time.Second
-	wsPingInterval    = 30 * time.Second
+	"github.com/nicktill/tinyobs/pkg/config"
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,8 +19,8 @@ var upgrader = websocket.Upgrader{
 		// No Origin header = direct connection (non-browser clients like curl, testing tools)
 		return origin == "" || origin == "http://"+r.Host || origin == "https://"+r.Host
 	},
-	ReadBufferSize:  wsReadBufferSize,
-	WriteBufferSize: wsWriteBufferSize,
+	ReadBufferSize:  config.WSReadBufferSize,
+	WriteBufferSize: config.WSWriteBufferSize,
 }
 
 // MetricsHub manages WebSocket connections for real-time metrics streaming
@@ -54,9 +44,9 @@ type MetricsHub struct {
 func NewMetricsHub() *MetricsHub {
 	return &MetricsHub{
 		clients:    make(map[*websocket.Conn]bool),
-		register:   make(chan *websocket.Conn, wsChannelBuffer),
-		unregister: make(chan *websocket.Conn, wsChannelBuffer),
-		broadcast:  make(chan []byte, wsBroadcastBuffer),
+		register:   make(chan *websocket.Conn, config.WSChannelBuffer),
+		unregister: make(chan *websocket.Conn, config.WSChannelBuffer),
+		broadcast:  make(chan []byte, config.WSBroadcastBuffer),
 	}
 }
 
@@ -92,7 +82,7 @@ func (h *MetricsHub) Run(ctx context.Context) {
 			// Collect failed connections to unregister after releasing lock
 			var failed []*websocket.Conn
 			for conn := range h.clients {
-				conn.SetWriteDeadline(time.Now().Add(wsWriteDeadline))
+				conn.SetWriteDeadline(time.Now().Add(config.WSWriteDeadline))
 				if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
 					log.Printf("WebSocket write error: %v", err)
 					failed = append(failed, conn)
@@ -151,7 +141,7 @@ func (h *Handler) HandleWebSocket(hub *MetricsHub) http.HandlerFunc {
 
 		// Start ping sender to keep connection alive
 		go func() {
-			ticker := time.NewTicker(wsPingInterval)
+			ticker := time.NewTicker(config.WSPingInterval)
 			defer ticker.Stop()
 
 			for {
@@ -159,7 +149,7 @@ func (h *Handler) HandleWebSocket(hub *MetricsHub) http.HandlerFunc {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					conn.SetWriteDeadline(time.Now().Add(wsWriteDeadline))
+					conn.SetWriteDeadline(time.Now().Add(config.WSWriteDeadline))
 					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 						return
 					}
@@ -173,9 +163,9 @@ func (h *Handler) HandleWebSocket(hub *MetricsHub) http.HandlerFunc {
 			hub.unregister <- conn
 		}()
 
-		conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
+		conn.SetReadDeadline(time.Now().Add(config.WSReadDeadline))
 		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
+			conn.SetReadDeadline(time.Now().Add(config.WSReadDeadline))
 			return nil
 		})
 

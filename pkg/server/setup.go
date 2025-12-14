@@ -6,17 +6,13 @@ import (
 	"strconv"
 
 	"github.com/nicktill/tinyobs/pkg/compaction"
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/export"
 	"github.com/nicktill/tinyobs/pkg/ingest"
 	"github.com/nicktill/tinyobs/pkg/query"
 	"github.com/nicktill/tinyobs/pkg/server/monitor"
 	"github.com/nicktill/tinyobs/pkg/storage"
 	"github.com/nicktill/tinyobs/pkg/storage/badger"
-)
-
-const (
-	defaultPort         = "8080"
-	defaultMaxStorageGB = 1 // 1 GB default
 )
 
 // Config holds server configuration.
@@ -29,8 +25,8 @@ type Config struct {
 
 // LoadConfig loads configuration from environment variables.
 func LoadConfig() Config {
-	maxStorageGB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", defaultMaxStorageGB)
-	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", 48) // 48 MB default
+	maxStorageGB := getEnvInt64("TINYOBS_MAX_STORAGE_GB", config.DefaultMaxStorageGB)
+	maxMemoryMB := getEnvInt64("TINYOBS_MAX_MEMORY_MB", config.DefaultMaxMemoryMB)
 	port := getPort()
 
 	// Ensure data directory exists
@@ -95,7 +91,7 @@ func InitializeHandlers(
 func InitializeCompactor(store storage.Storage) (*compaction.Compactor, *monitor.CompactionMonitor) {
 	compactor := compaction.New(store)
 	compactionMonitor := &monitor.CompactionMonitor{}
-	log.Printf("Compaction engine ready (runs every %v)", compactionInterval)
+	log.Printf("Compaction engine ready (runs every %v)", config.CompactionInterval)
 	return compactor, compactionMonitor
 }
 
@@ -115,5 +111,5 @@ func getPort() string {
 	if port := os.Getenv("PORT"); port != "" {
 		return port
 	}
-	return defaultPort
+	return config.DefaultPort
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
@@ -51,12 +52,6 @@ type SeriesResult struct {
 	Values [][]interface{}   `json:"values"` // [[timestamp, value], ...]
 }
 
-const (
-	defaultStep        = 15 * time.Second
-	defaultQueryWindow = 1 * time.Hour
-	queryTimeout       = 30 * time.Second
-)
-
 // HandleQueryExecute handles the /v1/query/execute endpoint.
 func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -79,14 +74,14 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	// Set defaults
 	now := time.Now()
 	if req.Start.IsZero() {
-		req.Start = now.Add(-defaultQueryWindow)
+		req.Start = now.Add(-config.QueryDefaultWindow)
 	}
 	if req.End.IsZero() {
 		req.End = now
 	}
 
 	// Parse step duration
-	step := defaultStep
+	step := config.QueryDefaultStep
 	if req.Step != "" {
 		parsedStep, err := time.ParseDuration(req.Step)
 		if err != nil {

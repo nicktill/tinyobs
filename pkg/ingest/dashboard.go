@@ -8,24 +8,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
-)
-
-const (
-	// API timeouts
-	ingestTimeout = 5 * time.Second
-	queryTimeout  = 10 * time.Second
-	statsTimeout  = 5 * time.Second
-	listTimeout   = 5 * time.Second
-
-	// Query defaults and limits
-	defaultQueryWindow    = 1 * time.Hour
-	defaultMaxPoints      = 1000
-	maxPointsLimit        = 5000
-	metricsListLimit      = 10000
-	metricsListTimeWindow = 24 * time.Hour
-	maxQueryWindow        = 90 * 24 * time.Hour // 90 days max
 )
 
 // MetricsListResponse returns available metric names
@@ -60,14 +45,14 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), listTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestListTimeout)
 	defer cancel()
 
 	// Query last 24h to find active metrics
 	results, err := h.storage.Query(ctx, storage.QueryRequest{
-		Start: time.Now().Add(-metricsListTimeWindow),
+		Start: time.Now().Add(-config.IngestMetricsListTimeWindow),
 		End:   time.Now(),
-		Limit: metricsListLimit,
+		Limit: config.IngestMetricsListLimit,
 	})
 	if err != nil {
 		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
@@ -132,27 +117,27 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Prevent queries that are too large
 	queryWindow := end.Sub(start)
-	if queryWindow > maxQueryWindow {
+	if queryWindow > config.IngestMaxQueryWindow {
 		httpx.RespondErrorString(w, http.StatusBadRequest, "query window too large (max 90 days)")
 		return
 	}
 
 	// Parse max points (default: 1000 for performance)
-	maxPoints := defaultMaxPoints
+	maxPoints := config.IngestDefaultMaxPoints
 	if mp := query.Get("maxPoints"); mp != "" {
 		parsed, err := strconv.Atoi(mp)
 		if err != nil {
 			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid maxPoints: %q is not an integer", mp))
 			return
 		}
-		if parsed <= 0 || parsed > maxPointsLimit {
-			httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("maxPoints must be between 1 and %d", maxPointsLimit))
+		if parsed <= 0 || parsed > config.IngestMaxPointsLimit {
+			httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("maxPoints must be between 1 and %d", config.IngestMaxPointsLimit))
 			return
 		}
 		maxPoints = parsed
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), config.IngestQueryTimeout)
 	defer cancel()
 
 	// Query metrics

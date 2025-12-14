@@ -6,16 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/config"
 	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
-)
-
-const (
-	// DefaultExportWindow is the default time range for exports (last 24 hours)
-	DefaultExportWindow = 24 * time.Hour
-
-	// MaxExportWindow is the maximum allowed export time range (30 days)
-	MaxExportWindow = 30 * 24 * time.Hour
 )
 
 // Handler handles export/import HTTP endpoints
@@ -59,7 +52,7 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 
 	// Parse time range
 	end := parseTimeParam(query.Get("end"), time.Now())
-	start := parseTimeParam(query.Get("start"), end.Add(-DefaultExportWindow))
+	start := parseTimeParam(query.Get("start"), end.Add(-config.DefaultExportWindow))
 
 	// Validate time range
 	if !start.Before(end) {
@@ -68,8 +61,8 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if time range is too large
-	if end.Sub(start) > MaxExportWindow {
-		httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("Time range too large. Maximum is %v", MaxExportWindow))
+	if end.Sub(start) > config.MaxExportWindow {
+		httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("Time range too large. Maximum is %v", config.MaxExportWindow))
 		return
 	}
 
