@@ -63,7 +63,11 @@ func handleGetUsers(w http.ResponseWriter, r *http.Request, apiTracer, dbTracer,
 	ctx := r.Context()
 
 	// Check cache first
-	cacheCtx, cacheSpan := cacheTracer.StartSpan(ctx, "cache.lookup", tracing.SpanKindInternal)
+		cacheCtx, cacheSpan, err := cacheTracer.StartSpan(ctx, "cache.lookup", tracing.SpanKindInternal)
+		if err != nil {
+			log.Printf("Failed to start cache span: %v", err)
+			return
+		}
 	time.Sleep(time.Duration(rand.Intn(5)+1) * time.Millisecond) // Simulate cache lookup
 	if rand.Float32() < 0.3 {
 		// Cache hit
@@ -78,7 +82,11 @@ func handleGetUsers(w http.ResponseWriter, r *http.Request, apiTracer, dbTracer,
 	cacheTracer.FinishSpan(cacheCtx, cacheSpan)
 
 	// Cache miss - query database
-	dbCtx, dbSpan := dbTracer.StartSpan(ctx, "db.query.users", tracing.SpanKindInternal)
+		dbCtx, dbSpan, err := dbTracer.StartSpan(ctx, "db.query.users", tracing.SpanKindInternal)
+		if err != nil {
+			log.Printf("Failed to start db span: %v", err)
+			return
+		}
 	dbTracer.SetTag(dbSpan, "db.query", "SELECT * FROM users")
 	dbTracer.SetTag(dbSpan, "db.table", "users")
 
@@ -104,7 +112,11 @@ func handleGetOrders(w http.ResponseWriter, r *http.Request, apiTracer, dbTracer
 	ctx := r.Context()
 
 	// Query orders
-	dbCtx, dbSpan := dbTracer.StartSpan(ctx, "db.query.orders", tracing.SpanKindInternal)
+		dbCtx, dbSpan, err := dbTracer.StartSpan(ctx, "db.query.orders", tracing.SpanKindInternal)
+		if err != nil {
+			log.Printf("Failed to start db span: %v", err)
+			return
+		}
 	dbTracer.SetTag(dbSpan, "db.query", "SELECT * FROM orders")
 	dbTracer.SetTag(dbSpan, "db.table", "orders")
 

@@ -20,20 +20,35 @@ func HTTPMiddleware(tracer *Tracer) func(http.Handler) http.Handler {
 				headers[key] = r.Header.Get(key)
 			}
 
-			var ctx = r.Context()
+			ctx := r.Context()
 			var span *Span
 
 			// Check for existing trace context in headers
 			if traceCtx, ok := ParseHTTPHeaders(headers); ok {
 				// Continue existing trace
 				ctx = InjectTraceContext(ctx, traceCtx)
-				ctx, span = tracer.StartSpan(ctx, r.Method+" "+r.URL.Path, SpanKindServer)
+				var err error
+				ctx, span, err = tracer.StartSpan(ctx, r.Method+" "+r.URL.Path, SpanKindServer)
+				if err != nil {
+					// If span creation fails, continue without tracing
+					next.ServeHTTP(w, r)
+					return
+				}
 			} else {
 				// Start new trace
-				ctx, span = tracer.StartSpan(ctx, r.Method+" "+r.URL.Path, SpanKindServer)
+				var err error
+				ctx, span, err = tracer.StartSpan(ctx, r.Method+" "+r.URL.Path, SpanKindServer)
+				if err != nil {
+					// If span creation fails, continue without tracing
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 
 			// Add HTTP metadata to span
+			if span.Tags == nil {
+				span.Tags = make(map[string]string)
+			}
 			span.Tags["http.method"] = r.Method
 			span.Tags["http.url"] = r.URL.Path
 			span.Tags["http.host"] = r.Host
@@ -61,7 +76,7 @@ func HTTPMiddleware(tracer *Tracer) func(http.Handler) http.Handler {
 			}
 
 			// Finish span
-			tracer.FinishSpan(ctx, span)
+			_ = tracer.FinishSpan(ctx, span)
 		})
 	}
 }
@@ -117,9 +132,16 @@ type tracingRoundTripper struct {
 
 func (t *tracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Create client span
-	ctx, span := t.tracer.StartSpan(req.Context(), req.Method+" "+req.URL.Path, SpanKindClient)
+	ctx, span, err := t.tracer.StartSpan(req.Context(), req.Method+" "+req.URL.Path, SpanKindClient)
+	if err != nil {
+		// If span creation fails, continue without tracing
+		return t.next.RoundTrip(req)
+	}
 
 	// Add HTTP metadata
+	if span.Tags == nil {
+		span.Tags = make(map[string]string)
+	}
 	span.Tags["http.method"] = req.Method
 	span.Tags["http.url"] = req.URL.String()
 	span.Tags["http.host"] = req.Host
@@ -143,9 +165,9 @@ func (t *tracingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 	// Record error
 	if err != nil {
-		t.tracer.FinishSpanWithError(ctx, span, err)
+		_ = t.tracer.FinishSpanWithError(ctx, span, err)
 	} else {
-		t.tracer.FinishSpan(ctx, span)
+		_ = t.tracer.FinishSpan(ctx, span)
 	}
 
 	return resp, err

@@ -2,12 +2,13 @@ package tracing
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/nicktill/tinyobs/pkg/httpx"
 )
 
 // Handler handles tracing API endpoints
@@ -22,27 +23,37 @@ func NewHandler(storage *Storage) *Handler {
 	}
 }
 
-// HandleGetTrace retrieves a specific trace by ID
+// TracesResponse represents a response containing multiple traces.
+type TracesResponse struct {
+	Traces []*Trace `json:"traces"`
+	Count  int      `json:"count"`
+}
+
+// IngestSpanResponse represents the response for span ingestion.
+type IngestSpanResponse struct {
+	Status  string `json:"status"`
+	TraceID string `json:"trace_id"`
+	SpanID  string `json:"span_id"`
+}
+
+// HandleGetTrace retrieves a specific trace by ID.
 // GET /v1/traces/{trace_id}
 func (h *Handler) HandleGetTrace(w http.ResponseWriter, r *http.Request) {
 	// Extract trace ID from URL path using gorilla/mux
 	vars := mux.Vars(r)
 	traceIDStr := vars["trace_id"]
 	if traceIDStr == "" {
-		http.Error(w, "trace_id is required", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "trace_id is required")
 		return
 	}
 
 	trace, err := h.storage.GetTrace(r.Context(), TraceID(traceIDStr))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		httpx.RespondError(w, http.StatusNotFound, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(trace); err != nil {
-		log.Printf("❌ Failed to encode trace response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, trace)
 }
 
 // HandleQueryTraces queries traces by time range
@@ -67,17 +78,15 @@ func (h *Handler) HandleQueryTraces(w http.ResponseWriter, r *http.Request) {
 
 	traces, err := h.storage.QueryTraces(r.Context(), start, end, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"traces": traces,
-		"count":  len(traces),
-	}); err != nil {
-		log.Printf("❌ Failed to encode traces response: %v", err)
+	response := TracesResponse{
+		Traces: traces,
+		Count:  len(traces),
 	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
 // HandleRecentTraces returns the most recent traces
@@ -95,58 +104,49 @@ func (h *Handler) HandleRecentTraces(w http.ResponseWriter, r *http.Request) {
 
 	traces, err := h.storage.GetRecentTraces(r.Context(), limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"traces": traces,
-		"count":  len(traces),
-	}); err != nil {
-		log.Printf("❌ Failed to encode recent traces response: %v", err)
+	response := TracesResponse{
+		Traces: traces,
+		Count:  len(traces),
 	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleTracingStats returns tracing storage statistics
+// HandleTracingStats returns tracing storage statistics.
 // GET /v1/traces/stats
 func (h *Handler) HandleTracingStats(w http.ResponseWriter, r *http.Request) {
 	stats := h.storage.Stats()
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
-		log.Printf("❌ Failed to encode tracing stats response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, stats)
 }
 
-// HandleIngestSpan handles manual span ingestion (for testing or external tracers)
+// HandleIngestSpan handles manual span ingestion (for testing or external tracers).
 // POST /v1/traces/ingest
 func (h *Handler) HandleIngestSpan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	var span Span
 	if err := json.NewDecoder(r.Body).Decode(&span); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
 		return
 	}
 
 	if err := h.storage.StoreSpan(r.Context(), &span); err != nil {
-		http.Error(w, "Failed to store span: "+err.Error(), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to store span: %w", err))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"status":   "success",
-		"trace_id": string(span.TraceID),
-		"span_id":  string(span.SpanID),
-	}); err != nil {
-		log.Printf("❌ Failed to encode ingest span response: %v", err)
+	response := IngestSpanResponse{
+		Status:  "success",
+		TraceID: string(span.TraceID),
+		SpanID:  string(span.SpanID),
 	}
+	httpx.RespondJSON(w, http.StatusCreated, response)
 }
 
 // parseTimeParam parses a time parameter or returns default

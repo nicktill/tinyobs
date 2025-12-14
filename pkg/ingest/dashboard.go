@@ -2,14 +2,13 @@ package ingest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
@@ -54,10 +53,10 @@ type Point struct {
 	Value     float64 `json:"v"`
 }
 
-// HandleMetricsList returns list of available metrics
+// HandleMetricsList returns list of available metrics.
 func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -71,7 +70,7 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 		Limit: metricsListLimit,
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
 		return
 	}
 
@@ -92,19 +91,17 @@ func (h *Handler) HandleMetricsList(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(metrics)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(MetricsListResponse{
+	response := MetricsListResponse{
 		Metrics: metrics,
 		Count:   len(metrics),
-	}); err != nil {
-		log.Printf("❌ Failed to encode metrics list response: %v", err)
 	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleRangeQuery returns time-series data with smart downsampling
+// HandleRangeQuery returns time-series data with smart downsampling.
 func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
@@ -113,13 +110,13 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	// Required parameter
 	metricName := query.Get("metric")
 	if metricName == "" {
-		http.Error(w, "metric parameter required", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "metric parameter required")
 		return
 	}
 
 	// Basic validation: ensure metric name is reasonable
 	if len(metricName) > 256 {
-		http.Error(w, "metric name too long (max 256 chars)", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "metric name too long (max 256 chars)")
 		return
 	}
 
@@ -129,14 +126,14 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Validate time range
 	if end.Before(start) {
-		http.Error(w, "end must be after start", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "end must be after start")
 		return
 	}
 
 	// Prevent queries that are too large
 	queryWindow := end.Sub(start)
 	if queryWindow > maxQueryWindow {
-		http.Error(w, "query window too large (max 90 days)", http.StatusBadRequest)
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query window too large (max 90 days)")
 		return
 	}
 
@@ -145,11 +142,11 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 	if mp := query.Get("maxPoints"); mp != "" {
 		parsed, err := strconv.Atoi(mp)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("invalid maxPoints: %q is not an integer", mp), http.StatusBadRequest)
+			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid maxPoints: %q is not an integer", mp))
 			return
 		}
 		if parsed <= 0 || parsed > maxPointsLimit {
-			http.Error(w, fmt.Sprintf("maxPoints must be between 1 and %d", maxPointsLimit), http.StatusBadRequest)
+			httpx.RespondErrorString(w, http.StatusBadRequest, fmt.Sprintf("maxPoints must be between 1 and %d", maxPointsLimit))
 			return
 		}
 		maxPoints = parsed
@@ -165,7 +162,7 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		MetricNames: []string{metricName},
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query failed: %w", err))
 		return
 	}
 
@@ -234,11 +231,8 @@ func (h *Handler) HandleRangeQuery(w http.ResponseWriter, r *http.Request) {
 		response.Data = append(response.Data, *series)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode range query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
 // makeSeriesKey creates a unique key for a series

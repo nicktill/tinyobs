@@ -77,7 +77,7 @@ func (h *MetricsHub) Run(ctx context.Context) {
 			h.clients[conn] = true
 			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("📡 WebSocket client connected (total: %d)", count)
+			log.Printf("WebSocket client connected (total: %d)", count)
 		case conn := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[conn]; ok {
@@ -86,7 +86,7 @@ func (h *MetricsHub) Run(ctx context.Context) {
 			}
 			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("📡 WebSocket client disconnected (total: %d)", count)
+			log.Printf("WebSocket client disconnected (total: %d)", count)
 		case message := <-h.broadcast:
 			h.mu.RLock()
 			// Collect failed connections to unregister after releasing lock
@@ -94,7 +94,7 @@ func (h *MetricsHub) Run(ctx context.Context) {
 			for conn := range h.clients {
 				conn.SetWriteDeadline(time.Now().Add(wsWriteDeadline))
 				if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-					log.Printf("❌ WebSocket write error: %v", err)
+					log.Printf("WebSocket write error: %v", err)
 					failed = append(failed, conn)
 				}
 			}
@@ -120,7 +120,7 @@ func (h *MetricsHub) Broadcast(data interface{}) error {
 		return nil
 	default:
 		// Channel full, drop message to prevent blocking
-		log.Printf("⚠️  Broadcast channel full, dropping message")
+		log.Printf("Broadcast channel full, dropping message")
 		return nil
 	}
 }
@@ -138,7 +138,7 @@ func (h *Handler) HandleWebSocket(hub *MetricsHub) http.HandlerFunc {
 		// Upgrade HTTP connection to WebSocket
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("❌ WebSocket upgrade failed: %v", err)
+			log.Printf("WebSocket upgrade failed: %v", err)
 			return
 		}
 

@@ -25,7 +25,10 @@ func TestStartSpan(t *testing.T) {
 	ctx := context.Background()
 
 	// Start a root span
-	newCtx, span := tracer.StartSpan(ctx, "test-operation", SpanKindServer)
+	newCtx, span, err := tracer.StartSpan(ctx, "test-operation", SpanKindServer)
+	if err != nil {
+		t.Fatalf("Failed to start span: %v", err)
+	}
 
 	if span == nil {
 		t.Fatal("Expected span to be created")
@@ -74,10 +77,16 @@ func TestStartChildSpan(t *testing.T) {
 	ctx := context.Background()
 
 	// Start root span
-	ctx, rootSpan := tracer.StartSpan(ctx, "root", SpanKindServer)
+	ctx, rootSpan, err := tracer.StartSpan(ctx, "root", SpanKindServer)
+	if err != nil {
+		t.Fatalf("Failed to start root span: %v", err)
+	}
 
 	// Start child span
-	_, childSpan := tracer.StartSpan(ctx, "child", SpanKindInternal)
+	_, childSpan, err := tracer.StartSpan(ctx, "child", SpanKindInternal)
+	if err != nil {
+		t.Fatalf("Failed to start child span: %v", err)
+	}
 
 	if childSpan.TraceID != rootSpan.TraceID {
 		t.Error("Child span should have same trace ID as root")
@@ -99,9 +108,12 @@ func TestFinishSpan(t *testing.T) {
 	ctx := context.Background()
 
 	// Start and finish span
-	ctx, span := tracer.StartSpan(ctx, "test", SpanKindServer)
+	ctx, span, err := tracer.StartSpan(ctx, "test", SpanKindServer)
+	if err != nil {
+		t.Fatalf("Failed to start span: %v", err)
+	}
 	time.Sleep(10 * time.Millisecond)
-	err := tracer.FinishSpan(ctx, span)
+	err = tracer.FinishSpan(ctx, span)
 
 	if err != nil {
 		t.Fatalf("Failed to finish span: %v", err)
@@ -135,9 +147,12 @@ func TestFinishSpanWithError(t *testing.T) {
 	tracer := NewTracer("test-service", storage)
 	ctx := context.Background()
 
-	ctx, span := tracer.StartSpan(ctx, "test", SpanKindServer)
+	ctx, span, err := tracer.StartSpan(ctx, "test", SpanKindServer)
+	if err != nil {
+		t.Fatalf("Failed to start span: %v", err)
+	}
 	testErr := &testError{"test error"}
-	err := tracer.FinishSpanWithError(ctx, span, testErr)
+	err = tracer.FinishSpanWithError(ctx, span, testErr)
 
 	if err != nil {
 		t.Fatalf("Failed to finish span: %v", err)
@@ -157,7 +172,10 @@ func TestSetTag(t *testing.T) {
 	tracer := NewTracer("test-service", storage)
 	ctx := context.Background()
 
-	_, span := tracer.StartSpan(ctx, "test", SpanKindServer)
+	_, span, err := tracer.StartSpan(ctx, "test", SpanKindServer)
+	if err != nil {
+		t.Fatalf("Failed to start span: %v", err)
+	}
 	tracer.SetTag(span, "key1", "value1")
 	tracer.SetTag(span, "key2", "value2")
 
@@ -171,7 +189,10 @@ func TestSetTag(t *testing.T) {
 }
 
 func TestTraceContext(t *testing.T) {
-	tc := NewTraceContext()
+	tc, err := NewTraceContext()
+	if err != nil {
+		t.Fatalf("Failed to create trace context: %v", err)
+	}
 
 	if tc.TraceID == "" {
 		t.Error("Expected trace ID to be set")
@@ -187,8 +208,14 @@ func TestTraceContext(t *testing.T) {
 }
 
 func TestChildTraceContext(t *testing.T) {
-	parent := NewTraceContext()
-	child := parent.NewChildContext()
+	parent, err := NewTraceContext()
+	if err != nil {
+		t.Fatalf("Failed to create parent trace context: %v", err)
+	}
+	child, err := parent.NewChildContext()
+	if err != nil {
+		t.Fatalf("Failed to create child trace context: %v", err)
+	}
 
 	if child.TraceID != parent.TraceID {
 		t.Error("Child should have same trace ID as parent")
@@ -208,7 +235,10 @@ func TestChildTraceContext(t *testing.T) {
 }
 
 func TestHTTPHeaders(t *testing.T) {
-	tc := NewTraceContext()
+	tc, err := NewTraceContext()
+	if err != nil {
+		t.Fatalf("Failed to create trace context: %v", err)
+	}
 	headers := tc.ToHTTPHeaders()
 
 	if headers["traceparent"] == "" {

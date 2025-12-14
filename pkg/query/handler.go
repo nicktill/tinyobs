@@ -3,10 +3,10 @@ package query
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/httpx"
 	"github.com/nicktill/tinyobs/pkg/storage"
 )
 
@@ -56,22 +56,22 @@ const (
 	queryTimeout       = 30 * time.Second
 )
 
-// HandleQueryExecute handles the /v1/query/execute endpoint
+// HandleQueryExecute handles the /v1/query/execute endpoint.
 func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	var req QueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid JSON: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
 		return
 	}
 
 	// Validate query
 	if req.Query == "" {
-		respondError(w, http.StatusBadRequest, "query parameter is required")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	if req.Step != "" {
 		parsedStep, err := time.ParseDuration(req.Step)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid step duration: %v", err))
+			httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid step duration: %w", err))
 			return
 		}
 		step = parsedStep
@@ -97,7 +97,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 
 	// Validate time range
 	if !req.Start.Before(req.End) {
-		respondError(w, http.StatusBadRequest, "start must be before end")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "start must be before end")
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 	parser := NewParser(req.Query)
 	expr, err := parser.Parse()
 	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Query parse error: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
 		return
 	}
 
@@ -122,7 +122,7 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.executor.Execute(ctx, query)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
 		return
 	}
 	// CRITICAL: Always close result to free memory
@@ -138,24 +138,21 @@ func (h *Handler) HandleQueryExecute(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
-// HandleQueryInstant handles the /v1/query endpoint (instant queries)
-// This is for compatibility with Prometheus query API
+// HandleQueryInstant handles the /v1/query endpoint (instant queries).
+// This is for compatibility with Prometheus query API.
 func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		httpx.RespondErrorString(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	// Parse query parameters
 	query := r.URL.Query().Get("query")
 	if query == "" {
-		respondError(w, http.StatusBadRequest, "query parameter is required")
+		httpx.RespondErrorString(w, http.StatusBadRequest, "query parameter is required")
 		return
 	}
 
@@ -180,7 +177,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	parser := NewParser(req.Query)
 	expr, err := parser.Parse()
 	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Query parse error: %v", err))
+		httpx.RespondError(w, http.StatusBadRequest, fmt.Errorf("query parse error: %w", err))
 		return
 	}
 
@@ -196,7 +193,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result, err := h.executor.Execute(ctx, queryObj)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query execution error: %v", err))
+		httpx.RespondError(w, http.StatusInternalServerError, fmt.Errorf("query execution error: %w", err))
 		return
 	}
 	// CRITICAL: Always close result to free memory
@@ -212,10 +209,7 @@ func (h *Handler) HandleQueryInstant(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode query response: %v", err)
-	}
+	httpx.RespondJSON(w, http.StatusOK, response)
 }
 
 // convertToSeriesResults converts executor result to API response format
@@ -261,15 +255,3 @@ func convertToInstantResults(result *Result) []SeriesResult {
 	return results
 }
 
-// respondError sends an error response
-func respondError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	response := QueryResponse{
-		Status: "error",
-		Error:  message,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("❌ Failed to encode error response: %v", err)
-	}
-}

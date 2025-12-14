@@ -28,21 +28,29 @@ func NewTracer(service string, storage *Storage) *Tracer {
 	}
 }
 
-// StartSpan starts a new span
-// If ctx contains a trace context, this creates a child span
-// Otherwise, this creates a root span (new trace)
-func (t *Tracer) StartSpan(ctx context.Context, operation string, kind SpanKind) (context.Context, *Span) {
+// StartSpan starts a new span.
+// If ctx contains a trace context, this creates a child span.
+// Otherwise, this creates a root span (new trace).
+// Returns an error if trace context creation fails.
+func (t *Tracer) StartSpan(ctx context.Context, operation string, kind SpanKind) (context.Context, *Span, error) {
 	var traceCtx TraceContext
 	var parentID SpanID
+	var err error
 
 	// Check if there's an existing trace context
 	if existing, ok := ctx.Value(traceContextKey).(TraceContext); ok {
 		// Create child span
-		traceCtx = existing.NewChildContext()
+		traceCtx, err = existing.NewChildContext()
+		if err != nil {
+			return ctx, nil, err
+		}
 		parentID = existing.SpanID
 	} else {
 		// Create new trace (root span)
-		traceCtx = NewTraceContext()
+		traceCtx, err = NewTraceContext()
+		if err != nil {
+			return ctx, nil, err
+		}
 		parentID = ""
 	}
 
@@ -62,7 +70,7 @@ func (t *Tracer) StartSpan(ctx context.Context, operation string, kind SpanKind)
 	// Store trace context in context
 	newCtx := context.WithValue(ctx, traceContextKey, traceCtx)
 
-	return newCtx, span
+	return newCtx, span, nil
 }
 
 // FinishSpan completes a span and stores it
@@ -99,32 +107,44 @@ func InjectTraceContext(ctx context.Context, tc TraceContext) context.Context {
 	return context.WithValue(ctx, traceContextKey, tc)
 }
 
-// TraceFunc is a helper that automatically creates a span for a function
+// TraceFunc is a helper that automatically creates a span for a function.
 // Usage:
 //
 //	defer tracer.TraceFunc(ctx, "my_operation", SpanKindInternal)()
+//
+// If span creation fails, the returned function is a no-op.
 func (t *Tracer) TraceFunc(ctx context.Context, operation string, kind SpanKind) func() {
-	_, span := t.StartSpan(ctx, operation, kind)
+	_, span, err := t.StartSpan(ctx, operation, kind)
+	if err != nil {
+		// Return no-op function if span creation fails
+		return func() {}
+	}
 
 	return func() {
 		// Use background context for storage since the original context might be cancelled
-		t.FinishSpan(context.Background(), span)
+		_ = t.FinishSpan(context.Background(), span)
 	}
 }
 
-// TraceFuncWithError is like TraceFunc but records errors
+// TraceFuncWithError is like TraceFunc but records errors.
 // Usage:
 //
 //	var err error
 //	defer tracer.TraceFuncWithError(ctx, "my_operation", SpanKindInternal, &err)()
+//
+// If span creation fails, the returned function is a no-op.
 func (t *Tracer) TraceFuncWithError(ctx context.Context, operation string, kind SpanKind, errPtr *error) func() {
-	_, span := t.StartSpan(ctx, operation, kind)
+	_, span, err := t.StartSpan(ctx, operation, kind)
+	if err != nil {
+		// Return no-op function if span creation fails
+		return func() {}
+	}
 
 	return func() {
 		if errPtr != nil && *errPtr != nil {
-			t.FinishSpanWithError(context.Background(), span, *errPtr)
+			_ = t.FinishSpanWithError(context.Background(), span, *errPtr)
 		} else {
-			t.FinishSpan(context.Background(), span)
+			_ = t.FinishSpan(context.Background(), span)
 		}
 	}
 }

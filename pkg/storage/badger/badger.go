@@ -190,7 +190,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 								it.Close()
 								elapsed := time.Since(startTime)
 								if elapsed > 5*time.Second {
-									log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+									log.Printf("Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 								}
 								return ctx.Err()
 							default:
@@ -252,7 +252,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 							// Log slow query warning before returning error
 							elapsed := time.Since(startTime)
 							if elapsed > 5*time.Second {
-								log.Printf("⚠️  Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+								log.Printf("Query cancelled after %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 							}
 							return ctx.Err()
 						default:
@@ -297,7 +297,7 @@ func (s *Storage) Query(ctx context.Context, req storage.QueryRequest) ([]metric
 			// Log slow queries for performance monitoring
 			elapsed := time.Since(startTime)
 			if elapsed > 5*time.Second {
-				log.Printf("⚠️  Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
+				log.Printf("Slow query completed in %v (%d iterations, %d results)\n", elapsed, iterCount, len(results))
 			}
 
 			return nil

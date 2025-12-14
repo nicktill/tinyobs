@@ -82,42 +82,57 @@ type TraceContext struct {
 	ParentID SpanID  `json:"parent_id"` // For propagating parent-child relationships
 }
 
-// NewTraceID generates a new random 128-bit trace ID
-func NewTraceID() TraceID {
+// NewTraceID generates a new random 128-bit trace ID.
+// Returns an error if random number generation fails.
+func NewTraceID() (TraceID, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// Fallback to timestamp-based ID if crypto/rand fails
-		panic("failed to generate trace ID: " + err.Error())
+		return "", fmt.Errorf("failed to generate trace ID: %w", err)
 	}
-	return TraceID(hex.EncodeToString(b[:]))
+	return TraceID(hex.EncodeToString(b[:])), nil
 }
 
-// NewSpanID generates a new random 64-bit span ID
-func NewSpanID() SpanID {
+// NewSpanID generates a new random 64-bit span ID.
+// Returns an error if random number generation fails.
+func NewSpanID() (SpanID, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic("failed to generate span ID: " + err.Error())
+		return "", fmt.Errorf("failed to generate span ID: %w", err)
 	}
-	return SpanID(hex.EncodeToString(b[:]))
+	return SpanID(hex.EncodeToString(b[:])), nil
 }
 
-// NewTraceContext creates a new root trace context (starts a new trace)
-func NewTraceContext() TraceContext {
+// NewTraceContext creates a new root trace context (starts a new trace).
+// Returns an error if ID generation fails.
+func NewTraceContext() (TraceContext, error) {
+	traceID, err := NewTraceID()
+	if err != nil {
+		return TraceContext{}, fmt.Errorf("failed to create trace context: %w", err)
+	}
+	spanID, err := NewSpanID()
+	if err != nil {
+		return TraceContext{}, fmt.Errorf("failed to create trace context: %w", err)
+	}
 	return TraceContext{
-		TraceID: NewTraceID(),
-		SpanID:  NewSpanID(),
+		TraceID: traceID,
+		SpanID:  spanID,
 		Sampled: true, // For now, sample everything
-	}
+	}, nil
 }
 
-// NewChildContext creates a child context from a parent
-func (tc TraceContext) NewChildContext() TraceContext {
+// NewChildContext creates a child context from a parent.
+// Returns an error if ID generation fails.
+func (tc TraceContext) NewChildContext() (TraceContext, error) {
+	spanID, err := NewSpanID()
+	if err != nil {
+		return TraceContext{}, fmt.Errorf("failed to create child context: %w", err)
+	}
 	return TraceContext{
 		TraceID:  tc.TraceID,  // Same trace ID
-		SpanID:   NewSpanID(), // New span ID
+		SpanID:   spanID,      // New span ID
 		ParentID: tc.SpanID,   // Parent is current span
 		Sampled:  tc.Sampled,  // Inherit sampling decision
-	}
+	}, nil
 }
 
 // ToHTTPHeaders converts trace context to HTTP headers (W3C format)

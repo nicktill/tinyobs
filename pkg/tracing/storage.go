@@ -174,8 +174,16 @@ func (s *Storage) GetRecentTraces(ctx context.Context, limit int) ([]*Trace, err
 	return s.QueryTraces(ctx, start, end, limit)
 }
 
-// Stats returns storage statistics
-func (s *Storage) Stats() map[string]interface{} {
+// StorageStats represents tracing storage statistics.
+type StorageStats struct {
+	TotalTraces int    `json:"total_traces"`
+	TotalSpans  int    `json:"total_spans"`
+	MaxTraces   int    `json:"max_traces"`
+	MaxAge      string `json:"max_age"`
+}
+
+// Stats returns storage statistics.
+func (s *Storage) Stats() StorageStats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -184,11 +192,11 @@ func (s *Storage) Stats() map[string]interface{} {
 		totalSpans += len(spans)
 	}
 
-	return map[string]interface{}{
-		"total_traces": len(s.traces),
-		"total_spans":  totalSpans,
-		"max_traces":   s.maxTraces,
-		"max_age":      s.maxAge.String(),
+	return StorageStats{
+		TotalTraces: len(s.traces),
+		TotalSpans:  totalSpans,
+		MaxTraces:   s.maxTraces,
+		MaxAge:      s.maxAge.String(),
 	}
 }
 

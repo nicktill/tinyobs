@@ -191,12 +191,12 @@ func TestStorageStats(t *testing.T) {
 
 	stats := storage.Stats()
 
-	if stats["total_traces"].(int) != 3 {
-		t.Errorf("Expected 3 traces in stats, got %v", stats["total_traces"])
+	if stats.TotalTraces != 3 {
+		t.Errorf("Expected 3 traces in stats, got %d", stats.TotalTraces)
 	}
 
-	if stats["total_spans"].(int) != 6 {
-		t.Errorf("Expected 6 spans in stats, got %v", stats["total_spans"])
+	if stats.TotalSpans != 6 {
+		t.Errorf("Expected 6 spans in stats, got %d", stats.TotalSpans)
 	}
 }
 

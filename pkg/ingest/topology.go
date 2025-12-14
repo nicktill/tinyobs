@@ -71,7 +71,7 @@ func (h *Handler) HandleTopology(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(topology); err != nil {
-		log.Printf("❌ Failed to encode topology response: %v", err)
+		log.Printf("Failed to encode topology response: %v", err)
 	}
 }
 
