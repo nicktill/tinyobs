@@ -68,7 +68,7 @@
 - **SDK Client**: Batches and pushes metrics from applications
 - **Ingest Handler**: Validates and stores incoming metrics
 - **BadgerDB Storage**: Persistent time-series storage with compression
-- **Query Handler**: Executes PromQL-like queries
+- **Query Handler**: Executes TinyQL queries (see Query Language below)
 - **Compaction Engine**: Downsamples old data (raw → 5m → 1h aggregates)
 - **WebSocket Hub**: Broadcasts real-time metric updates
 - **Dashboard UI**: Visualizes metrics and queries
@@ -120,10 +120,32 @@ This provides **240x compression** for old data while keeping recent data at ful
 2. **BadgerDB**: Embedded, no external dependencies, good for single-node
 3. **Downsampling**: Automatic compression to manage storage growth
 4. **WebSocket**: Real-time updates without polling
-5. **PromQL-like queries**: Familiar query language for learning
+5. **TinyQL**: a small query language, deliberately not PromQL
 
 ## See Also
 
 - [Quick Start Guide](../QUICK_START.md) - How to run and test
 - [SDK Documentation](../pkg/sdk/doc.go) - Client library usage
 - [Testing Guide](../TESTING.md) - How to test the system
+
+## Query Language (TinyQL)
+
+TinyObs does not implement PromQL. Claiming "PromQL-like" invites the question
+of which subset, and the honest answer would be "a small one", so the language
+has its own name instead.
+
+What is implemented, as of `pkg/query/executor.go`:
+
+- **Aggregations**: `sum`, `avg`, `min`, `max`, `count`
+- **Functions**: `rate`, `increase`
+- Selecting a metric by name, filtering on label equality, and a time range
+
+What is not: subqueries, joins, offset modifiers, `histogram_quantile`, label
+rewriting, and the rest of the PromQL function library. Unknown functions and
+unsupported expression types return an explicit error from the executor rather
+than a silently wrong result, which is the one behaviour a monitoring tool must
+never get wrong.
+
+Prometheus-compatible endpoints (`/api/v1/query`, `/api/v1/query_range`) exist so
+Grafana can talk to TinyObs, and they are bounded by the same feature set: a
+PromQL query using anything above the line will not work against them.
