@@ -31,8 +31,8 @@ narrow *because* narrow is cheap.
 
 Store sample timestamps as **milliseconds since the Unix epoch** (`int64`).
 
-The `chunkenc` package itself stays unit-agnostic — it encodes whatever `int64`
-it is handed — but its bucket widths are chosen for milliseconds, and the
+The `chunkenc` package itself stays unit-agnostic (it encodes whatever `int64`
+it is handed), but its bucket widths are chosen for milliseconds, and the
 storage engine converts at the boundary.
 
 ## Consequences
@@ -49,7 +49,7 @@ storage engine converts at the boundary.
 ## Why this is acceptable
 
 Metrics are aggregates over a window, not events. A counter sampled at 15s
-intervals carries no meaning at microsecond resolution — the timestamp records
+intervals carries no meaning at microsecond resolution. The timestamp records
 roughly when the value was observed, and "roughly" is bounded by the scrape
 interval, not by clock precision. Every widely deployed metrics system makes
 this same choice: Prometheus, the remote-write protocol, and Grafana all work in

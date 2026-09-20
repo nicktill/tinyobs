@@ -15,9 +15,7 @@
 //
 // That number is the problem. At one million active series and a 15s scrape
 // interval a system takes 5.76 billion samples a day, which at 55.6 bytes is
-// about 320 GB/day. The same workload on Prometheus is roughly 9 GB. A tool
-// that is thirty times more expensive per sample than the thing everyone
-// already runs is not a tool anyone will adopt, however pleasant its UI.
+// about 320 GB/day. The same workload on Prometheus is roughly 9 GB.
 //
 // Two things drove the cost. Every sample re-sent its own label set even though
 // the storage key already contained a hash identifying the series, and every
@@ -52,13 +50,9 @@
 //	slow-moving gauge, fixed interval     0.95 bytes/sample     16.8x
 //	noisy gauge, jittered interval        9.81 bytes/sample      1.6x
 //
-// The last row is the honest one. Random values share no structure with their
-// predecessors, so the XOR is dense and the encoder degrades to roughly the
-// uncompressed size plus a small header. Compression here is a bet that real
-// telemetry is repetitive, and the bet stops paying when it isn't. It is worth
-// knowing which of your series look like the bottom row, which is part of why
-// cardinality and value-churn are worth surfacing to operators rather than
-// hiding.
+// The bottom row is the limit of the technique. Random values share no
+// structure with their predecessors, so the XOR is dense and the encoder
+// degrades to roughly the raw size plus a header.
 //
 // # What this deliberately does not do
 //

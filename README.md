@@ -76,10 +76,9 @@ Append costs 20.5ns with zero allocations. Iteration runs at roughly 17ns per
 sample. Label hashing and series lookup are both allocation-free, because they
 run once per sample on the ingest path.
 
-That last row is the honest one, and it is in this table on purpose. Random
-values share no structure with their predecessors, so the XOR goes dense and
-compression stops paying. Compression here is a bet that real telemetry is
-repetitive; the bet stops working when it isn't.
+The bottom row is the limit of the technique. Random values share no structure
+with their predecessors, so the XOR goes dense and compression degrades to
+roughly the raw size.
 
 **Why this matters.** The encoding exists because the previous engine stored one
 JSON document per sample, including a full copy of the label set that the
@@ -91,8 +90,8 @@ workload on Prometheus.
 The reasoning behind each decision, including what it cost and what was rejected,
 is written down:
 
-- [ADR 0001 — Chunked, XOR-compressed sample storage](docs/adr/0001-chunked-xor-storage.md)
-- [ADR 0002 — Millisecond timestamp resolution](docs/adr/0002-millisecond-timestamps.md)
+- [ADR 0001: Chunked, XOR-compressed sample storage](docs/adr/0001-chunked-xor-storage.md)
+- [ADR 0002: Millisecond timestamp resolution](docs/adr/0002-millisecond-timestamps.md)
 
 ## Using the SDK
 
@@ -203,10 +202,10 @@ I built this to understand how metrics systems work. Prometheus has 300k+ lines.
 
 ## Documentation
 
-- [Quick Start Guide](QUICK_START.md) — detailed setup and testing
-- [Architecture](ARCHITECTURE.md) — system design and the push vs pull tradeoff
-- [ADR 0001](docs/adr/0001-chunked-xor-storage.md) — chunked, XOR-compressed sample storage
-- [ADR 0002](docs/adr/0002-millisecond-timestamps.md) — millisecond timestamp resolution
+- [Quick Start Guide](QUICK_START.md): detailed setup and testing
+- [Architecture](ARCHITECTURE.md): system design and the push vs pull tradeoff
+- [ADR 0001](docs/adr/0001-chunked-xor-storage.md): chunked, XOR-compressed sample storage
+- [ADR 0002](docs/adr/0002-millisecond-timestamps.md): millisecond timestamp resolution
 
 ## Development
 

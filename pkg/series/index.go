@@ -81,13 +81,11 @@ func (ix *Index) GetOrCreate(ls Labels) (ID, bool) {
 
 // allocateLocked picks an unused ID, starting from the label hash.
 //
-// Using the hash as the ID keeps storage keys well distributed and means the ID
-// is reproducible across restarts for the overwhelming majority of series. On
-// collision we walk forward to the next free slot. With 64-bit hashes a
-// collision needs roughly 5 billion series before it is even likely, so this
-// path is effectively dead code, which is exactly why it is worth writing and
-// testing rather than asserting it cannot happen: silently merging two series
-// produces a graph that is wrong in a way nobody can debug from the outside.
+// Using the hash keeps storage keys well distributed and makes IDs stable
+// across restarts. On collision, walk to the next free slot. A 64-bit hash
+// needs roughly 5 billion series before a collision is likely, but the failure
+// mode is two series silently merging, so it is handled rather than assumed
+// away.
 func (ix *Index) allocateLocked(hash uint64) ID {
 	id := ID(hash)
 	for {

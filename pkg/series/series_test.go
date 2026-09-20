@@ -29,11 +29,9 @@ func TestHashIsOrderIndependent(t *testing.T) {
 	require.True(t, a.Equal(b))
 }
 
-// TestEncodingIsInjective is the test that matters most in this package.
-//
-// Under a delimiter-based encoding these pairs collide, because the delimiter
-// can appear inside a label value. Two distinct series sharing an identity is a
-// silent data-corruption bug, so the encoding is length-prefixed instead.
+// TestEncodingIsInjective checks that distinct label sets cannot encode to the
+// same bytes. Under a delimiter-based scheme these pairs collide, because the
+// delimiter can appear inside a label value.
 func TestEncodingIsInjective(t *testing.T) {
 	pairs := [][2]Labels{
 		{

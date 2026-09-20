@@ -32,13 +32,9 @@ func (b *bstream) writeBit(bit bool) {
 
 // writeBits writes the low nbits of u, most significant bit first.
 //
-// This walks one bit at a time rather than slicing whole bytes out of u. That
-// is measurably slower than the word-at-a-time approach, and it is a deliberate
-// choice: the encoder is not the bottleneck (ingest is dominated by the storage
-// engine's write path, see BenchmarkXORChunk_Append), and a codec whose
-// correctness cannot be read off the page is a liability in a system whose
-// entire job is to be trusted about what happened. If profiling ever shows this
-// mattering, the fast path is contained to this one function.
+// One bit at a time rather than slicing bytes out of u: slower than the
+// word-at-a-time form, but easier to check against the spec. Not a bottleneck
+// (BenchmarkXORChunk_Append), and a fast path would live only in this function.
 func (b *bstream) writeBits(u uint64, nbits uint8) {
 	for nbits > 0 {
 		nbits--
