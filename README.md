@@ -7,7 +7,7 @@
 
 ![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
 
-TinyObs is a metrics platform in ~5,000 lines of Go (excluding tests). Small enough to read in a weekend, useful enough for local development.
+TinyObs is a metrics platform in about 6,000 lines of Go (excluding tests and comments). Small enough to read in a weekend, useful enough for local development.
 
 ## Quick Start
 
@@ -46,11 +46,10 @@ open http://localhost:8080
 ## What You Get
 
 - **Push-based metrics SDK** (counters, gauges, histograms)
-- **Persistent storage** with BadgerDB
-- **Automatic downsampling**: raw → 5min → 1hr aggregates (240x compression)
-- **Real-time dashboard** with WebSocket updates
-- **Query API** with time-range filtering and aggregations
-- **Export/Import** metrics (JSON, CSV)
+- **Persistent storage** on BadgerDB: ~14 bytes/sample, crash-safe, 72h retention by default
+- **PromQL**, checked against Prometheus's own test suite ([what's supported](#promql-support))
+- **Prometheus HTTP API**, so Grafana can use TinyObs as a Prometheus data source
+- **Dashboard** for exploring your metrics
 
 ## Using the SDK
 
@@ -87,33 +86,49 @@ func main() {
     //   - http_requests_total (counter): by method, path, status
     //   - http_request_duration_seconds (histogram): request latency
     handler := httpx.Middleware(client)(mux)
-    
-    http.ListenAndServe(":8080", handler)
-    
+
     // You can also create custom metrics for business logic:
     activeUsers := client.Gauge("active_users")
     activeUsers.Set(42.0) // Set current active users
-    
+
     errors := client.Counter("errors_total")
     errors.Inc("type", "api_error", "endpoint", "/api/users")
+
+    // Your app listens on its own port; TinyObs uses 8080.
+    http.ListenAndServe(":3000", handler)
 }
 ```
 
-## API Endpoints
+## API
 
-- `POST /v1/ingest` - Ingest metrics
-- `GET /v1/query/range` - Query metrics with time range
-- `POST /v1/query/execute` - Execute query language queries
-- `GET /v1/export` - Export metrics (JSON/CSV)
-- `POST /v1/import` - Import metrics from backup
-- `GET /v1/health` - Health check
-- `GET /v1/ws` - WebSocket for real-time updates
+TinyObs serves the [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/):
+point Grafana's Prometheus data source at `http://localhost:8080`.
 
-**Prometheus-compatible endpoints (for Grafana):**
-- `GET /api/v1/query` - Instant queries (Prometheus-compatible)
-- `GET /api/v1/query_range` - Range queries (Prometheus-compatible)
+| Endpoint | Purpose |
+|---|---|
+| `GET/POST /api/v1/query`, `/api/v1/query_range` | PromQL queries |
+| `GET/POST /api/v1/series`, `/api/v1/labels`, `GET /api/v1/label/<name>/values` | Series and label discovery |
+| `GET /api/v1/metadata` | Metric type and help text |
+| `GET /api/v1/status/tsdb`, `/api/v1/status/buildinfo` | Cardinality statistics, version |
+| `GET /-/healthy`, `/-/ready` | Health checks |
+| `POST /v1/ingest` | Ingest from the TinyObs Go SDK |
 
-See [QUICK_START.md](QUICK_START.md) for detailed API examples.
+```bash
+curl -s localhost:8080/api/v1/query --data-urlencode 'query=sum by (path) (rate(http_requests_total[5m]))'
+```
+
+### PromQL support
+
+The engine is tested against [Prometheus's PromQL test suite](https://github.com/prometheus/prometheus/tree/v3.7.0/promql/promqltest/testdata)
+(`make promql-compat`). Every supported feature returns Prometheus's result; everything else is an explicit
+"not supported by TinyObs" error, never a guess.
+
+- **Supported:** selectors with `=` `!=` `=~` `!~`, range vectors, `offset`, subqueries; arithmetic, comparison
+  (with `bool`) and set operators with `on`/`ignoring`/`group_left`/`group_right`; `sum avg min max count group
+  stddev stdvar topk bottomk quantile`; `rate irate increase delta idelta deriv predict_linear resets changes`,
+  `*_over_time`, `histogram_quantile` (classic histograms), math, clamping, date and label functions.
+- **Not supported:** native histograms, the `@` modifier, duration expressions, `count_values`, `limitk`,
+  `holt_winters`, `sort_by_label`.
 
 ## Configuration
 
@@ -122,8 +137,12 @@ Environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `8080` |
-| `TINYOBS_MAX_STORAGE_GB` | Max storage in GB | `1` |
-| `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory limit | `48` |
+| `TINYOBS_DATA_DIR` | Data directory | `./data/tinyobs-v2` |
+| `TINYOBS_RETENTION` | How long samples are kept | `72h` |
+| `TINYOBS_MAX_SERIES` | Series limit; protects against label explosions | `50000` |
+| `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory budget | `64` |
+
+Disk use is bounded by `max series × samples per series in the retention window × ~14 bytes`.
 
 ## Project Structure
 
@@ -133,18 +152,18 @@ tinyobs/
 │   ├── server/     # Main server
 │   └── example/    # Example app
 ├── pkg/
-│   ├── sdk/        # Client SDK
-│   ├── ingest/     # Metrics ingestion
-│   ├── query/       # Query engine
-│   ├── storage/     # BadgerDB storage
-│   ├── compaction/ # Downsampling
-│   └── export/     # Backup/restore
+│   ├── api/        # Prometheus HTTP API
+│   ├── labels/     # Series labels and matchers
+│   ├── promql/     # Query engine
+│   ├── sdk/        # Go client SDK
+│   ├── server/     # HTTP server wiring
+│   └── tsdb/       # Time series storage
 └── web/            # Dashboard UI
 ```
 
 ## Why TinyObs?
 
-I built this to understand how metrics systems work. Prometheus has 300k+ lines. TinyObs is ~5,000 lines of core code you can actually read and learn from.
+I built this to understand how metrics systems work. Prometheus has 300k+ lines. TinyObs is about 6,000 lines you can actually read and learn from.
 
 **Perfect for:**
 - Learning how metrics systems work
@@ -159,22 +178,23 @@ I built this to understand how metrics systems work. Prometheus has 300k+ lines.
 ## Documentation
 
 - [Quick Start Guide](QUICK_START.md) - Detailed setup and testing
-- [Architecture](docs/ARCHITECTURE.md) - System design
-- [Testing Guide](TESTING.md) - How to test
+- [V2 design](docs/design/v2.md) - Architecture and the decisions behind it
+- [ADRs](docs/adr/) - Storage layout, timestamp resolution
 
 ## Development
 
 ### Local Development
 
 ```bash
-# Run tests
-go test ./...
+# Run tests (and the Prometheus conformance suite)
+make test
+make promql-compat
 
 # Build
 go build ./cmd/server
 
 # Run with custom config
-PORT=3000 TINYOBS_MAX_STORAGE_GB=5 go run ./cmd/server
+PORT=3000 TINYOBS_RETENTION=168h go run ./cmd/server
 ```
 
 ### Docker

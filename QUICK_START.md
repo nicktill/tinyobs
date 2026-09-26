@@ -14,7 +14,7 @@ make docker-up
 make docker-demo
 
 # Wait a few seconds, then test
-curl http://localhost:8080/v1/health
+curl http://localhost:8080/-/healthy
 
 # View dashboard
 open http://localhost:8080
@@ -61,20 +61,18 @@ You should see:
 
 ### Query Metrics
 ```bash
-# List all metrics
-curl http://localhost:8080/v1/metrics/list
-
-# Query with time range
-curl "http://localhost:8080/v1/query/range?metric=http_requests_total&start=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# List all metric names
+curl http://localhost:8080/api/v1/label/__name__/values
 
 # PromQL instant query
-curl "http://localhost:8080/v1/query/instant?query=sum(http_requests_total)"
+curl http://localhost:8080/api/v1/query --data-urlencode 'query=sum by (path) (rate(http_requests_total[5m]))'
 
-# Get storage stats
-curl http://localhost:8080/v1/stats
+# PromQL range query over the last hour (portable: Unix timestamps)
+curl http://localhost:8080/api/v1/query_range --data-urlencode 'query=sum(rate(http_requests_total[1m]))' \
+  -d start=$(($(date +%s) - 3600)) -d end=$(date +%s) -d step=60
 
-# Health check
-curl http://localhost:8080/v1/health
+# Cardinality: series per metric and label
+curl http://localhost:8080/api/v1/status/tsdb
 ```
 
 ## Configuration
@@ -86,7 +84,7 @@ Set environment variables before starting the server:
 export PORT=3000
 
 # Storage limit in GB (default: 1)
-export TINYOBS_MAX_STORAGE_GB=5
+export TINYOBS_RETENTION=168h
 
 # BadgerDB memory limit in MB (default: 48)
 export TINYOBS_MAX_MEMORY_MB=128
@@ -97,7 +95,7 @@ go run ./cmd/server
 
 Or use inline:
 ```bash
-PORT=3000 TINYOBS_MAX_STORAGE_GB=5 go run ./cmd/server
+PORT=3000 TINYOBS_RETENTION=168h go run ./cmd/server
 ```
 
 ## Running Tests
@@ -139,21 +137,6 @@ docker build -t tinyobs:latest .
 docker run -d -p 8080:8080 -v tinyobs-data:/app/data tinyobs:latest
 ```
 
-## WebSocket Testing
-
-The dashboard automatically connects to WebSocket at `/v1/ws` for real-time updates.
-
-### Manual WebSocket Test
-```bash
-# Using wscat (install: npm install -g wscat)
-wscat -c ws://localhost:8080/v1/ws
-```
-
-### Check Connection in Browser
-1. Open `http://localhost:8080`
-2. Open Developer Tools (F12) → Console
-3. Look for: `WebSocket connected - real-time updates enabled`
-
 ## Troubleshooting
 
 ### Port Already in Use
@@ -163,22 +146,17 @@ PORT=3001 go run ./cmd/server
 
 ### No Metrics Showing
 1. Verify example app is running: `curl http://localhost:3000/health`
-2. Check server stats: `curl http://localhost:8080/v1/stats`
+2. Check what TinyObs has stored: `curl http://localhost:8080/api/v1/status/tsdb`
 3. Check example app logs for errors
 4. Wait a few seconds - metrics are sent every 5 seconds
 
-### WebSocket Not Connecting
-1. Check browser console for errors
-2. Verify server health: `curl http://localhost:8080/v1/health`
-3. Try `ws://127.0.0.1:8080/v1/ws` instead of `localhost`
-
 ### Storage Issues
 ```bash
-# Check storage usage
-curl http://localhost:8080/v1/stats
+# Check series counts (disk use is bounded by series x retention)
+curl http://localhost:8080/api/v1/status/tsdb
 
 # Clean up data directory (WARNING: deletes all metrics)
-rm -rf ./data/tinyobs/*
+rm -rf ./data/tinyobs-v2
 ```
 
 ## Verification Checklist
@@ -186,9 +164,7 @@ rm -rf ./data/tinyobs/*
 - [ ] Server starts without errors
 - [ ] Dashboard loads at `http://localhost:8080`
 - [ ] Example app runs and sends metrics
-- [ ] WebSocket connects (check browser console)
 - [ ] Metrics appear in dashboard
-- [ ] Real-time updates work (stats refresh every 5s)
 - [ ] API endpoints respond correctly
 - [ ] Tests pass: `go test ./...`
 
@@ -197,6 +173,6 @@ rm -rf ./data/tinyobs/*
 1. Explore the dashboard features
 2. Try different metric types (counters, gauges, histograms)
 3. Test PromQL queries: `sum()`, `avg()`, `rate()`
-4. Export metrics: `curl http://localhost:8080/v1/export?format=json`
+4. Add TinyObs to Grafana as a Prometheus data source (`http://localhost:8080`)
 5. Read the [README.md](README.md) for SDK usage
 6. Check out the code to understand how it works!

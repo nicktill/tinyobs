@@ -1,161 +1,79 @@
+// Command server runs the TinyObs server.
 package main
 
 import (
 	"context"
-	"log"
-	"net/http"
+	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/server"
-	"github.com/nicktill/tinyobs/pkg/server/monitor"
-
-	"github.com/gorilla/mux"
-)
-
-const (
-	serverReadTimeout  = 10 * time.Second
-	serverWriteTimeout = 10 * time.Second
-	shutdownTimeout    = 30 * time.Second
 )
 
 func main() {
-	log.Println("Starting TinyObs Server...")
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	// Load configuration
-	cfg := server.LoadConfig()
-	maxStorageBytes := cfg.MaxStorageGB * 1024 * 1024 * 1024
-
-	if cfg.MaxMemoryMB > 0 {
-		log.Printf("Configuration: Storage limit = %.2f GB, Memory limit = %d MB",
-			float64(maxStorageBytes)/(1024*1024*1024), cfg.MaxMemoryMB)
-	} else {
-		log.Printf("Configuration: Storage limit = %.2f GB, Memory limit = auto-detect",
-			float64(maxStorageBytes)/(1024*1024*1024))
+	cfg := server.Config{
+		Listen:    ":" + env("PORT", "8080"),
+		DataDir:   env("TINYOBS_DATA_DIR", "./data/tinyobs-v2"),
+		Retention: envDuration(log, "TINYOBS_RETENTION", 72*time.Hour),
+		MaxSeries: int(envInt(log, "TINYOBS_MAX_SERIES", 50_000)),
+		MemoryMB:  envInt(log, "TINYOBS_MAX_MEMORY_MB", 64),
+		WebDir:    env("TINYOBS_WEB_DIR", "./web"),
+		Logger:    log,
 	}
-	log.Printf("Data directory: %s", cfg.DataDir)
+	if _, err := os.Stat("./data/tinyobs"); err == nil && cfg.DataDir != "./data/tinyobs" {
+		log.Info("V1 data in ./data/tinyobs is not read by V2 and can be deleted")
+	}
 
-	// Initialize storage
-	store, err := server.InitializeStorage(cfg)
+	srv, err := server.New(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+		log.Error("starting server", "err", err)
+		os.Exit(1)
 	}
-	defer store.Close()
+	log.Info("TinyObs started", "version", server.Version, "data", cfg.DataDir, "retention", cfg.Retention, "max_series", cfg.MaxSeries)
 
-	// Create storage monitor for limit enforcement
-	storageMonitor := monitor.NewStorageMonitor(cfg.DataDir, maxStorageBytes)
-	log.Printf("Storage limit enforcement enabled: %.2f GB max", float64(maxStorageBytes)/(1024*1024*1024))
-
-	// Initialize handlers
-	ingestHandler, queryHandler, exportHandler, hub := server.InitializeHandlers(store, storageMonitor)
-
-	// Initialize compactor
-	compactor, compactionMonitor := server.InitializeCompactor(store)
-
-	// Create router
-	router := mux.NewRouter()
-	server.SetupRoutes(router, ingestHandler, queryHandler, exportHandler, storageMonitor, compactionMonitor, hub, cfg.Port)
-
-	// Create HTTP server
-	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      router,
-		ReadTimeout:  serverReadTimeout,
-		WriteTimeout: serverWriteTimeout,
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := srv.Run(ctx); err != nil {
+		log.Error("server stopped", "err", err)
+		os.Exit(1)
 	}
+	log.Info("TinyObs stopped")
+}
 
-	// Start background tasks
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-
-	// WebSocket hub
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		hub.Run(ctx)
-	}()
-	log.Println("WebSocket hub started for real-time metrics streaming")
-
-	// Metrics broadcaster
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		server.BroadcastMetrics(ctx, store, hub)
-	}()
-	log.Println("Metrics broadcaster started (updates every 5s)")
-
-	// Compaction
-	stopCompaction := make(chan bool)
-	wg.Add(1)
-	go server.RunCompaction(compactor, compactionMonitor, stopCompaction, &wg)
-
-	// BadgerDB GC
-	stopGC := make(chan bool)
-	wg.Add(1)
-	go server.RunBadgerGC(store, stopGC, &wg)
-
-	// Start server in goroutine
-	go func() {
-		log.Printf("Server starting on http://localhost:%s", cfg.Port)
-		log.Printf("Dashboard: http://localhost:%s", cfg.Port)
-		log.Println("API endpoints:")
-		log.Println("   POST /v1/ingest          - Ingest metrics")
-		log.Println("   GET  /v1/query          - Query metrics")
-		log.Println("   GET  /v1/query/range    - Range queries")
-		log.Println("   GET  /v1/query/execute  - Execute query")
-		log.Println("   GET  /v1/stats          - Storage statistics")
-		log.Println("   GET  /v1/export         - Export metrics (JSON/CSV)")
-		log.Println("   POST /v1/import         - Import metrics from backup")
-		log.Println("   GET  /v1/health         - Health check")
-		log.Println("Server ready to accept requests")
-
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
-		}
-	}()
-
-	// Wait for interrupt signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	log.Println("Shutdown signal received...")
-
-	// Stop background tasks
-	log.Println("Stopping background tasks...")
-	cancel() // Stop WebSocket hub and broadcaster
-	close(stopCompaction)
-	close(stopGC)
-
-	// Graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer shutdownCancel()
-
-	log.Println("Gracefully shutting down server...")
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown warning: %v", err)
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
+	return def
+}
 
-	// Wait for background goroutines to finish
-	log.Println("Waiting for background tasks to complete...")
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	// Wait with timeout to prevent infinite hang
-	select {
-	case <-done:
-		log.Println("All background tasks stopped cleanly")
-	case <-time.After(5 * time.Second):
-		log.Println("Some background tasks did not stop in time (forcing exit)")
+func envInt(log *slog.Logger, key string, def int64) int64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
 	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		log.Error("invalid environment variable", "key", key, "value", v)
+		os.Exit(2)
+	}
+	return n
+}
 
-	log.Println("TinyObs server exited cleanly")
+func envDuration(log *slog.Logger, key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Error("invalid environment variable", "key", key, "value", v)
+		os.Exit(2)
+	}
+	return d
 }

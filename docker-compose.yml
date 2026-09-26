@@ -8,13 +8,13 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
-      - TINYOBS_MAX_STORAGE_GB=1
-      - TINYOBS_MAX_MEMORY_MB=48
+      - TINYOBS_RETENTION=72h
+      - TINYOBS_MAX_MEMORY_MB=64
     volumes:
       - tinyobs-data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/-/healthy"]
       interval: 30s
       timeout: 3s
       retries: 3
