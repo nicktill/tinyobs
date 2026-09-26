@@ -137,7 +137,9 @@ func (b *Batcher) flush() {
 
 // sendMetrics sends metrics via transport
 func (b *Batcher) sendMetrics(metrics []metrics.Metric) error {
-	ctx, cancel := context.WithTimeout(b.ctx, 5*time.Second)
+	// Not derived from b.ctx: Stop cancels b.ctx before the final flush, and
+	// sending with a cancelled context silently dropped the last batch.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	return b.transport.Send(ctx, metrics)
