@@ -30,7 +30,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - TINYOBS_ENDPOINT=http://tinyobs:8080/v1/ingest
+      - TINYOBS_ENDPOINT=http://tinyobs:8080
     depends_on:
       - tinyobs
     restart: unless-stopped

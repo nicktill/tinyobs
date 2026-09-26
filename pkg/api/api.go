@@ -33,12 +33,29 @@ type BuildInfo struct {
 	GoVersion string `json:"goVersion"`
 }
 
+// Target describes a scrape target for /api/v1/targets.
+type Target struct {
+	Labels             map[string]string `json:"labels"`
+	DiscoveredLabels   map[string]string `json:"discoveredLabels"`
+	ScrapePool         string            `json:"scrapePool"`
+	ScrapeURL          string            `json:"scrapeUrl"`
+	GlobalURL          string            `json:"globalUrl"`
+	LastError          string            `json:"lastError"`
+	LastScrape         time.Time         `json:"lastScrape"`
+	LastScrapeDuration float64           `json:"lastScrapeDuration"`
+	Health             string            `json:"health"`
+	ScrapeInterval     string            `json:"scrapeInterval"`
+	ScrapeTimeout      string            `json:"scrapeTimeout"`
+}
+
 // API serves the query endpoints.
 type API struct {
 	DB        *tsdb.DB
 	Engine    *promql.Engine
 	BuildInfo BuildInfo
 	Now       func() time.Time
+	// Targets lists scrape targets; nil means none are configured.
+	Targets func() []Target
 }
 
 // Register adds the API routes to mux.
@@ -53,6 +70,15 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/metadata", a.metadata)
 	mux.HandleFunc("GET /api/v1/status/buildinfo", a.buildInfo)
 	mux.HandleFunc("GET /api/v1/status/tsdb", a.tsdbStatus)
+	mux.HandleFunc("GET /api/v1/targets", a.targets)
+}
+
+func (a *API) targets(w http.ResponseWriter, _ *http.Request) {
+	active := []Target{}
+	if a.Targets != nil {
+		active = a.Targets()
+	}
+	respond(w, map[string]any{"activeTargets": active, "droppedTargets": []Target{}})
 }
 
 func (a *API) now() time.Time {

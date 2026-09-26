@@ -45,11 +45,36 @@ open http://localhost:8080
 
 ## What You Get
 
-- **Push-based metrics SDK** (counters, gauges, histograms)
+- **Works with what you already have**: scrapes Prometheus `/metrics` endpoints and receives OpenTelemetry (OTLP/HTTP)
 - **Persistent storage** on BadgerDB: ~14 bytes/sample, crash-safe, 72h retention by default
 - **PromQL**, checked against Prometheus's own test suite ([what's supported](#promql-support))
 - **Prometheus HTTP API**, so Grafana can use TinyObs as a Prometheus data source
 - **Dashboard** for exploring your metrics
+- A small **Go SDK** for apps with no instrumentation yet
+
+## Getting data in
+
+**Scrape a Prometheus endpoint.** Anything instrumented with a Prometheus client library works:
+
+```bash
+TINYOBS_SCRAPE=api=localhost:2112,worker=localhost:9100 go run ./cmd/server
+```
+
+Each entry is `[job=]host:port[/path]` (the path defaults to `/metrics`). TinyObs records `up` and
+`scrape_duration_seconds` per target, marks series stale when they disappear, and lists targets at
+`/api/v1/targets`.
+
+**Send OpenTelemetry metrics.** Point any OTLP/HTTP exporter at TinyObs:
+
+```bash
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:8080/v1/metrics \
+OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf ./your-app
+```
+
+Metrics are named the way Prometheus names OTLP metrics: `http.server.request.duration` (unit `s`) becomes
+`http_server_request_duration_seconds`, `service.name` becomes `job` and `service.instance.id` becomes `instance`.
+Only cumulative temporality is accepted; delta data points are rejected with an explicit message (set the
+exporter's temporality preference to cumulative, which is the default for most SDKs).
 
 ## Using the SDK
 
@@ -67,9 +92,8 @@ import (
 func main() {
     // Initialize TinyObs client
     client, _ := sdk.New(sdk.ClientConfig{
-        Service:    "my-app",
-        Endpoint:   "http://localhost:8080/v1/ingest",
-        FlushEvery: 5 * time.Second,
+        Service:  "my-app",                // becomes the job label
+        Endpoint: "http://localhost:8080", // TinyObs, or any OTLP/HTTP endpoint
     })
     
     ctx := context.Background()
@@ -111,7 +135,8 @@ point Grafana's Prometheus data source at `http://localhost:8080`.
 | `GET /api/v1/metadata` | Metric type and help text |
 | `GET /api/v1/status/tsdb`, `/api/v1/status/buildinfo` | Cardinality statistics, version |
 | `GET /-/healthy`, `/-/ready` | Health checks |
-| `POST /v1/ingest` | Ingest from the TinyObs Go SDK |
+| `POST /v1/metrics` | OTLP/HTTP metrics (protobuf or JSON, optionally gzipped) |
+| `GET /api/v1/targets` | Scrape target health |
 
 ```bash
 curl -s localhost:8080/api/v1/query --data-urlencode 'query=sum by (path) (rate(http_requests_total[5m]))'
@@ -141,6 +166,8 @@ Environment variables:
 | `TINYOBS_RETENTION` | How long samples are kept | `72h` |
 | `TINYOBS_MAX_SERIES` | Series limit; protects against label explosions | `50000` |
 | `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory budget | `64` |
+| `TINYOBS_SCRAPE` | Comma-separated scrape targets, `[job=]host:port[/path]` | none |
+| `TINYOBS_SCRAPE_INTERVAL` | Scrape interval | `15s` |
 
 Disk use is bounded by `max series × samples per series in the retention window × ~14 bytes`.
 
@@ -154,8 +181,10 @@ tinyobs/
 ├── pkg/
 │   ├── api/        # Prometheus HTTP API
 │   ├── labels/     # Series labels and matchers
+│   ├── otlp/       # OTLP/HTTP receiver
 │   ├── promql/     # Query engine
-│   ├── sdk/        # Go client SDK
+│   ├── scrape/     # Prometheus scraping
+│   ├── sdk/        # Go client SDK (exports OTLP)
 │   ├── server/     # HTTP server wiring
 │   └── tsdb/       # Time series storage
 └── web/            # Dashboard UI

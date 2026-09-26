@@ -7,15 +7,17 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nicktill/tinyobs/pkg/scrape"
 	"github.com/nicktill/tinyobs/pkg/sdk"
 )
 
-func startServer(t *testing.T, dir string) (string, context.CancelFunc, <-chan error) {
+func startServer(t *testing.T, dir string, targets ...scrape.Target) (string, context.CancelFunc, <-chan error) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -23,7 +25,10 @@ func startServer(t *testing.T, dir string) (string, context.CancelFunc, <-chan e
 	}
 	addr := ln.Addr().String()
 	ln.Close()
-	srv, err := New(Config{Listen: addr, DataDir: dir, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	srv, err := New(Config{
+		Listen: addr, DataDir: dir, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ScrapeTargets: targets, ScrapeInterval: 100 * time.Millisecond,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +73,7 @@ func TestEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	base, stop, done := startServer(t, dir)
 
-	client, err := sdk.New(sdk.ClientConfig{Service: "e2e", Endpoint: base + "/v1/ingest", FlushEvery: 50 * time.Millisecond})
+	client, err := sdk.New(sdk.ClientConfig{Service: "e2e", Endpoint: base, FlushEvery: 50 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,5 +136,52 @@ func TestEndToEnd(t *testing.T) {
 	resp.Body.Close()
 	if !strings.Contains(string(b), `"type":"counter"`) {
 		t.Fatalf("metadata after restart: %s", b)
+	}
+}
+
+// TestScrapeEndToEnd scrapes a Prometheus endpoint through the running server.
+func TestScrapeEndToEnd(t *testing.T) {
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "# TYPE orders_total counter\norders_total{shop=\"eu\"} 12\n")
+	}))
+	defer app.Close()
+	target, err := scrape.ParseTarget("orders=" + app.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, stop, done := startServer(t, t.TempDir(), target)
+	defer func() { stop(); <-done }()
+
+	var res []map[string]any
+	for i := 0; i < 50; i++ {
+		if res = promQuery(t, base, `orders_total{job="orders"}`); len(res) == 1 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(res) != 1 || res[0]["value"].([]any)[1] != "12" {
+		t.Fatalf("scraped series = %v", res)
+	}
+	if r := promQuery(t, base, `up{job="orders"}`); len(r) != 1 || r[0]["value"].([]any)[1] != "1" {
+		t.Fatalf("up = %v", r)
+	}
+
+	resp, err := http.Get(base + "/api/v1/targets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Data struct {
+			ActiveTargets []struct {
+				Health     string            `json:"health"`
+				ScrapePool string            `json:"scrapePool"`
+				Labels     map[string]string `json:"labels"`
+			} `json:"activeTargets"`
+		} `json:"data"`
+	}
+	json.NewDecoder(resp.Body).Decode(&body)
+	if ts := body.Data.ActiveTargets; len(ts) != 1 || ts[0].Health != "up" || ts[0].ScrapePool != "orders" || ts[0].Labels["instance"] == "" {
+		t.Fatalf("targets = %+v", body.Data.ActiveTargets)
 	}
 }
