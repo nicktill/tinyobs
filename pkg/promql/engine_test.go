@@ -122,7 +122,7 @@ func TestV1Regressions(t *testing.T) {
 	if _, err := NewEngine(db, EngineOptions{}).Instant(context.Background(), `rate(req_total[5m]`, time.Unix(40, 0)); err == nil {
 		t.Error("malformed query evaluated without error")
 	}
-	// P1-14: an instant query is evaluated at the requested time, with lookback.
+	// P1-15: an instant query is evaluated at the requested time, with lookback.
 	v := instant(t, db, `req_total{code="200"}`, 100)
 	if len(v) != 1 || v[0].T != 100_000 || v[0].F != 30 {
 		t.Errorf("instant query = %+v", v)
