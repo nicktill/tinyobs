@@ -18,6 +18,9 @@ cmd/example/example
 # Runtime data
 /data/
 
+# Prometheus PromQL test files, fetched by scripts/fetch-promql-tests.sh
+/pkg/promql/testdata/prometheus/
+
 # Test binary, built with `go test -c`
 *.test
 

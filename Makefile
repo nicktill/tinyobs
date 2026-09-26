@@ -1,4 +1,4 @@
-.PHONY: build server example clean test docker-build docker-run docker-compose-up docker-compose-down docker-clean help
+.PHONY: build server example clean test promql-compat docker-build docker-run docker-compose-up docker-compose-down docker-clean help
 
 # Build all binaries
 build:
@@ -22,7 +22,12 @@ clean:
 
 # Run tests
 test:
-	go test ./...
+	go test -race ./...
+
+# Check the query engine against Prometheus's own PromQL test suite
+promql-compat:
+	sh scripts/fetch-promql-tests.sh
+	go test ./pkg/promql -run TestPrometheusConformance -v
 
 # Install dependencies
 deps:
@@ -53,6 +58,7 @@ help:
 	@echo "    make demo      - Start both server and example"
 	@echo "    make build     - Build all binaries"
 	@echo "    make test      - Run tests"
+	@echo "    make promql-compat - Run Prometheus's PromQL tests against TinyObs"
 	@echo "    make clean     - Clean build artifacts"
 	@echo "    make deps      - Install dependencies"
 	@echo ""
