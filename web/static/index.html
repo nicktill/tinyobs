@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyObs</title>
+  <meta name="description" content="TinyObs: a single-binary metrics server with PromQL, Prometheus scraping and OpenTelemetry ingestion.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/uPlot.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { const t = localStorage.getItem('tinyobs.theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
+  <script src="vendor/uPlot.iife.min.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="TinyObs home">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" style="color: var(--accent)">
+        <rect x="1.5" y="1.5" width="29" height="29" rx="8" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M7 19.5l4.5-5 4 3.5 5-7.5 4.5 4" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      TinyObs
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#/" data-page="services">Services</a>
+      <a href="#/explore" data-page="explore">Explore</a>
+      <a href="#/metrics" data-page="metrics">Metrics</a>
+      <a href="#/system" data-page="system">System</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="controls" id="controls"></div>
+  </header>
+  <main id="main" aria-live="polite"></main>
+</body>
+</html>
