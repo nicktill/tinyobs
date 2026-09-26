@@ -55,11 +55,16 @@ m <metric name>                                      →  JSON metadata
 - **Disk is 3.5× smaller than V1.**
   - Reading one series is ~470× faster, and reading a whole metric ~28×
     faster.
+  - After tuning, a dashboard query over 1,000 series and one hour takes about
+    125 ms end to end. About 70 ms of that is reading 240k samples from
+    Badger, which is the per-sample iteration cost this layout accepts.
   - Ingest is 2.8× faster.
   - Startup doesn't grow with the amount of data stored.
   - At the target ceiling (10k series, 15 s interval, 72 h) disk is about
     2.4 GB. A typical 1k-series setup uses about 240 MB.
-- **The storage code is roughly 150 lines plus the index.** Durability comes
+- **The sample path is about 150 lines.** The whole storage package is about
+  700 lines of code once the in-memory index, retention, statistics and label
+  encoding are included. Durability comes
   from Badger: a sample is on disk once its write batch is flushed. There is no
   head block to recover and no WAL to replay.
 - **Compressed chunks would use ~40% less disk and query ~3× faster.** They
