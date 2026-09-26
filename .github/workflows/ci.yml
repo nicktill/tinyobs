@@ -65,8 +65,8 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Build server
-        run: go build -o /tmp/tinyobs-server ./cmd/server
+      - name: Build tinyobs
+        run: go build -o /tmp/tinyobs ./cmd/tinyobs
 
       - name: Build example
         run: go build -o /tmp/tinyobs-example ./cmd/example

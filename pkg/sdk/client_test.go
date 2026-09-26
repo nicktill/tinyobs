@@ -133,7 +133,7 @@ func TestStopFlushes(t *testing.T) {
 
 func TestEndpointResolution(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                                  "http://localhost:8080/v1/metrics",
+		"":                                  "http://localhost:4318/v1/metrics",
 		"http://tinyobs:8080":               "http://tinyobs:8080/v1/metrics",
 		"http://tinyobs:8080/":              "http://tinyobs:8080/v1/metrics",
 		"http://localhost:8080/v1/ingest":   "http://localhost:8080/v1/metrics",

@@ -1,51 +1,19 @@
-# Build stage
-FROM golang:1.23-alpine AS builder
-
-WORKDIR /build
-
-# Install build dependencies
-RUN apk add --no-cache git
-
-# Copy go mod files
+FROM golang:1.24-alpine AS build
+WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-
-# Copy source code
 COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/nicktill/tinyobs/pkg/server.Version=${VERSION}" -o /out/tinyobs ./cmd/tinyobs \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/tinyobs-example ./cmd/example
 
-# Build both binaries
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s' \
-    -o tinyobs-server \
-    ./cmd/server
-
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s' \
-    -o tinyobs-example \
-    ./cmd/example
-
-# Runtime stage
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates tzdata wget
-
-WORKDIR /app
-
-# Copy binaries from builder
-COPY --from=builder /build/tinyobs-server .
-COPY --from=builder /build/tinyobs-example .
-COPY --from=builder /build/web ./web
-
-# Create data directory
-RUN mkdir -p /app/data && chmod 755 /app/data
-
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/-/healthy || exit 1
-
-# Run the server
-CMD ["./tinyobs-server"]
-
+FROM alpine:3.20
+RUN adduser -D -H -u 10001 tinyobs && mkdir /data && chown tinyobs /data
+COPY --from=build /out/ /usr/local/bin/
+USER tinyobs
+# Inside a container, listen on all interfaces; publish the ports you need.
+ENV TINYOBS_LISTEN=:8421 TINYOBS_OTLP_LISTEN=:4318 TINYOBS_DATA_DIR=/data
+VOLUME /data
+EXPOSE 8421 4318
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s CMD wget -q --spider http://localhost:8421/-/healthy || exit 1
+ENTRYPOINT ["tinyobs"]

@@ -38,7 +38,8 @@ type ClientConfig struct {
 	// becomes the instance label. Default: the hostname.
 	Instance string
 	// Endpoint is the TinyObs base URL (the OTLP path is added) or a full
-	// OTLP/HTTP metrics URL. Default: http://localhost:8080.
+	// OTLP/HTTP metrics URL. Default: http://localhost:4318, the standard
+	// OTLP/HTTP port, where TinyObs listens by default.
 	Endpoint string
 	// APIKey, if set, is sent as a bearer token.
 	APIKey string
@@ -96,7 +97,7 @@ func New(cfg ClientConfig) (*Client, error) {
 // otlpURL resolves the endpoint to the OTLP metrics URL.
 func otlpURL(endpoint string) (string, error) {
 	if endpoint == "" {
-		endpoint = "http://localhost:8080"
+		endpoint = "http://localhost:4318"
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {

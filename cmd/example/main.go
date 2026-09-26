@@ -24,14 +24,15 @@ func main() {
 
 	// Initialize TinyObs client
 	log.Println("🚀 Initializing TinyObs client...")
+	// TINYOBS_ENDPOINT is where metrics go (default: the OTLP port,
+	// localhost:4318); TINYOBS_URL is where the stats page queries TinyObs.
 	endpoint := os.Getenv("TINYOBS_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "http://localhost:8080"
+	if u := os.Getenv("TINYOBS_URL"); u != "" {
+		tinyObsURL = strings.TrimSuffix(u, "/")
 	}
-	tinyObsURL = strings.TrimSuffix(endpoint, "/")
 	client, err := sdk.New(sdk.ClientConfig{
 		Service:    "example-app",
-		APIKey:     "demo-key",
+		APIKey:     os.Getenv("TINYOBS_AUTH_TOKEN"),
 		Endpoint:   endpoint,
 		FlushEvery: 5 * time.Second,
 	})
@@ -74,7 +75,7 @@ func main() {
 	go func() {
 		log.Println("🌐 Starting example app on :3000")
 		log.Println("📊 Visit http://localhost:3000 to see the app in action")
-		log.Println("📊 Visit http://localhost:8080 to see the TinyObs dashboard")
+		log.Println("📊 Visit http://localhost:8421 to see the TinyObs dashboard")
 
 		// Signal that we're starting (server takes a moment to bind)
 		time.Sleep(100 * time.Millisecond)
