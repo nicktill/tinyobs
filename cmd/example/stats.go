@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// tinyObsURL is the TinyObs base URL, set from TINYOBS_ENDPOINT in main.
-var tinyObsURL = "http://localhost:8080"
+// tinyObsURL is the TinyObs UI and API address, set from TINYOBS_URL in main.
+var tinyObsURL = "http://localhost:8421"
 
 // handleStats queries TinyObs for real metrics from httpx.Middleware
 func handleStats() http.HandlerFunc {

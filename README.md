@@ -1,255 +1,203 @@
 # TinyObs
 
-**A lightweight metrics platform you can actually understand.**
+**Production-style metrics for your app, without running an observability stack.**
 
-[![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
+One binary. Point it at your service, open a browser, and see request rate, errors and latency. TinyObs speaks
+the standards your code already uses (Prometheus scraping and OpenTelemetry), stores metrics on local disk,
+and answers PromQL checked against Prometheus's own test suite.
+
+[![CI](https://github.com/nicktill/tinyobs/actions/workflows/ci.yml/badge.svg)](https://github.com/nicktill/tinyobs/actions/workflows/ci.yml)
+[![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![TinyObs Dashboard](screenshots/dashboard-dark-theme-view.png)
-
-TinyObs is a metrics platform in about 6,000 lines of Go (excluding tests and comments). Small enough to read in a weekend, useful enough for local development.
-
-## Quick Start
-
-### Option 1: Docker
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/services-dark.png">
+  <img alt="The TinyObs Services page: request rate, 5xx error ratio and p95 latency for three services" src="docs/screenshots/services-light.png">
+</picture>
 
 ```bash
-# Start server only
-make docker-up
-
-# Or start server + example app (generates demo metrics)
-make docker-demo
-
-# View dashboard
-open http://localhost:8080
+go install github.com/nicktill/tinyobs/cmd/tinyobs@latest
+tinyobs -scrape api=localhost:2112     # or just `tinyobs` and send it OpenTelemetry
+open http://localhost:8421
 ```
 
-**Alternative (without Make):**
-```bash
-docker-compose up -d                    # Server only
-docker-compose --profile example up -d  # Server + example app
-```
+## Why TinyObs
 
-### Option 2: Local Development
-
-```bash
-# Terminal 1: Start server
-go run ./cmd/server
-
-# Terminal 2: Run example app (generates metrics)
-go run ./cmd/example
-
-# Terminal 3: Open dashboard
-open http://localhost:8080
-```
-
-## What You Get
-
-- **Works with what you already have**: scrapes Prometheus `/metrics` endpoints and receives OpenTelemetry (OTLP/HTTP)
-- **Persistent storage** on BadgerDB: ~14 bytes/sample, crash-safe, 72h retention by default
-- **PromQL**, checked against Prometheus's own test suite ([what's supported](#promql-support))
-- **Prometheus HTTP API**, so Grafana can use TinyObs as a Prometheus data source
-- **Dashboard** for exploring your metrics
-- A small **Go SDK** for apps with no instrumentation yet
+- **Useful in the first minute.** Services that serve HTTP get request, error and latency panels automatically.
+  You don't write queries or build dashboards first.
+- **Nothing proprietary.** Scrape any Prometheus `/metrics` endpoint, or send OTLP from any OpenTelemetry SDK or
+  Collector. TinyObs listens on the standard OTLP port, 4318, so SDKs with default settings just work.
+- **Answers you can trust.** The PromQL engine runs Prometheus's own test suite in CI. Supported features match
+  Prometheus: 887 test cases, 0 differences. Anything else is refused with an explicit error; TinyObs never
+  guesses.
+- **Small.** A 14 MB binary that starts in about 40 ms and idles at 16 MB of memory, with about 7,000 lines of Go
+  you can read in a weekend.
 
 ## Getting data in
 
-**Scrape a Prometheus endpoint.** Anything instrumented with a Prometheus client library works:
+**Scrape Prometheus endpoints.** Anything instrumented with a Prometheus client library works as is:
 
 ```bash
-TINYOBS_SCRAPE=api=localhost:2112,worker=localhost:9100 go run ./cmd/server
+tinyobs -scrape api=localhost:2112 -scrape worker=localhost:9100/metrics
 ```
 
-Each entry is `[job=]host:port[/path]` (the path defaults to `/metrics`). TinyObs records `up` and
-`scrape_duration_seconds` per target, marks series stale when they disappear, and lists targets at
-`/api/v1/targets`.
+Each target is `[job=]host:port[/path]`. TinyObs records `up` and `scrape_duration_seconds` for every target,
+marks series stale when they disappear, and shows target health on the System page.
 
-**Send OpenTelemetry metrics.** Point any OTLP/HTTP exporter at TinyObs:
+**Send OpenTelemetry metrics.** OTLP/HTTP, protobuf or JSON, on port 4318 (and on `/v1/metrics` of the main port):
 
 ```bash
-OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:8080/v1/metrics \
-OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf ./your-app
+OTEL_SERVICE_NAME=checkout \
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics \
+  ./your-app
 ```
 
-Metrics are named the way Prometheus names OTLP metrics: `http.server.request.duration` (unit `s`) becomes
-`http_server_request_duration_seconds`, `service.name` becomes `job` and `service.instance.id` becomes `instance`.
-Only cumulative temporality is accepted; delta data points are rejected with an explicit message (set the
-exporter's temporality preference to cumulative, which is the default for most SDKs).
+Metrics are named as Prometheus names OTLP metrics: `http.server.request.duration` (unit `s`) becomes
+`http_server_request_duration_seconds`, `service.name` becomes `job`, and `service.instance.id` becomes `instance`.
+TinyObs stores cumulative temporality, the default of most SDKs. Delta data points and exponential histograms are
+rejected with an explicit message rather than approximated.
 
-## Using the SDK
+**No instrumentation yet?** The Go SDK adds request metrics with one middleware and exports them over OTLP:
 
 ```go
-package main
+client, _ := sdk.New(sdk.ClientConfig{Service: "checkout"})
+client.Start(ctx)
+defer client.Stop()
 
-import (
-    "context"
-    "net/http"
-    "time"
-    "github.com/nicktill/tinyobs/pkg/sdk"
-    "github.com/nicktill/tinyobs/pkg/sdk/httpx"
-)
-
-func main() {
-    // Initialize TinyObs client
-    client, _ := sdk.New(sdk.ClientConfig{
-        Service:  "my-app",                // becomes the job label
-        Endpoint: "http://localhost:8080", // TinyObs, or any OTLP/HTTP endpoint
-    })
-    
-    ctx := context.Background()
-    client.Start(ctx)
-    defer client.Stop()
-    
-    // Create HTTP server
-    mux := http.NewServeMux()
-    mux.HandleFunc("/api/users", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("OK"))
-    })
-    
-    // Add TinyObs middleware - automatically tracks:
-    //   - http_requests_total (counter): by method, path, status
-    //   - http_request_duration_seconds (histogram): request latency
-    handler := httpx.Middleware(client)(mux)
-
-    // You can also create custom metrics for business logic:
-    activeUsers := client.Gauge("active_users")
-    activeUsers.Set(42.0) // Set current active users
-
-    errors := client.Counter("errors_total")
-    errors.Inc("type", "api_error", "endpoint", "/api/users")
-
-    // Your app listens on its own port; TinyObs uses 8080.
-    http.ListenAndServe(":3000", handler)
-}
+http.ListenAndServe(":3000", httpx.Middleware(client)(mux)) // http_requests_total, http_request_duration_seconds
+client.Counter("orders_total").Inc("region", "eu")
 ```
 
-## API
+## What you get
 
-TinyObs serves the [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/):
-point Grafana's Prometheus data source at `http://localhost:8080`.
-
-| Endpoint | Purpose |
+| | |
 |---|---|
-| `GET/POST /api/v1/query`, `/api/v1/query_range` | PromQL queries |
-| `GET/POST /api/v1/series`, `/api/v1/labels`, `GET /api/v1/label/<name>/values` | Series and label discovery |
-| `GET /api/v1/metadata` | Metric type and help text |
-| `GET /api/v1/status/tsdb`, `/api/v1/status/buildinfo` | Cardinality statistics, version |
-| `GET /-/healthy`, `/-/ready` | Health checks |
-| `POST /v1/metrics` | OTLP/HTTP metrics (protobuf or JSON, optionally gzipped) |
-| `GET /api/v1/targets` | Scrape target health |
+| **Services**: RED metrics per service, detected from OpenTelemetry or Prometheus HTTP conventions. | **Service detail**: requests by route, errors by status code, p50/p95/p99 latency, a routes table and runtime metrics. |
+| ![Service detail](docs/screenshots/service-dark.png) | ![Explore](docs/screenshots/explore-dark.png) |
+| **Explore**: PromQL with autocomplete, graph and table views, and hints such as "this is a counter, use `rate()`". | **Metrics and System**: the catalog with series counts per label, and TinyObs's own health and scrape targets. |
+| ![Metrics catalog](docs/screenshots/metrics-light.png) | ![System](docs/screenshots/system-dark.png) |
+
+Charts use a color-blind-safe palette validated in light and dark mode, and every chart has a legend and a
+tooltip showing all series at the cursor.
+
+**Grafana works too.** TinyObs serves the Prometheus HTTP API (`query`, `query_range`, `series`, `labels`,
+`label/<name>/values`, `metadata`), so you can add it as a Prometheus data source at `http://localhost:8421`.
+
+## PromQL support
+
+`make promql-compat` runs Prometheus v3.7.0's PromQL test files against TinyObs. CI runs them on every change.
+
+| | Test cases |
+|---|---|
+| Match Prometheus exactly | 887 |
+| Refused with "not supported by TinyObs" | 370 |
+| Skipped: need native histograms, which TinyObs doesn't store | 241 |
+| **Different from Prometheus** | **0** |
+
+**Supported:**
+- selectors with `=` `!=` `=~` `!~`, `offset` and subqueries;
+- arithmetic, comparison (with `bool`) and set operators, with `on`/`ignoring`/`group_left`/`group_right`;
+- `sum avg min max count group stddev stdvar topk bottomk quantile`;
+- `rate irate increase delta idelta deriv predict_linear resets changes`, all `*_over_time` functions and
+  `histogram_quantile`;
+- math, clamping, date and label functions.
+
+**Not supported:**
+- native histograms;
+- the `@` modifier and duration expressions;
+- `count_values`, `limitk`, `holt_winters` and `sort_by_label`.
+
+## Running it for real
+
+TinyObs is one process on one machine. It suits local development, CI, demos and small deployments where
+losing monitoring while that machine is down is acceptable. For those:
 
 ```bash
-curl -s localhost:8080/api/v1/query --data-urlencode 'query=sum by (path) (rate(http_requests_total[5m]))'
+tinyobs -listen :8421 -auth-token "$TOKEN" -tls-cert cert.pem -tls-key key.pem -retention 168h
 ```
 
-### PromQL support
+- **Authentication.** `-auth-token` protects every endpoint except `/-/healthy` and `/-/ready`. Send it as
+  `Authorization: Bearer …` or as the password of HTTP Basic auth, so browsers prompt for it and Grafana,
+  Prometheus and OTLP exporters all support it.
+- **Bounded resources.**
+  - Retention (default 72h) and the series cap (`-max-series`, default 50,000) bound disk and memory.
+  - New series past the cap are rejected and counted, so a label explosion can't take the process down.
+  - Queries are limited to 5M samples, 11,000 points per series and 30 s.
+- **Backups.** `POST /api/v1/admin/tsdb/snapshot` writes a consistent snapshot while TinyObs runs;
+  `tinyobs restore FILE -data DIR` restores it.
+- **Monitoring TinyObs.** It records its own ingest rate, rejections, series count, disk use and API latency (see
+  the System page), and exposes them at `/metrics`.
+- **Docker.** `docker compose up` runs it as a non-root user with data on a volume.
+  `docker compose --profile example up` adds an instrumented demo app.
 
-The engine is tested against [Prometheus's PromQL test suite](https://github.com/prometheus/prometheus/tree/v3.7.0/promql/promqltest/testdata)
-(`make promql-compat`). Every supported feature returns Prometheus's result; everything else is an explicit
-"not supported by TinyObs" error, never a guess.
-
-- **Supported:** selectors with `=` `!=` `=~` `!~`, range vectors, `offset`, subqueries; arithmetic, comparison
-  (with `bool`) and set operators with `on`/`ignoring`/`group_left`/`group_right`; `sum avg min max count group
-  stddev stdvar topk bottomk quantile`; `rate irate increase delta idelta deriv predict_linear resets changes`,
-  `*_over_time`, `histogram_quantile` (classic histograms), math, clamping, date and label functions.
-- **Not supported:** native histograms, the `@` modifier, duration expressions, `count_values`, `limitk`,
-  `holt_winters`, `sort_by_label`.
+There is no replication or high availability. It's not the right tool for long-term storage, many teams, or
+high-cardinality production fleets; use Prometheus, Mimir or VictoriaMetrics for those.
 
 ## Configuration
 
-Environment variables:
+Every flag can also be set through an environment variable, which is handy in containers.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `8080` |
-| `TINYOBS_DATA_DIR` | Data directory | `./data/tinyobs-v2` |
-| `TINYOBS_RETENTION` | How long samples are kept | `72h` |
-| `TINYOBS_MAX_SERIES` | Series limit; protects against label explosions | `50000` |
-| `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory budget | `64` |
-| `TINYOBS_SCRAPE` | Comma-separated scrape targets, `[job=]host:port[/path]` | none |
-| `TINYOBS_SCRAPE_INTERVAL` | Scrape interval | `15s` |
+| Flag | Environment | Default | |
+|---|---|---|---|
+| `-listen` | `TINYOBS_LISTEN` | `127.0.0.1:8421` | UI and API address |
+| `-otlp-listen` | `TINYOBS_OTLP_LISTEN` | `127.0.0.1:4318` | Extra OTLP listener; empty disables it |
+| `-data` | `TINYOBS_DATA_DIR` | `~/.tinyobs` | Data directory |
+| `-retention` | `TINYOBS_RETENTION` | `72h` | How long samples are kept |
+| `-max-series` | `TINYOBS_MAX_SERIES` | `50000` | Series limit |
+| `-scrape` | `TINYOBS_SCRAPE` | | Targets, `[job=]host:port[/path]`, repeatable or comma-separated |
+| `-scrape-interval` | `TINYOBS_SCRAPE_INTERVAL` | `15s` | Scrape interval |
+| `-auth-token` | `TINYOBS_AUTH_TOKEN` | | Require this token |
+| `-tls-cert`, `-tls-key` | `TINYOBS_TLS_CERT`, `TINYOBS_TLS_KEY` | | Serve HTTPS |
+| `-memory-mb` | `TINYOBS_MAX_MEMORY_MB` | `64` | Storage cache budget |
+| `-open` | | | Open the UI in a browser after starting |
 
-Disk use is bounded by `max series × samples per series in the retention window × ~14 bytes`.
+TinyObs listens on localhost by default and warns when it listens on a wider address without a token.
 
-## Project Structure
+## Performance
 
-```
-tinyobs/
-├── cmd/
-│   ├── server/     # Main server
-│   └── example/    # Example app
-├── pkg/
-│   ├── api/        # Prometheus HTTP API
-│   ├── labels/     # Series labels and matchers
-│   ├── otlp/       # OTLP/HTTP receiver
-│   ├── promql/     # Query engine
-│   ├── scrape/     # Prometheus scraping
-│   ├── sdk/        # Go client SDK (exports OTLP)
-│   ├── server/     # HTTP server wiring
-│   └── tsdb/       # Time series storage
-└── web/            # Dashboard UI
-```
+Measured on a 4-core Linux VM. Each figure comes with the command that reproduces it.
 
-## Why TinyObs?
+| | |
+|---|---|
+| Binary | 14 MB, including the UI (`make build`) |
+| Startup | 36 ms empty, 120 ms with 10,000 series and 14M samples |
+| Memory | 16 MB idle, 47 MB with 10,000 series |
+| Disk | ~13.6 bytes/sample on a deliberately hard mix of counters, gauges and random floats; regular data compresses further ([ADR 0001](docs/adr/0001-storage-layout.md)) |
+| Ingest | ~240,000 samples/s (`go test -bench Ingest ./pkg/tsdb`) |
+| Query | `sum by (instance) (rate(x[5m]))` over 1,000 series for 1h at a 15s step: ~125 ms (`go test -bench RangeQuery ./pkg/promql`) |
 
-I built this to understand how metrics systems work. Prometheus has 300k+ lines. TinyObs is about 6,000 lines you can actually read and learn from.
+## How it works
 
-**Perfect for:**
-- Learning how metrics systems work
-- Local development metrics
-- Understanding Go systems programming
+TinyObs is small on purpose, and meant to be read. The whole server is about 7,000 lines of Go:
 
-**Not for:**
-- Production deployments (use Prometheus)
-- Distributed tracing (use Jaeger/Zipkin)
-- Large-scale deployments
+| Package | Lines | What it does |
+|---|---|---|
+| [`pkg/tsdb`](pkg/tsdb) | 840 | Storage: one key per sample in BadgerDB with ZSTD, an in-memory label index, retention, crash-safe commits |
+| [`pkg/promql`](pkg/promql) | 2,640 | Lexer, parser, type checker and step-based evaluator, checked against Prometheus's tests |
+| [`pkg/api`](pkg/api) | 530 | The Prometheus HTTP API |
+| [`pkg/scrape`](pkg/scrape) | 520 | Prometheus and OpenMetrics text parsing, scraping, staleness |
+| [`pkg/otlp`](pkg/otlp) | 1,170 | OTLP/HTTP decoding (protobuf and JSON) and translation to Prometheus names |
+| [`pkg/labels`](pkg/labels) | 310 | Series identity, matchers, validation |
+| [`pkg/server`](pkg/server) | 460 | Wiring, auth, snapshots, self-monitoring |
+| [`web`](web) | 1,700 | The UI: vanilla JavaScript modules, no build step, embedded in the binary |
 
-## Documentation
+The [V2 design document](docs/design/v2.md) explains each decision: why storage keeps one key per sample
+rather than compressed chunks ([measured in ADR 0001](docs/adr/0001-storage-layout.md)), how the engine
+evaluates, and what TinyObs deliberately doesn't do.
 
-- [Quick Start Guide](QUICK_START.md) - Detailed setup and testing
-- [V2 design](docs/design/v2.md) - Architecture and the decisions behind it
-- [ADRs](docs/adr/) - Storage layout, timestamp resolution
+**Not planned:** traces, logs, alerting, recording rules, clustering, multi-tenancy, a dashboard builder or
+long-term storage. Staying small is the feature.
 
 ## Development
 
-### Local Development
-
 ```bash
-# Run tests (and the Prometheus conformance suite)
-make test
-make promql-compat
-
-# Build
-go build ./cmd/server
-
-# Run with custom config
-PORT=3000 TINYOBS_RETENTION=168h go run ./cmd/server
+make run            # TinyObs on http://localhost:8421
+make example        # an instrumented demo app that sends it traffic
+make test           # tests with the race detector
+make promql-compat  # Prometheus's PromQL test suite against the engine
+make build          # bin/tinyobs
 ```
-
-### Docker
-
-**Recommended (using Make):**
-```bash
-make docker-up      # Start server only
-make docker-demo    # Start server + example app
-make docker-down    # Stop all services
-make docker-logs    # View logs
-```
-
-**Alternative (direct docker-compose):**
-```bash
-docker-compose up -d --build                    # Server only
-docker-compose --profile example up -d --build  # Server + example app
-docker-compose --profile example down           # Stop all services
-docker-compose logs -f                          # View logs
-```
-
-See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
-
----
-
-Built by [@nicktill](https://github.com/nicktill)
+MIT

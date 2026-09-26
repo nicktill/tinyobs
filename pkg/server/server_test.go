@@ -2,31 +2,28 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/scrape"
 	"github.com/nicktill/tinyobs/pkg/sdk"
+	"github.com/nicktill/tinyobs/pkg/tsdb"
 )
 
 func startServer(t *testing.T, dir string, targets ...scrape.Target) (string, context.CancelFunc, <-chan error) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	ln.Close()
 	srv, err := New(Config{
-		Listen: addr, DataDir: dir, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Listen: "127.0.0.1:0", DataDir: dir, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ScrapeTargets: targets, ScrapeInterval: 100 * time.Millisecond,
 	})
 	if err != nil {
@@ -34,16 +31,14 @@ func startServer(t *testing.T, dir string, targets ...scrape.Target) (string, co
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- srv.Run(ctx) }()
-	base := "http://" + addr
-	for i := 0; i < 100; i++ {
-		if resp, err := http.Get(base + "/-/ready"); err == nil {
-			resp.Body.Close()
-			return base, cancel, done
-		}
-		time.Sleep(20 * time.Millisecond)
+	ready := make(chan Addrs, 1)
+	go func() { done <- srv.Run(ctx, ready) }()
+	select {
+	case a := <-ready:
+		return "http://" + a.HTTP.String(), cancel, done
+	case err := <-done:
+		t.Fatal(err)
 	}
-	t.Fatal("server did not become ready")
 	return "", nil, nil
 }
 
@@ -107,17 +102,6 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("gauge = %v", r)
 	}
 
-	// The legacy dashboard endpoints are served from the new storage.
-	resp, err := http.Get(base + "/v1/query/range?metric=e2e_requests_total")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if !strings.Contains(string(b), `"route":"/a"`) {
-		t.Fatalf("legacy range endpoint: %s", b)
-	}
-
 	stop()
 	if err := <-done; err != nil {
 		t.Fatalf("shutdown: %v", err)
@@ -128,11 +112,11 @@ func TestEndToEnd(t *testing.T) {
 	if r := promQuery(t, base, `sum(e2e_requests_total)`); len(r) != 1 || r[0]["value"].([]any)[1] != "300" {
 		t.Fatalf("after restart = %v", r)
 	}
-	resp, err = http.Get(base + "/api/v1/metadata?metric=e2e_requests_total")
+	resp, err := http.Get(base + "/api/v1/metadata?metric=e2e_requests_total")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ = io.ReadAll(resp.Body)
+	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if !strings.Contains(string(b), `"type":"counter"`) {
 		t.Fatalf("metadata after restart: %s", b)
@@ -183,5 +167,109 @@ func TestScrapeEndToEnd(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	if ts := body.Data.ActiveTargets; len(ts) != 1 || ts[0].Health != "up" || ts[0].ScrapePool != "orders" || ts[0].Labels["instance"] == "" {
 		t.Fatalf("targets = %+v", body.Data.ActiveTargets)
+	}
+}
+
+// TestProductionFeatures covers auth, snapshots, self-metrics, the OTLP port
+// and the embedded UI on one running server.
+func TestProductionFeatures(t *testing.T) {
+	dir := t.TempDir()
+	srv, err := New(Config{
+		Listen: "127.0.0.1:0", OTLPListen: "127.0.0.1:0", DataDir: dir,
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AuthToken: "s3cret",
+		UI:        fstest.MapFS{"index.html": {Data: []byte("<title>TinyObs</title>")}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	ready := make(chan Addrs, 1)
+	go func() { done <- srv.Run(ctx, ready) }()
+	a := <-ready
+	defer func() { cancel(); <-done }()
+	base := "http://" + a.HTTP.String()
+
+	do := func(method, path, auth string, body io.Reader) (int, string) {
+		req, _ := http.NewRequest(method, base+path, body)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	// Auth: required everywhere except health checks; bearer and Basic both work.
+	if code, _ := do("GET", "/-/healthy", "", nil); code != 200 {
+		t.Errorf("healthy without token: %d", code)
+	}
+	for _, path := range []string{"/", "/api/v1/labels", "/metrics"} {
+		if code, _ := do("GET", path, "", nil); code != 401 {
+			t.Errorf("%s without token: %d", path, code)
+		}
+	}
+	if code, _ := do("GET", "/api/v1/labels", "Bearer wrong", nil); code != 401 {
+		t.Errorf("wrong token accepted: %d", code)
+	}
+	if code, _ := do("GET", "/api/v1/labels", "Bearer s3cret", nil); code != 200 {
+		t.Errorf("bearer token rejected: %d", code)
+	}
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("anyone:s3cret"))
+	if code, body := do("GET", "/", basic, nil); code != 200 || !strings.Contains(body, "TinyObs") {
+		t.Errorf("UI with Basic auth: %d %q", code, body)
+	}
+
+	// OTLP on its own port, also behind auth.
+	otlpURL := "http://" + a.OTLP.String() + "/v1/metrics"
+	payload := `{"resourceMetrics":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"svc"}}]},"scopeMetrics":[{"metrics":[{"name":"jobs","gauge":{"dataPoints":[{"asDouble":3}]}}]}]}]}`
+	req, _ := http.NewRequest("POST", otlpURL, strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 401 {
+		t.Fatalf("OTLP port without token: %v %v", err, resp)
+	}
+	req, _ = http.NewRequest("POST", otlpURL, strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer s3cret")
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("OTLP port with token: %v %v", err, resp)
+	}
+
+	// Self-metrics: exposed at /metrics and recorded as job="tinyobs".
+	if code, body := do("GET", "/metrics", "Bearer s3cret", nil); code != 200 || !strings.Contains(body, "tinyobs_series ") || !strings.Contains(body, `tinyobs_http_requests_total{code="401",handler="other"}`) {
+		t.Errorf("/metrics: %d\n%s", code, body)
+	}
+	if err := srv.self.record(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := do("GET", "/api/v1/query?query="+url.QueryEscape(`tinyobs_series{job="tinyobs"}`), "Bearer s3cret", nil); code != 200 || !strings.Contains(body, `"tinyobs_series"`) {
+		t.Errorf("self-metrics not queryable: %d %s", code, body)
+	}
+
+	// Snapshots are written under the data directory and can be restored.
+	code, body := do("POST", "/api/v1/admin/tsdb/snapshot", "Bearer s3cret", nil)
+	if code != 200 {
+		t.Fatalf("snapshot: %d %s", code, body)
+	}
+	var snap struct {
+		Data struct{ Path string } `json:"data"`
+	}
+	json.Unmarshal([]byte(body), &snap)
+	f, err := os.Open(snap.Data.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	restored := t.TempDir()
+	if err := tsdb.Restore(restored, f); err != nil {
+		t.Fatalf("restoring snapshot: %v", err)
 	}
 }

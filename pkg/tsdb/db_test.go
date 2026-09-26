@@ -2,6 +2,7 @@ package tsdb
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -466,4 +467,35 @@ func BenchmarkIngest(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(b.N*len(sets))/b.Elapsed().Seconds(), "samples/s")
+}
+
+func TestSnapshotRestore(t *testing.T) {
+	db := openTest(t, Options{})
+	app := db.Appender()
+	for i := int64(0); i < 100; i++ {
+		app.Append(labels.FromStrings("__name__", "m", "i", strconv.Itoa(int(i%3))), i*1000, float64(i))
+	}
+	commit(t, app)
+	db.SetMetadata("m", Metadata{Type: "gauge"})
+
+	var buf bytes.Buffer
+	if err := db.Snapshot(&buf); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := Restore(dir, bytes.NewReader(buf.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(dir, bytes.NewReader(buf.Bytes())); err == nil {
+		t.Fatal("restore into a non-empty directory must fail")
+	}
+	restored := openTest(t, Options{Dir: dir})
+	got := selectAll(t, restored, eq("__name__", "m"))
+	n := 0
+	for _, s := range got {
+		n += len(s.Samples)
+	}
+	if len(got) != 3 || n != 100 || restored.Metadata()["m"].Type != "gauge" {
+		t.Fatalf("restored %d series, %d samples, metadata %+v", len(got), n, restored.Metadata())
+	}
 }

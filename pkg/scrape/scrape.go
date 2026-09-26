@@ -92,6 +92,11 @@ func NewManager(db *tsdb.DB, targets []Target, interval, timeout time.Duration, 
 	if timeout <= 0 || timeout > interval {
 		timeout = interval
 	}
+	if len(targets) > 0 {
+		for name, md := range syntheticMetadata {
+			db.SetMetadata(name, md)
+		}
+	}
 	m := &Manager{db: db, interval: interval, timeout: timeout, log: log, client: &http.Client{}}
 	for _, t := range targets {
 		m.targets = append(m.targets, &target{
@@ -254,6 +259,13 @@ func (m *Manager) fetch(ctx context.Context, t *target) (*ParseResult, error) {
 	}
 	mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	return Parse(body, mt == "application/openmetrics-text")
+}
+
+// syntheticMetadata describes the series every scrape adds.
+var syntheticMetadata = map[string]tsdb.Metadata{
+	"up":                      {Type: "gauge", Help: "1 if the last scrape of the target succeeded, 0 if it failed."},
+	"scrape_duration_seconds": {Type: "gauge", Help: "How long the last scrape of the target took.", Unit: "seconds"},
+	"scrape_samples_scraped":  {Type: "gauge", Help: "Samples the target exposed in the last scrape."},
 }
 
 // storeMetadata records type, help and unit. OpenMetrics counters are
