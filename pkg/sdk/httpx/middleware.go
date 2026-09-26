@@ -73,19 +73,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// normalizePath normalizes paths to avoid cardinality explosion.
-// Examples:
-//   - /api/users/123 → /api/users/{id}
-//   - /posts/456/comments → /posts/{id}/comments
-//   - /api/users/550e8400-e29b-41d4-a716-446655440000 → /api/users/{id}
+var (
+	uuidPath    = regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	numericPath = regexp.MustCompile(`/\d+`)
+)
+
+// normalizePath replaces IDs in paths with {id}, so each route is one series
+// rather than one per resource.
 func normalizePath(path string) string {
-	// Replace UUIDs first (more specific pattern, case-insensitive)
-	uuidRe := regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	path = uuidRe.ReplaceAllString(path, "/{id}")
-
-	// Replace numeric IDs with {id} (after UUIDs to avoid partial matches)
-	re := regexp.MustCompile(`/\d+`)
-	path = re.ReplaceAllString(path, "/{id}")
-
-	return path
+	path = uuidPath.ReplaceAllString(path, "/{id}")
+	return numericPath.ReplaceAllString(path, "/{id}")
 }

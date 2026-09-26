@@ -1,8 +1,8 @@
 package server
 
-// Deprecated V1 endpoints, kept so the V1 dashboard and the V1 SDK keep
-// working while V2 lands. They are backed by the new storage and query
-// engine, and are removed together with the V1 UI and SDK.
+// Deprecated V1 endpoints, kept so the V1 dashboard keeps working while V2
+// lands. They are backed by the new storage and query engine, and are
+// removed together with the V1 UI.
 
 import (
 	"context"
@@ -11,19 +11,14 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"sort"
 	"strconv"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/labels"
-	"github.com/nicktill/tinyobs/pkg/sdk/metrics"
 	"github.com/nicktill/tinyobs/pkg/tsdb"
 )
 
-const legacyMaxBody = 16 << 20
-
 func (s *Server) registerLegacy(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/ingest", s.legacyIngest)
 	mux.HandleFunc("GET /v1/query", s.legacyLatest)
 	mux.HandleFunc("GET /v1/query/range", s.legacyRange)
 	mux.HandleFunc("POST /v1/query/execute", s.legacyExecute)
@@ -42,75 +37,6 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeErr(w http.ResponseWriter, code int, err error) {
 	writeJSON(w, code, map[string]string{"error": err.Error()})
-}
-
-// legacyIngest accepts the V1 SDK's JSON batches. The V1 SDK sends a sample
-// per increment, so a batch can hold several samples for one series in the
-// same millisecond; the last one wins, since counters only grow.
-func (s *Server) legacyIngest(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Metrics []metrics.Metric `json:"metrics"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, legacyMaxBody)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
-		return
-	}
-	type key struct {
-		series string
-		t      int64
-	}
-	type entry struct {
-		lset labels.Labels
-		t    int64
-		v    float64
-	}
-	latest := map[key]entry{}
-	now := time.Now().UnixMilli()
-	for _, m := range req.Metrics {
-		lm := make(map[string]string, len(m.Labels)+1)
-		for k, v := range m.Labels {
-			lm[k] = v
-		}
-		lm[labels.MetricName] = m.Name
-		ls := labels.FromMap(lm)
-		t := now
-		if !m.Timestamp.IsZero() {
-			t = m.Timestamp.UnixMilli()
-		}
-		latest[key{ls.String(), t}] = entry{ls, t, m.Value}
-		if m.Type != "" {
-			family := m.Name
-			typ := string(m.Type)
-			if m.Type == metrics.HistogramType {
-				for _, suffix := range []string{"_bucket", "_sum", "_count"} {
-					if len(family) > len(suffix) && family[len(family)-len(suffix):] == suffix {
-						family = family[:len(family)-len(suffix)]
-					}
-				}
-			}
-			s.db.SetMetadata(family, tsdb.Metadata{Type: typ})
-		}
-	}
-	entries := make([]entry, 0, len(latest))
-	for _, e := range latest {
-		entries = append(entries, e)
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].t < entries[j].t })
-	app := s.db.Appender()
-	for _, e := range entries {
-		app.Append(e.lset, e.t, e.v)
-	}
-	res, err := app.Commit()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	resp := map[string]any{"status": "success", "count": res.Appended}
-	if res.NumRejected() > 0 {
-		resp["rejected"] = res.NumRejected()
-		resp["message"] = res.FirstError.Error()
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 type legacyMetric struct {
@@ -165,11 +91,15 @@ func (s *Server) legacyLatest(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		name := ser.Labels.Get(labels.MetricName)
+		lm := ser.Labels.DropMetricName().Map()
+		if _, ok := lm["service"]; !ok && lm["job"] != "" {
+			lm["service"] = lm["job"] // the V1 dashboard groups by "service"
+		}
 		out = append(out, legacyMetric{
 			Name:      name,
 			Type:      meta[name].Type,
 			Value:     last.V,
-			Labels:    ser.Labels.DropMetricName().Map(),
+			Labels:    lm,
 			Timestamp: time.UnixMilli(last.T),
 		})
 	}
@@ -221,7 +151,11 @@ func (s *Server) legacyRange(w http.ResponseWriter, r *http.Request) {
 				pts = append(pts, point{smp.T, smp.V})
 			}
 		}
-		out = append(out, seriesData{Metric: name, Labels: ser.Labels.DropMetricName().Map(), Points: pts, Resolution: "raw"})
+		lm := ser.Labels.DropMetricName().Map()
+		if _, ok := lm["service"]; !ok && lm["job"] != "" {
+			lm["service"] = lm["job"]
+		}
+		out = append(out, seriesData{Metric: name, Labels: lm, Points: pts, Resolution: "raw"})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": out})
 }

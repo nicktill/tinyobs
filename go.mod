@@ -7,6 +7,7 @@ toolchain go1.24.7
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.8.0
+	google.golang.org/protobuf v1.36.6
 )
 
 require (
@@ -22,5 +23,4 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
 )

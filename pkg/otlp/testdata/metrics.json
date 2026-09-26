@@ -1,0 +1,236 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "checkout"
+            }
+          },
+          {
+            "key": "service.namespace",
+            "value": {
+              "stringValue": "shop"
+            }
+          },
+          {
+            "key": "service.instance.id",
+            "value": {
+              "stringValue": "pod-1"
+            }
+          },
+          {
+            "key": "deployment.environment",
+            "value": {
+              "stringValue": "dev"
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "example"
+          },
+          "metrics": [
+            {
+              "name": "http.server.requests",
+              "description": "Requests.",
+              "unit": "{request}",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asInt": "42",
+                    "attributes": [
+                      {
+                        "key": "http.route",
+                        "value": {
+                          "stringValue": "/cart"
+                        }
+                      },
+                      {
+                        "key": "http.response.status_code",
+                        "value": {
+                          "intValue": "200"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asInt": "3",
+                    "attributes": [
+                      {
+                        "key": "http.route",
+                        "value": {
+                          "stringValue": "/cart"
+                        }
+                      },
+                      {
+                        "key": "http.response.status_code",
+                        "value": {
+                          "intValue": "500"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "process.memory.usage",
+              "unit": "By",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asDouble": 1048576.0
+                  }
+                ]
+              }
+            },
+            {
+              "name": "http.server.request.duration",
+              "unit": "s",
+              "histogram": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "count": "10",
+                    "sum": 3.25,
+                    "bucketCounts": [
+                      "5",
+                      "3",
+                      "1",
+                      "1"
+                    ],
+                    "explicitBounds": [
+                      0.1,
+                      0.5,
+                      1.0
+                    ],
+                    "attributes": [
+                      {
+                        "key": "http.route",
+                        "value": {
+                          "stringValue": "/cart"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+              }
+            },
+            {
+              "name": "rpc.latency",
+              "unit": "ms",
+              "summary": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "count": "7",
+                    "sum": 1.25,
+                    "quantileValues": [
+                      {
+                        "quantile": 0.5,
+                        "value": 0.125
+                      },
+                      {
+                        "quantile": 0.99,
+                        "value": 0.875
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "jobs.processed",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asInt": "5"
+                  }
+                ],
+                "aggregationTemporality": "AGGREGATION_TEMPORALITY_DELTA",
+                "isMonotonic": true
+              }
+            },
+            {
+              "name": "exp.hist",
+              "exponentialHistogram": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "count": "1"
+                  }
+                ],
+                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+              }
+            },
+            {
+              "name": "queue.depth",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asDouble": 0.0,
+                    "flags": 1
+                  }
+                ]
+              }
+            },
+            {
+              "name": "cpu.utilization",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000000000000000",
+                    "asDouble": 0.5,
+                    "attributes": [
+                      {
+                        "key": "0weird",
+                        "value": {
+                          "boolValue": true
+                        }
+                      },
+                      {
+                        "key": "net.peer.name",
+                        "value": {
+                          "stringValue": "db"
+                        }
+                      },
+                      {
+                        "key": "tags",
+                        "value": {
+                          "arrayValue": {
+                            "values": [
+                              {
+                                "stringValue": "a"
+                              },
+                              {
+                                "intValue": "1"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

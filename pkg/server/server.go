@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/api"
+	"github.com/nicktill/tinyobs/pkg/otlp"
 	"github.com/nicktill/tinyobs/pkg/promql"
+	"github.com/nicktill/tinyobs/pkg/scrape"
 	"github.com/nicktill/tinyobs/pkg/tsdb"
 )
 
@@ -29,6 +31,9 @@ type Config struct {
 	MemoryMB  int64
 	WebDir    string // static UI files
 	Logger    *slog.Logger
+
+	ScrapeTargets  []scrape.Target
+	ScrapeInterval time.Duration
 }
 
 // Server is a running TinyObs instance.
@@ -38,6 +43,7 @@ type Server struct {
 	db     *tsdb.DB
 	engine *promql.Engine
 	http   *http.Server
+	scrape *scrape.Manager
 }
 
 // New opens storage and builds the HTTP handlers.
@@ -54,11 +60,15 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	if cfg.ScrapeInterval <= 0 {
+		cfg.ScrapeInterval = 15 * time.Second
+	}
 	s := &Server{
 		cfg:    cfg,
 		log:    cfg.Logger,
 		db:     db,
 		engine: promql.NewEngine(db, promql.EngineOptions{}),
+		scrape: scrape.NewManager(db, cfg.ScrapeTargets, cfg.ScrapeInterval, 10*time.Second, cfg.Logger),
 	}
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
@@ -78,7 +88,8 @@ func (s *Server) Handler() http.Handler { return s.http.Handler }
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	(&api.API{DB: s.db, Engine: s.engine, BuildInfo: api.BuildInfo{Version: Version}}).Register(mux)
+	(&api.API{DB: s.db, Engine: s.engine, BuildInfo: api.BuildInfo{Version: Version}, Targets: s.targets}).Register(mux)
+	mux.Handle("POST /v1/metrics", &otlp.Handler{DB: s.db})
 	mux.HandleFunc("GET /-/healthy", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "TinyObs is Healthy.")
 	})
@@ -108,10 +119,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 	bg, stopBG := context.WithCancel(context.Background())
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		s.retentionLoop(bg)
+	}()
+	go func() {
+		defer wg.Done()
+		s.scrape.Run(bg)
 	}()
 
 	errc := make(chan error, 1)
@@ -135,6 +150,27 @@ func (s *Server) Run(ctx context.Context) error {
 		err = nil
 	}
 	return err
+}
+
+func (s *Server) targets() []api.Target {
+	var out []api.Target
+	for _, st := range s.scrape.Status() {
+		ls := map[string]string{"job": st.Job, "instance": st.Instance()}
+		out = append(out, api.Target{
+			Labels:             ls,
+			DiscoveredLabels:   map[string]string{"__address__": st.Instance(), "__metrics_path__": st.URL.Path, "__scheme__": st.URL.Scheme, "job": st.Job},
+			ScrapePool:         st.Job,
+			ScrapeURL:          st.URL.String(),
+			GlobalURL:          st.URL.String(),
+			LastError:          st.LastError,
+			LastScrape:         st.LastScrape,
+			LastScrapeDuration: st.LastDuration.Seconds(),
+			Health:             st.Health,
+			ScrapeInterval:     st.Interval.String(),
+			ScrapeTimeout:      st.Timeout.String(),
+		})
+	}
+	return out
 }
 
 // retentionLoop applies retention at startup and then hourly.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,8 +26,9 @@ func main() {
 	log.Println("🚀 Initializing TinyObs client...")
 	endpoint := os.Getenv("TINYOBS_ENDPOINT")
 	if endpoint == "" {
-		endpoint = "http://localhost:8080/v1/ingest"
+		endpoint = "http://localhost:8080"
 	}
+	tinyObsURL = strings.TrimSuffix(endpoint, "/")
 	client, err := sdk.New(sdk.ClientConfig{
 		Service:    "example-app",
 		APIKey:     "demo-key",
