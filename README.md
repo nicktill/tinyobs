@@ -1,6 +1,6 @@
 # TinyObs
 
-**A lightweight metrics platform you can actually understand.**
+**A lightweight metrics platform you can actually understand.** · [Website & docs](https://nicktill.github.io/tinyobs/)
 
 [![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
