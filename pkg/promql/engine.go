@@ -28,6 +28,10 @@ type EngineOptions struct {
 	Timeout time.Duration
 	// MaxPoints bounds the points per series in a range query result.
 	MaxPoints int
+	// MaxConcurrent bounds queries evaluated at once. MaxSamples bounds one
+	// query's memory; this bounds their sum. Further queries wait, within
+	// their timeout.
+	MaxConcurrent int
 }
 
 // DefaultEngineOptions matches Prometheus's defaults for lookback and points,
@@ -38,6 +42,7 @@ func DefaultEngineOptions() EngineOptions {
 		MaxSamples:    5_000_000,
 		Timeout:       30 * time.Second,
 		MaxPoints:     11_000,
+		MaxConcurrent: 8,
 	}
 }
 
@@ -45,6 +50,22 @@ func DefaultEngineOptions() EngineOptions {
 type Engine struct {
 	db   Storage
 	opts EngineOptions
+	gate chan struct{} // one token per running query
+}
+
+// acquire waits for a query slot, giving up when ctx ends or the query
+// timeout passes. The returned func releases the slot.
+func (e *Engine) acquire(ctx context.Context) (func(), error) {
+	t := time.NewTimer(e.opts.Timeout)
+	defer t.Stop()
+	select {
+	case e.gate <- struct{}{}:
+		return func() { <-e.gate }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-t.C:
+		return nil, fmt.Errorf("%w waiting for one of %d query slots", ErrTimeout, e.opts.MaxConcurrent)
+	}
 }
 
 // NewEngine returns an engine reading from db.
@@ -62,7 +83,10 @@ func NewEngine(db Storage, opts EngineOptions) *Engine {
 	if opts.MaxPoints <= 0 {
 		opts.MaxPoints = d.MaxPoints
 	}
-	return &Engine{db: db, opts: opts}
+	if opts.MaxConcurrent <= 0 {
+		opts.MaxConcurrent = d.MaxConcurrent
+	}
+	return &Engine{db: db, opts: opts, gate: make(chan struct{}, opts.MaxConcurrent)}
 }
 
 // ErrTimeout is returned when evaluation exceeds the timeout.
@@ -74,6 +98,11 @@ func (e *Engine) Instant(ctx context.Context, q string, ts time.Time) (Value, er
 	if err != nil {
 		return nil, err
 	}
+	release, err := e.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	t := ts.UnixMilli()
 	ev, cancel, err := e.newEvaluator(ctx, expr, t, t, 0)
 	if err != nil {
@@ -121,6 +150,11 @@ func (e *Engine) Range(ctx context.Context, q string, start, end time.Time, step
 	if t := expr.Type(); t != TypeScalar && t != TypeVector {
 		return nil, fmt.Errorf("invalid expression type %q for range query, must be Scalar or instant Vector", typeName(t))
 	}
+	release, err := e.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	s, en, st := start.UnixMilli(), end.UnixMilli(), step.Milliseconds()
 	ev, cancel, err := e.newEvaluator(ctx, expr, s, en, st)
 	if err != nil {

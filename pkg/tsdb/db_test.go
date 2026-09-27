@@ -299,6 +299,40 @@ func TestRetention(t *testing.T) {
 	}
 }
 
+// Retention must not lose a series that receives samples while it runs.
+func TestRetentionConcurrentWithAppends(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	db := openTest(t, Options{InMemory: true, Retention: time.Hour, Now: func() time.Time { return now }})
+	old := now.Add(-2 * time.Hour).UnixMilli()
+	app := db.Appender()
+	for i := 0; i < 500; i++ {
+		app.Append(labels.FromStrings("__name__", "m", "i", fmt.Sprint(i)), old, 1)
+	}
+	commit(t, app)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 500; i++ {
+			a := db.Appender()
+			a.Append(labels.FromStrings("__name__", "m", "i", fmt.Sprint(i)), now.UnixMilli(), 2)
+			if _, err := a.Commit(); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	if err := db.ApplyRetention(); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if err := db.ApplyRetention(); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(selectAll(t, db, eq("__name__", "m"))); n != 500 {
+		t.Fatalf("%d of 500 revived series survive retention", n)
+	}
+}
+
 func TestConcurrentAppendAndSelect(t *testing.T) {
 	db := openTest(t, Options{InMemory: true})
 	var wg sync.WaitGroup

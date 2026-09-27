@@ -85,7 +85,7 @@ func (c *Client) Counter(name string) metrics.CounterInterface {
 		return counter
 	}
 
-	counter := metrics.NewCounter(name, c)
+	counter := metrics.NewCounter(name)
 	c.counters[name] = counter
 	return counter
 }
@@ -99,7 +99,7 @@ func (c *Client) Gauge(name string) metrics.GaugeInterface {
 		return gauge
 	}
 
-	gauge := metrics.NewGauge(name, c)
+	gauge := metrics.NewGauge(name)
 	c.gauges[name] = gauge
 	return gauge
 }
@@ -113,7 +113,7 @@ func (c *Client) Histogram(name string) metrics.HistogramInterface {
 		return histogram
 	}
 
-	histogram := metrics.NewHistogram(name, c)
+	histogram := metrics.NewHistogram(name)
 	c.histograms[name] = histogram
 	return histogram
 }
@@ -132,8 +132,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start batcher: %w", err)
 	}
 
-	// Start histogram flushing (aggregates observations into buckets)
-	go c.flushHistograms()
+	go c.collectLoop()
 
 	// Start runtime metrics collection
 	c.collector = runtime.NewCollector(c, 15*time.Second)
@@ -152,7 +151,8 @@ func (c *Client) Stop() error {
 		c.cancel()
 	}
 
-	// Flush remaining metrics
+	// Report final values, so short-lived programs don't lose their last interval.
+	c.collect()
 	if err := c.batcher.Flush(); err != nil {
 		return fmt.Errorf("failed to flush metrics: %w", err)
 	}
@@ -161,7 +161,7 @@ func (c *Client) Stop() error {
 	return nil
 }
 
-// SendMetric sends a metric to the batcher (implements metrics.ClientInterface)
+// SendMetric queues one sample (implements metrics.ClientInterface)
 func (c *Client) SendMetric(metric metrics.Metric) {
 	if !c.started.Load() {
 		return
@@ -176,32 +176,40 @@ func (c *Client) SendMetric(metric metrics.Metric) {
 	c.batcher.Add(metric)
 }
 
-// flushHistograms periodically flushes histogram buckets
-// This sends aggregated bucket counts instead of individual observations
-func (c *Client) flushHistograms() {
-	// Flush interval should match the batch flush interval
+// collectLoop snapshots every instrument once per flush interval.
+func (c *Client) collectLoop() {
 	ticker := time.NewTicker(c.config.FlushEvery)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
 		case <-ticker.C:
-			c.mu.RLock()
-			histograms := make([]*metrics.Histogram, 0, len(c.histograms))
-			for _, h := range c.histograms {
-				histograms = append(histograms, h)
-			}
-			c.mu.RUnlock()
+			c.collect()
+		}
+	}
+}
 
-			// Flush each histogram and send aggregated metrics
-			for _, h := range histograms {
-				aggregatedMetrics := h.Flush()
-				for _, metric := range aggregatedMetrics {
-					c.SendMetric(metric)
-				}
-			}
+// collect queues the current value of every series, all stamped with the
+// same timestamp. Traffic is proportional to the number of series, not to
+// how often they are updated.
+func (c *Client) collect() {
+	c.mu.RLock()
+	cs := make([]metrics.Collector, 0, len(c.counters)+len(c.gauges)+len(c.histograms))
+	for _, m := range c.counters {
+		cs = append(cs, m)
+	}
+	for _, m := range c.gauges {
+		cs = append(cs, m)
+	}
+	for _, m := range c.histograms {
+		cs = append(cs, m)
+	}
+	c.mu.RUnlock()
+	now := time.Now()
+	for _, m := range cs {
+		for _, s := range m.Collect(now) {
+			c.SendMetric(s)
 		}
 	}
 }

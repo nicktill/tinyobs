@@ -44,9 +44,9 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	writeJSON(w, code, map[string]string{"error": err.Error()})
 }
 
-// legacyIngest accepts the V1 SDK's JSON batches. The V1 SDK sends a sample
-// per increment, so a batch can hold several samples for one series in the
-// same millisecond; the last one wins, since counters only grow.
+// legacyIngest accepts the Go SDK's JSON batches. Older SDK versions sent a
+// sample per increment, so a batch can hold several samples for one series in
+// the same millisecond; the last one wins, since counters only grow.
 func (s *Server) legacyIngest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Metrics []metrics.Metric `json:"metrics"`

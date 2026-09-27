@@ -278,3 +278,20 @@ func BenchmarkRangeQuery(b *testing.B) {
 		}
 	}
 }
+
+func TestConcurrencyLimit(t *testing.T) {
+	e := NewEngine(nil, EngineOptions{MaxConcurrent: 1, Timeout: 50 * time.Millisecond})
+	release, err := e.acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.acquire(context.Background()); !errors.Is(err, ErrTimeout) {
+		t.Fatalf("second query: err = %v, want timeout", err)
+	}
+	release()
+	if r, err := e.acquire(context.Background()); err != nil {
+		t.Fatalf("after release: %v", err)
+	} else {
+		r()
+	}
+}
