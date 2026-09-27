@@ -9,7 +9,7 @@
 <link rel="preload" href="fonts/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-root="./">
 <header class="nav"><div class="wrap">
   <a class="brand" href="./"><i></i>tinyobs</a>
   <ul>
@@ -121,9 +121,10 @@
 </div></section>
 </main>
 
-<footer><div class="wrap">
-  <span>MIT · <a href="https://github.com/nicktill/tinyobs">github</a></span>
-  <span>built by <a href="https://github.com/nicktill">@nicktill</a></span>
+<footer class="status"><div class="wrap">
+  <div class="left"><span class="mode">NORMAL</span><span>~/tinyobs/site/index.html</span><span class="keys"><kbd>d</kbd>docs <kbd>h</kbd>home <kbd>g</kbd>github</span></div>
+  <div class="right"><span>MIT</span><span>built by <a href="https://github.com/nicktill">@nicktill</a></span></div>
 </div></footer>
+<script src="./site.js"></script>
 </body>
 </html>

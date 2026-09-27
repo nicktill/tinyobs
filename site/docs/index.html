@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='5' y='2' width='6' height='12' fill='%23f5a524'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../style.css">
 </head>
-<body>
+<body data-root="../">
 <header class="nav"><div class="wrap" style="max-width:1360px">
   <a class="brand" href="../"><i></i>tinyobs</a>
   <ul>
@@ -155,9 +155,9 @@ curl -s localhost:8080/api/v1/status/tsdb | jq '.data.seriesCountByMetricName'</
 </ol></aside>
 </div>
 
-<footer><div class="wrap" style="max-width:1360px">
-  <span>MIT · <a href="https://github.com/nicktill/tinyobs">github</a></span>
-  <span>built by <a href="https://github.com/nicktill">@nicktill</a></span>
+<footer class="status"><div class="wrap" style="max-width:1360px">
+  <div class="left"><span class="mode">NORMAL</span><span>~/tinyobs/site/docs/index.html</span><span class="keys"><kbd>d</kbd>docs <kbd>h</kbd>home <kbd>g</kbd>github</span></div>
+  <div class="right"><span>MIT</span><span>built by <a href="https://github.com/nicktill">@nicktill</a></span></div>
 </div></footer>
 
 <script>
@@ -170,10 +170,18 @@ document.querySelectorAll('.code').forEach(function (block) {
     var text = block.querySelector('pre').innerText;
     navigator.clipboard.writeText(text).then(function () {
       btn.textContent = 'copied';
-      setTimeout(function () { btn.textContent = 'copy'; }, 1500);
+      btn.classList.add('done');
+      setTimeout(function () { btn.textContent = 'copy'; btn.classList.remove('done'); }, 1500);
     });
   });
   block.appendChild(btn);
+});
+
+// Linkable headings.
+document.querySelectorAll('.content section').forEach(function (s) {
+  var a = document.createElement('a');
+  a.className = 'anchor'; a.href = '#' + s.id; a.textContent = '#'; a.setAttribute('aria-label', 'Link to this section');
+  s.querySelector('h2').appendChild(a);
 });
 
 // Highlight the section in view.
@@ -186,5 +194,6 @@ var observer = new IntersectionObserver(function (entries) {
 }, { rootMargin: '0px 0px -70% 0px' });
 document.querySelectorAll('.content section').forEach(function (s) { observer.observe(s); });
 </script>
+<script src="../site.js"></script>
 </body>
 </html>
