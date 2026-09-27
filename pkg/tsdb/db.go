@@ -54,6 +54,10 @@ func IsStaleNaN(v float64) bool { return math.Float64bits(v) == staleNaNBits }
 // ErrTooManySeries is returned when a new series would exceed MaxSeries.
 var ErrTooManySeries = errors.New("series limit reached")
 
+// ErrTooManyMetricSeries is returned when a new series would exceed
+// MaxSeriesPerMetric.
+var ErrTooManyMetricSeries = errors.New("per-metric series limit reached")
+
 // Options configures a DB.
 type Options struct {
 	// Dir is the data directory. Ignored when InMemory is set.
@@ -65,6 +69,10 @@ type Options struct {
 	// MaxSeries caps the number of series. Samples for new series beyond it
 	// are rejected, which bounds memory and disk. Default 50,000.
 	MaxSeries int
+	// MaxSeriesPerMetric caps the series of one metric name, so a single
+	// label explosion (a user ID in a label, say) is rejected on its own
+	// instead of exhausting MaxSeries for every other metric. Default 10,000.
+	MaxSeriesPerMetric int
 	// MemoryMB bounds Badger's memtables and caches. Default 64.
 	MemoryMB int64
 	// Now returns the current time. Tests override it.
@@ -129,6 +137,9 @@ func Open(opts Options) (*DB, error) {
 	}
 	if opts.MaxSeries <= 0 {
 		opts.MaxSeries = 50_000
+	}
+	if opts.MaxSeriesPerMetric <= 0 {
+		opts.MaxSeriesPerMetric = 10_000
 	}
 	if opts.MemoryMB <= 0 {
 		opts.MemoryMB = 64
@@ -336,6 +347,7 @@ func (a *Appender) Append(lset labels.Labels, t int64, v float64) {
 const (
 	ReasonOutOfOrder = "out_of_order"
 	ReasonSeriesCap  = "series_limit"
+	ReasonMetricCap  = "metric_series_limit"
 	ReasonInvalid    = "invalid_labels"
 )
 
@@ -406,6 +418,9 @@ func (a *Appender) Commit() (CommitResult, error) {
 		switch {
 		case errors.Is(err, ErrTooManySeries):
 			res.reject(ReasonSeriesCap, fmt.Errorf("%s: %w (%d)", p.lset, err, db.opts.MaxSeries))
+			continue
+		case errors.Is(err, ErrTooManyMetricSeries):
+			res.reject(ReasonMetricCap, fmt.Errorf("%s: %w (%d)", p.lset, err, db.opts.MaxSeriesPerMetric))
 			continue
 		case err != nil:
 			res.reject(ReasonInvalid, err)
@@ -478,6 +493,9 @@ func (db *DB) getOrCreate(lset labels.Labels) (*memSeries, bool, error) {
 	}
 	if len(db.series) >= db.opts.MaxSeries {
 		return nil, false, ErrTooManySeries
+	}
+	if len(db.postings[labels.MetricName][lset.Get(labels.MetricName)]) >= db.opts.MaxSeriesPerMetric {
+		return nil, false, ErrTooManyMetricSeries
 	}
 	s = &memSeries{id: db.allocateID(lset), lset: lset, firstT: math.MaxInt64, lastT: math.MinInt64}
 	db.indexSeries(s)
@@ -661,19 +679,20 @@ func (db *DB) LabelValues(name string, mint, maxt int64, ms ...*labels.Matcher) 
 
 // Stats describes the database.
 type Stats struct {
-	NumSeries       int
-	MaxSeries       int
-	MinTime         int64 // ms; 0 when empty
-	MaxTime         int64
-	DiskBytes       int64
-	SamplesAppended uint64            // since start
-	SamplesRejected map[string]uint64 // since start, by reason
-	Retention       time.Duration
+	NumSeries          int
+	MaxSeries          int
+	MaxSeriesPerMetric int
+	MinTime            int64 // ms; 0 when empty
+	MaxTime            int64
+	DiskBytes          int64
+	SamplesAppended    uint64            // since start
+	SamplesRejected    map[string]uint64 // since start, by reason
+	Retention          time.Duration
 }
 
 // Stats returns current statistics.
 func (db *DB) Stats() Stats {
-	st := Stats{MaxSeries: db.opts.MaxSeries, Retention: db.opts.Retention}
+	st := Stats{MaxSeries: db.opts.MaxSeries, MaxSeriesPerMetric: db.opts.MaxSeriesPerMetric, Retention: db.opts.Retention}
 	minT, maxT := int64(math.MaxInt64), int64(math.MinInt64)
 	db.mu.RLock()
 	st.NumSeries = len(db.series)

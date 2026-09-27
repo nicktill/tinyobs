@@ -133,3 +133,19 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("metadata after restart: %s", b)
 	}
 }
+
+func TestSelfMetrics(t *testing.T) {
+	base, cancel, done := startServer(t, t.TempDir())
+	defer func() { cancel(); <-done }()
+	resp, err := http.Get(base + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{"tinyobs_series 0", `tinyobs_samples_rejected_total{reason="series_limit"} 0`, "tinyobs_series_per_metric_limit 10000"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("missing %q in:\n%s", want, body)
+		}
+	}
+}

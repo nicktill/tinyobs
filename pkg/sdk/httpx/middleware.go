@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nicktill/tinyobs/pkg/sdk"
@@ -42,8 +43,7 @@ func Middleware(client *sdk.Client) func(http.Handler) http.Handler {
 			// Calculate duration
 			duration := time.Since(start).Seconds()
 
-			// Normalize path to avoid cardinality explosion
-			normalizedPath := normalizePath(r.URL.Path)
+			normalizedPath := routeLabel(r, rw.statusCode)
 
 			// Track metrics automatically
 			statusStr := strconv.Itoa(rw.statusCode)
@@ -73,6 +73,28 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// routeLabel returns a bounded-cardinality path label. It prefers the route
+// pattern that net/http's ServeMux matched (Go 1.22+), e.g. "GET /users/{id}".
+// Requests no route matched are collapsed into one value: otherwise every
+// scanner probing /wp-login.php or /.env creates a new series.
+func routeLabel(r *http.Request, status int) string {
+	if r.Pattern != "" {
+		if _, path, ok := strings.Cut(r.Pattern, " "); ok {
+			return path
+		}
+		return r.Pattern
+	}
+	if status == http.StatusNotFound {
+		return "unmatched"
+	}
+	return normalizePath(r.URL.Path)
+}
+
+var (
+	uuidRe    = regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	numericRe = regexp.MustCompile(`/\d+`)
+)
+
 // normalizePath normalizes paths to avoid cardinality explosion.
 // Examples:
 //   - /api/users/123 → /api/users/{id}
@@ -80,12 +102,10 @@ func (rw *responseWriter) WriteHeader(code int) {
 //   - /api/users/550e8400-e29b-41d4-a716-446655440000 → /api/users/{id}
 func normalizePath(path string) string {
 	// Replace UUIDs first (more specific pattern, case-insensitive)
-	uuidRe := regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 	path = uuidRe.ReplaceAllString(path, "/{id}")
 
 	// Replace numeric IDs with {id} (after UUIDs to avoid partial matches)
-	re := regexp.MustCompile(`/\d+`)
-	path = re.ReplaceAllString(path, "/{id}")
+	path = numericRe.ReplaceAllString(path, "/{id}")
 
 	return path
 }

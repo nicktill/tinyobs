@@ -194,6 +194,19 @@ func TestInvalidLabelsAndSeriesLimit(t *testing.T) {
 	}
 }
 
+func TestPerMetricSeriesLimit(t *testing.T) {
+	db := openTest(t, Options{InMemory: true, MaxSeriesPerMetric: 2})
+	app := db.Appender()
+	for _, u := range []string{"1", "2", "3"} {
+		app.Append(labels.FromStrings("__name__", "logins", "user", u), 1, 1)
+	}
+	app.Append(labels.FromStrings("__name__", "up"), 1, 1) // other metrics unaffected
+	res := commit(t, app)
+	if res.Rejected[ReasonMetricCap] != 1 || res.Appended != 3 {
+		t.Fatalf("result = %+v", res)
+	}
+}
+
 func TestPersistence(t *testing.T) {
 	dir := t.TempDir()
 	ls := labels.FromStrings("__name__", "requests_total", "job", "api")
