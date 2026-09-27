@@ -12,26 +12,45 @@
         const savedTheme = localStorage.getItem('tinyobs-theme') || 'dark';
         document.documentElement.setAttribute('data-theme', savedTheme);
 
-        // Update chart defaults based on theme
-        function updateChartDefaults() {
-            const theme = document.documentElement.getAttribute('data-theme');
-            Chart.defaults.color = theme === 'light' ? '#6c757d' : '#8b949e';
-            Chart.defaults.borderColor = theme === 'light' ? '#dee2e6' : '#30363d';
+        // Chart colours come from the CSS custom properties in dashboard.css,
+        // so both themes are defined in one place.
+        function cssVar(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
         }
+
+        function updateChartDefaults() {
+            Chart.defaults.color = cssVar('--muted');
+            Chart.defaults.borderColor = cssVar('--rule');
+            Chart.defaults.font.family = '"JetBrains Mono", ui-monospace, monospace';
+            Chart.defaults.font.size = 11;
+            Chart.defaults.plugins.tooltip.backgroundColor = cssVar('--raised');
+            Chart.defaults.plugins.tooltip.borderColor = cssVar('--rule');
+            Chart.defaults.plugins.tooltip.borderWidth = 1;
+            Chart.defaults.plugins.tooltip.titleColor = cssVar('--fg');
+            Chart.defaults.plugins.tooltip.bodyColor = cssVar('--soft');
+            Chart.defaults.plugins.tooltip.cornerRadius = 0;
+            Chart.defaults.plugins.tooltip.boxPadding = 4;
+            Chart.defaults.plugins.legend.labels.boxWidth = 10;
+            Chart.defaults.plugins.legend.labels.boxHeight = 2;
+            Chart.defaults.scale.ticks.maxRotation = 0;
+            Chart.defaults.scale.ticks.autoSkipPadding = 24;
+            Chart.defaults.elements.line.borderWidth = 1.5;
+            Chart.defaults.elements.point.radius = 0;
+            Chart.defaults.elements.point.hoverRadius = 3;
+        }
+
+        // 24-hour clock on time axes; the locale default ("4:33:42 p.m.") is
+        // too wide for small charts.
+        const TIME_AXIS = {
+            tooltipFormat: 'HH:mm:ss',
+            displayFormats: { millisecond: 'HH:mm:ss', second: 'HH:mm:ss', minute: 'HH:mm', hour: 'HH:mm', day: 'MMM d' },
+        };
         updateChartDefaults();
 
-        // Color palette for consistent chart colors (works in both themes)
-        const COLOR_PALETTE_DARK = [
-            '#58a6ff', '#3fb950', '#f0883e', '#f85149', '#bc8cff',
-            '#ff7b72', '#79c0ff', '#56d364', '#ffa657', '#f778ba',
-            '#a5d6ff', '#7ee787', '#ffbc6f', '#ff9492', '#d2a8ff'
-        ];
-
-        const COLOR_PALETTE_LIGHT = [
-            '#0d6efd', '#198754', '#fd7e14', '#dc3545', '#6f42c1',
-            '#0dcaf0', '#20c997', '#ffc107', '#d63384', '#6610f2',
-            '#0a58ca', '#146c43', '#bb6d00', '#a71d2a', '#59359a'
-        ];
+        // Series colours: amber first, then muted hues that stay apart on
+        // the warm background.
+        const COLOR_PALETTE_DARK = ['#f5a524', '#6fb3a8', '#8aa8d8', '#d9776b', '#a8bd72', '#b99ad0', '#d8c39a', '#72c3d6'];
+        const COLOR_PALETTE_LIGHT = ['#b86e00', '#2f7c70', '#3f64a6', '#b0473a', '#5d7a22', '#7d559c', '#8a6d2f', '#227f95'];
 
         function getColorPalette() {
             const theme = document.documentElement.getAttribute('data-theme');
@@ -66,7 +85,7 @@
 
             // Update theme toggle button
             const toggle = document.getElementById('themeToggle');
-            toggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            toggle.textContent = newTheme === 'dark' ? 'light' : 'dark';
 
             // Update chart defaults and re-render all charts
             updateChartDefaults();
@@ -129,7 +148,7 @@
                         document.documentElement.setAttribute('data-theme', config.theme);
                         localStorage.setItem('tinyobs-theme', config.theme);
                         const toggle = document.getElementById('themeToggle');
-                        toggle.textContent = config.theme === 'dark' ? '☀️' : '🌙';
+                        toggle.textContent = config.theme === 'dark' ? 'light' : 'dark';
                         updateChartDefaults();
                     }
 
@@ -251,9 +270,9 @@
 
                 if (storageRes.ok) {
                     const storage = await storageRes.json();
-                    const usedPct = ((storage.used_bytes / storage.max_bytes) * 100).toFixed(1);
-                    document.getElementById('storageSize').textContent =
-                        formatBytes(storage.used_bytes) + ' / ' + formatBytes(storage.max_bytes) + ' (' + usedPct + '%)';
+                    const el = document.getElementById('storageSize');
+                    el.textContent = formatBytes(storage.used_bytes);
+                    el.title = 'Upper bound at the series limit and retention: ' + formatBytes(storage.max_bytes);
                 }
             } catch (error) {
                 console.error('Stats error:', error);
@@ -282,12 +301,8 @@
                 if (metricsData.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <div class="empty-icon">📊</div>
-                            <p>No metrics found</p>
-                            <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 0.5rem;">
-                                Start sending metrics to TinyObs or run the example app:<br>
-                                <code style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 3px; margin-top: 0.5rem; display: inline-block;">go run cmd/example/main.go</code>
-                            </p>
+                            <p>no series in this range</p>
+                            <p>send some with the Go SDK or remote write, or start the example app:<br><code>go run ./cmd/example</code></p>
                         </div>
                     `;
                     return;
@@ -319,16 +334,12 @@
             } catch (error) {
                 console.error('Dashboard error:', error);
                 const errorMsg = error.message.includes('Failed to fetch') || error.message.includes('NetworkError')
-                    ? 'Cannot connect to TinyObs server. Make sure the server is running on http://localhost:8080'
-                    : `Failed to load dashboard: ${error.message}`;
+                    ? 'cannot reach the TinyObs server'
+                    : `failed to load: ${error.message}`;
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">⚠️</div>
                         <p>${errorMsg}</p>
-                        <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 0.5rem;">
-                            Start the server with:<br>
-                            <code style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 3px; margin-top: 0.5rem; display: inline-block;">go run cmd/server/main.go</code>
-                        </p>
+                        <p>start the server with:<br><code>go run ./cmd/server</code></p>
                     </div>
                 `;
             }
@@ -339,18 +350,18 @@
             const serviceFilter = document.getElementById('serviceFilter');
             const exploreServiceFilter = document.getElementById('exploreServiceFilter');
             const serviceOptions = services.map(s => `<option value="${s}">${s}</option>`).join('');
-            serviceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
-            exploreServiceFilter.innerHTML = '<option value="all">All Services</option>' + serviceOptions;
+            serviceFilter.innerHTML = '<option value="all">all services</option>' + serviceOptions;
+            exploreServiceFilter.innerHTML = '<option value="all">all services</option>' + serviceOptions;
 
             // Update endpoint filter
             const endpointFilter = document.getElementById('endpointFilter');
             const endpointOptions = endpoints.map(e => `<option value="${e}">${e}</option>`).join('');
-            endpointFilter.innerHTML = '<option value="all">All Endpoints</option>' + endpointOptions;
+            endpointFilter.innerHTML = '<option value="all">all endpoints</option>' + endpointOptions;
 
             // Update metric name filter
             const metricNameFilter = document.getElementById('metricNameFilter');
             const metricOptions = metricNames.map(m => `<option value="${m}">${m}</option>`).join('');
-            metricNameFilter.innerHTML = '<option value="all">All Metrics</option>' + metricOptions;
+            metricNameFilter.innerHTML = '<option value="all">all metrics</option>' + metricOptions;
         }
 
         function renderDashboard(services) {
@@ -365,7 +376,7 @@
                 : [[selectedService, services[selectedService]]].filter(([_, v]) => v);
 
             if (servicesToShow.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No metrics for this service</p></div>';
+                container.innerHTML = '<div class="empty-state"><p>no series for this service</p></div>';
                 return;
             }
 
@@ -412,34 +423,16 @@
                 const chartCards = metricsToShow.map(([name, data], idx) => {
                     const chartId = `chart-${service}-${name.replace(/[^a-zA-Z0-9]/g, '-')}-${idx}`;
 
-                    // Calculate basic stats for status indicator
-                    let avgValue = 0;
-                    let latestValue = 0;
-                    let pointCount = 0;
-
-                    data.forEach(m => {
-                        avgValue += m.value;
-                        latestValue = m.value;
-                        pointCount++;
-                    });
-
-                    if (pointCount > 0) {
-                        avgValue /= pointCount;
-                    }
-
-                    // Get status (we'll calculate trend properly when rendering the chart)
-                    const status = getMetricStatus(name, avgValue, latestValue, 0);
+                    const plotted = isCounter(name) ? 'rate / s' : (data[0]?.type || 'gauge');
 
                     return `
                         <div class="chart-card" onclick="openChartModal('${name.replace(/'/g, "\\'")}', '${service.replace(/'/g, "\\'")}')">
                             <div class="chart-header">
                                 <div>
                                     <div class="chart-title">${name}</div>
-                                    <div class="chart-subtitle">${data.length} series • Click to explore</div>
+                                    <div class="chart-subtitle">${data.length} series</div>
                                 </div>
-                                <div class="chart-status" style="color: ${status.color}; font-size: 1.25rem;" title="${status.label}">
-                                    ${status.icon}
-                                </div>
+                                <div class="chart-status" title="${isCounter(name) ? 'Counter, charted as its per-second rate over 5m' : 'Charted as stored'}">${plotted}</div>
                             </div>
                             <div class="chart-wrapper">
                                 <canvas id="${chartId}"></canvas>
@@ -449,9 +442,9 @@
                 }).join('');
 
                 const showMoreButton = hasMore ? `
-                    <div style="text-align: center; padding: 1rem;">
+                    <div style="text-align: center; padding: 8px 0 4px;">
                         <button class="primary" onclick="expandService('${service}')">
-                            Show ${totalMetrics - limit} more charts
+                            show ${totalMetrics - limit} more
                         </button>
                     </div>
                 ` : '';
@@ -460,12 +453,12 @@
                     <div class="service-section" id="service-${service}">
                         <div class="service-header" onclick="toggleService('${service}')">
                             <h3>
-                                <span class="service-icon">📦</span>
+                                <span class="service-icon"></span>
                                 ${service}
                                 <span class="badge">${totalMetrics} metrics</span>
-                                ${hasMore && !isExpanded ? `<span class="badge" style="background: var(--bg-tertiary);">Showing ${limit} of ${totalMetrics}</span>` : ''}
+                                ${hasMore && !isExpanded ? `<span class="badge">showing ${limit} of ${totalMetrics}</span>` : ''}
                             </h3>
-                            <span class="collapse-icon">▼</span>
+                            <span class="collapse-icon">▾</span>
                         </div>
                         <div class="service-charts">
                             ${chartCards}
@@ -556,7 +549,7 @@
                         borderColor: color,
                         backgroundColor: color + '20',
                         borderWidth: 2,
-                        pointRadius: 0,
+                        pointRadius: (ctx) => (ctx.dataset.data.length < 3 ? 2 : 0),
                         tension: 0.1,
                         borderDash: []
                     };
@@ -596,7 +589,7 @@
                                         borderColor: color,
                                         backgroundColor: color + '10',
                                         borderWidth: 2,
-                                        pointRadius: 0,
+                                        pointRadius: (ctx) => (ctx.dataset.data.length < 3 ? 2 : 0),
                                         tension: 0.1,
                                         borderDash: [5, 5] // Dashed line for comparison
                                     });
@@ -627,20 +620,21 @@
                                 }
                             },
                             tooltip: {
-                                backgroundColor: '#161b22',
-                                borderColor: '#30363d',
+                                backgroundColor: cssVar('--raised'),
+                                borderColor: cssVar('--rule'),
                                 borderWidth: 1
                             }
                         },
                         scales: {
                             x: {
                                 type: 'time',
-                                grid: { color: '#30363d' },
-                                ticks: { color: '#8b949e', maxTicksLimit: 6 }
+                                time: TIME_AXIS,
+                                grid: { display: false },
+                                ticks: { color: cssVar('--faint'), maxTicksLimit: 6 }
                             },
                             y: {
-                                grid: { color: '#30363d' },
-                                ticks: { color: '#8b949e' }
+                                grid: { color: cssVar('--rule') },
+                                ticks: { color: cssVar('--faint') }
                             }
                         }
                     }
@@ -679,61 +673,6 @@
         }
 
         // Status thresholds for smart indicators
-        const statusThresholds = {
-            error_rate: { warning: 0.01, critical: 0.05 }, // 1% warning, 5% critical
-            latency: { warning: 100, critical: 500 }, // milliseconds
-            response_time: { warning: 200, critical: 1000 },
-            cpu_usage: { warning: 70, critical: 90 }, // percentage
-            memory_usage: { warning: 75, critical: 90 },
-            disk_usage: { warning: 80, critical: 95 },
-            request_duration: { warning: 1000, critical: 5000 },
-            failure_rate: { warning: 0.02, critical: 0.1 }
-        };
-
-        function getMetricStatus(metricName, avgValue, latestValue, trend) {
-            // Find matching threshold
-            let threshold = null;
-            for (const [key, value] of Object.entries(statusThresholds)) {
-                if (metricName.toLowerCase().includes(key)) {
-                    threshold = value;
-                    break;
-                }
-            }
-
-            if (!threshold) {
-                // No specific threshold, use generic trend-based status
-                if (Math.abs(trend) < 0.05) return { icon: '→', color: '#8b949e', label: 'Stable' };
-                if (trend > 0.2) return { icon: '↑', color: '#f85149', label: 'Rising' };
-                if (trend < -0.2) return { icon: '↓', color: '#56d364', label: 'Declining' };
-                return { icon: '→', color: '#8b949e', label: 'Stable' };
-            }
-
-            // Use threshold-based status
-            const value = latestValue !== undefined ? latestValue : avgValue;
-            if (value >= threshold.critical) {
-                return { icon: '🚨', color: '#f85149', label: 'Critical' };
-            } else if (value >= threshold.warning) {
-                return { icon: '⚠️', color: '#ffa657', label: 'Warning' };
-            } else {
-                return { icon: '✅', color: '#56d364', label: 'Healthy' };
-            }
-        }
-
-        function calculateTrend(points) {
-            if (!points || points.length < 2) return 0;
-
-            // Compare first half vs second half
-            const midpoint = Math.floor(points.length / 2);
-            const firstHalf = points.slice(0, midpoint);
-            const secondHalf = points.slice(midpoint);
-
-            const firstAvg = firstHalf.reduce((sum, p) => sum + p.y, 0) / firstHalf.length;
-            const secondAvg = secondHalf.reduce((sum, p) => sum + p.y, 0) / secondHalf.length;
-
-            if (firstAvg === 0) return 0;
-            return (secondAvg - firstAvg) / firstAvg;
-        }
-
         // Modal functionality
         let modalChart = null;
         let modalMetricData = null;
@@ -760,7 +699,7 @@
                 renderModalChart(metricName, result);
 
                 // Pre-fill query editor
-                document.getElementById('queryEditor').value = metricName;
+                document.getElementById('queryEditor').value = isCounter(metricName) ? `rate(${metricName}[5m])` : metricName;
 
                 // Populate metric info
                 populateMetricInfo(metricName, result, service);
@@ -784,7 +723,7 @@
 
             // Prepare datasets
             const datasets = [];
-            const colors = ['#58a6ff', '#f78166', '#56d364', '#d2a8ff', '#ffa657', '#f85149'];
+            const colors = getColorPalette();
 
             if (result.data && result.data.length > 0) {
                 result.data.forEach((series, idx) => {
@@ -819,18 +758,18 @@
                             display: datasets.length > 1,
                             position: 'top',
                             labels: {
-                                color: '#c9d1d9',
+                                color: cssVar('--soft'),
                                 font: { size: 12 },
                                 boxWidth: 12,
                                 usePointStyle: true
                             }
                         },
                         tooltip: {
-                            backgroundColor: '#161b22',
-                            borderColor: '#30363d',
+                            backgroundColor: cssVar('--raised'),
+                            borderColor: cssVar('--rule'),
                             borderWidth: 1,
-                            titleColor: '#c9d1d9',
-                            bodyColor: '#8b949e',
+                            titleColor: cssVar('--fg'),
+                            bodyColor: cssVar('--soft'),
                             callbacks: {
                                 title: (items) => {
                                     if (items.length > 0) {
@@ -844,12 +783,13 @@
                     scales: {
                         x: {
                             type: 'time',
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
+                            time: TIME_AXIS,
+                            grid: { display: false },
+                            ticks: { color: cssVar('--faint') }
                         },
                         y: {
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
+                            grid: { color: cssVar('--rule') },
+                            ticks: { color: cssVar('--faint') }
                         }
                     }
                 }
@@ -973,7 +913,7 @@
                 await navigator.clipboard.writeText(query);
                 const btn = event.target;
                 const originalText = btn.textContent;
-                btn.textContent = '✓ Copied!';
+                btn.textContent = 'copied';
                 setTimeout(() => { btn.textContent = originalText; }, 2000);
             } catch (error) {
                 console.error('Copy failed:', error);
@@ -993,7 +933,7 @@
             navigator.clipboard.writeText(shareUrl).then(() => {
                 const btn = event.target;
                 const originalText = btn.textContent;
-                btn.textContent = '✓ Link Copied!';
+                btn.textContent = 'link copied';
                 setTimeout(() => { btn.textContent = originalText; }, 2000);
             }).catch(err => {
                 console.error('Share failed:', err);
@@ -1085,7 +1025,7 @@
             } catch (error) {
                 console.error('Load metrics error:', error);
                 document.getElementById('metricsBrowser').innerHTML =
-                    '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load metrics</p></div>';
+                    '<div class="empty-state"><p>failed to load series</p></div>';
             }
         }
 
@@ -1096,7 +1036,7 @@
             const serviceFilter = document.getElementById('exploreServiceFilter').value;
 
             if (!metricsData || metricsData.length === 0) {
-                browser.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No metrics available</p></div>';
+                browser.innerHTML = '<div class="empty-state"><p>no series yet</p></div>';
                 return;
             }
 
@@ -1124,7 +1064,7 @@
             });
 
             if (filtered.length === 0) {
-                browser.innerHTML = '<div class="empty-state"><p>No metrics match your filters</p></div>';
+                browser.innerHTML = '<div class="empty-state"><p>nothing matches these filters</p></div>';
                 return;
             }
 
@@ -1146,8 +1086,8 @@
                             <div class="metric-name">${data.name}</div>
                             <div class="metric-labels">${labelsHtml}</div>
                             <div class="metric-value">
-                                <div><span class="value-label">Latest:</span>${formatValue(latest.value)}</div>
-                                <div><span class="value-label">Samples:</span>${data.values.length}</div>
+                                <div><span class="value-label">latest</span>${formatValue(latest.value)}</div>
+                                <div><span class="value-label">samples</span>${data.values.length}</div>
                             </div>
                         </div>
                     </div>
@@ -1237,7 +1177,7 @@
                             borderColor: color,
                             backgroundColor: color + '20',
                             borderWidth: 2,
-                            pointRadius: 0,
+                            pointRadius: (ctx) => (ctx.dataset.data.length < 3 ? 2 : 0),
                             tension: 0.1
                         });
                     });
@@ -1258,7 +1198,7 @@
                                 display: true,
                                 position: 'bottom',
                                 labels: {
-                                    color: '#c9d1d9',
+                                    color: cssVar('--soft'),
                                     padding: 12,
                                     font: { size: 11, family: "'Monaco', 'Menlo', 'Consolas', monospace" }
                                 }
@@ -1267,12 +1207,13 @@
                         scales: {
                             x: {
                                 type: 'time',
-                                grid: { color: '#30363d' },
-                                ticks: { color: '#8b949e' }
+                                time: TIME_AXIS,
+                                grid: { display: false },
+                                ticks: { color: cssVar('--faint') }
                             },
                             y: {
-                                grid: { color: '#30363d' },
-                                ticks: { color: '#8b949e' }
+                                grid: { color: cssVar('--rule') },
+                                ticks: { color: cssVar('--faint') }
                             }
                         }
                     }
@@ -1306,7 +1247,7 @@
             // Initialize theme toggle button icon
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const themeToggleBtn = document.getElementById('themeToggle');
-            themeToggleBtn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+            themeToggleBtn.textContent = currentTheme === 'dark' ? 'light' : 'dark';
 
             // Initialize charts-per-service select
             const chartsSelect = document.getElementById('chartsPerServiceSelect');
@@ -1314,8 +1255,12 @@
 
             // Enhanced Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
-                // Don't trigger shortcuts if user is typing in an input or textarea
-                // FIXED: Include TEXTAREA (query editor) in the check
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.id === 'queryEditor') {
+                    e.preventDefault();
+                    executeModalQuery();
+                    return;
+                }
+                // Don't trigger shortcuts while typing in an input or textarea.
                 const isInputField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
                 if (isInputField && e.key !== 'Escape') return;
 
