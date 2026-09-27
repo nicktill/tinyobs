@@ -17,13 +17,14 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	cfg := server.Config{
-		Listen:    ":" + env("PORT", "8080"),
-		DataDir:   env("TINYOBS_DATA_DIR", "./data/tinyobs-v2"),
-		Retention: envDuration(log, "TINYOBS_RETENTION", 72*time.Hour),
-		MaxSeries: int(envInt(log, "TINYOBS_MAX_SERIES", 50_000)),
-		MemoryMB:  envInt(log, "TINYOBS_MAX_MEMORY_MB", 64),
-		WebDir:    env("TINYOBS_WEB_DIR", "./web"),
-		Logger:    log,
+		Listen:             ":" + env("PORT", "8080"),
+		DataDir:            env("TINYOBS_DATA_DIR", "./data/tinyobs-v2"),
+		Retention:          envDuration(log, "TINYOBS_RETENTION", 72*time.Hour),
+		MaxSeries:          int(envInt(log, "TINYOBS_MAX_SERIES", 50_000)),
+		MaxSeriesPerMetric: int(envInt(log, "TINYOBS_MAX_SERIES_PER_METRIC", 10_000)),
+		MemoryMB:           envInt(log, "TINYOBS_MAX_MEMORY_MB", 64),
+		WebDir:             env("TINYOBS_WEB_DIR", "./web"),
+		Logger:             log,
 	}
 	if _, err := os.Stat("./data/tinyobs"); err == nil && cfg.DataDir != "./data/tinyobs" {
 		log.Info("V1 data in ./data/tinyobs is not read by V2 and can be deleted")
@@ -34,7 +35,7 @@ func main() {
 		log.Error("starting server", "err", err)
 		os.Exit(1)
 	}
-	log.Info("TinyObs started", "version", server.Version, "data", cfg.DataDir, "retention", cfg.Retention, "max_series", cfg.MaxSeries)
+	log.Info("TinyObs started", "version", server.Version, "data", cfg.DataDir, "retention", cfg.Retention, "max_series", cfg.MaxSeries, "max_series_per_metric", cfg.MaxSeriesPerMetric)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

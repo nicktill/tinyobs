@@ -1377,126 +1377,13 @@
             // Initial load
             loadStats();
             loadDashboard();
-
-            // Connect to WebSocket for real-time updates
-            connectWebSocket();
         });
 
-        // WebSocket connection management
-        let ws = null;
-        let wsReconnectInterval = null;
-        let wsConnected = false;
-
-        function connectWebSocket() {
-            // Clear any existing reconnect interval to prevent multiple intervals
-            if (wsReconnectInterval) {
-                clearInterval(wsReconnectInterval);
-                wsReconnectInterval = null;
-            }
-
-            // Close existing connection if any to prevent race conditions
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/v1/ws`;
-
-            try {
-                ws = new WebSocket(wsUrl);
-
-                ws.onopen = () => {
-                    wsConnected = true;
-                    console.log('📡 WebSocket connected - real-time updates enabled');
-
-                    // Clear reconnect attempts
-                    if (wsReconnectInterval) {
-                        clearInterval(wsReconnectInterval);
-                        wsReconnectInterval = null;
-                    }
-
-                    // Show connection indicator
-                    updateConnectionStatus(true);
-                };
-
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-
-                        if (data.type === 'metrics_update') {
-                            // Real-time metrics update received
-                            console.log(`📊 Received ${data.count} metrics updates`);
-
-                            // Update header stats only (don't re-render entire dashboard)
-                            loadStats();
-
-                            // Note: We don't auto-refresh the dashboard view to avoid
-                            // disrupting the user's interaction with charts/filters.
-                            // Stats in the header will update in real-time.
-                        }
-                    } catch (err) {
-                        console.error('Failed to parse WebSocket message:', err);
-                    }
-                };
-
-                ws.onerror = (error) => {
-                    console.error('❌ WebSocket error:', error);
-                };
-
-                ws.onclose = () => {
-                    wsConnected = false;
-                    console.log('📡 WebSocket disconnected - attempting reconnect...');
-                    updateConnectionStatus(false);
-
-                    // Attempt to reconnect every 5 seconds
-                    if (!wsReconnectInterval) {
-                        wsReconnectInterval = setInterval(() => {
-                            console.log('🔄 Reconnecting WebSocket...');
-                            connectWebSocket();
-                        }, 5000);
-                    }
-                };
-
-            } catch (err) {
-                console.error('Failed to create WebSocket:', err);
-                wsConnected = false;
-                updateConnectionStatus(false);
-            }
-        }
-
-        function updateConnectionStatus(connected) {
-            // Update UI to show connection status
-            const statusEl = document.querySelector('.header-stats');
-            if (statusEl && !document.getElementById('wsStatus')) {
-                const statusBadge = document.createElement('div');
-                statusBadge.id = 'wsStatus';
-                statusBadge.className = 'stat-item';
-                statusBadge.innerHTML = `
-                    <div class="stat-label">Connection</div>
-                    <div class="stat-value" style="font-size: 0.75rem; color: ${connected ? 'var(--accent-green)' : 'var(--accent-orange)'}">
-                        ${connected ? '● Live' : '○ Reconnecting'}
-                    </div>
-                `;
-                statusEl.appendChild(statusBadge);
-            } else if (document.getElementById('wsStatus')) {
-                const wsStatus = document.getElementById('wsStatus');
-                wsStatus.innerHTML = `
-                    <div class="stat-label">Connection</div>
-                    <div class="stat-value" style="font-size: 0.75rem; color: ${connected ? 'var(--accent-green)' : 'var(--accent-orange)'}">
-                        ${connected ? '● Live' : '○ Reconnecting'}
-                    </div>
-                `;
-            }
-        }
-
-        // Fallback polling in case WebSocket fails (every 60s instead of 30s)
+        // Poll for fresh data. TinyObs has no push channel; 15s matches the SDK flush interval.
         setInterval(() => {
-            if (!wsConnected) {
-                console.log('⏰ Fallback polling (WebSocket not connected)');
-                loadStats();
-                if (currentView === 'dashboard') {
-                    refreshDashboard();
-                }
+            if (document.hidden) return;
+            loadStats();
+            if (currentView === 'dashboard') {
+                refreshDashboard();
             }
-        }, 60000);
+        }, 15000);

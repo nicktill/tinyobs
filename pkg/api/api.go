@@ -53,6 +53,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/metadata", a.metadata)
 	mux.HandleFunc("GET /api/v1/status/buildinfo", a.buildInfo)
 	mux.HandleFunc("GET /api/v1/status/tsdb", a.tsdbStatus)
+	mux.HandleFunc("POST /api/v1/write", a.remoteWrite)
 }
 
 func (a *API) now() time.Time {

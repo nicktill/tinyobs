@@ -26,9 +26,11 @@ type Config struct {
 	DataDir   string
 	Retention time.Duration
 	MaxSeries int
-	MemoryMB  int64
-	WebDir    string // static UI files
-	Logger    *slog.Logger
+	// MaxSeriesPerMetric caps series per metric name; see tsdb.Options.
+	MaxSeriesPerMetric int
+	MemoryMB           int64
+	WebDir             string // static UI files
+	Logger             *slog.Logger
 }
 
 // Server is a running TinyObs instance.
@@ -46,10 +48,11 @@ func New(cfg Config) (*Server, error) {
 		cfg.Logger = slog.Default()
 	}
 	db, err := tsdb.Open(tsdb.Options{
-		Dir:       cfg.DataDir,
-		Retention: cfg.Retention,
-		MaxSeries: cfg.MaxSeries,
-		MemoryMB:  cfg.MemoryMB,
+		Dir:                cfg.DataDir,
+		Retention:          cfg.Retention,
+		MaxSeries:          cfg.MaxSeries,
+		MaxSeriesPerMetric: cfg.MaxSeriesPerMetric,
+		MemoryMB:           cfg.MemoryMB,
 	})
 	if err != nil {
 		return nil, err
@@ -85,6 +88,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /-/ready", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "TinyObs is Ready.")
 	})
+	mux.HandleFunc("GET /metrics", s.selfMetrics)
 	s.registerLegacy(mux)
 	if s.cfg.WebDir != "" {
 		files := http.FileServer(http.Dir(s.cfg.WebDir))

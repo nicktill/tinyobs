@@ -72,3 +72,24 @@ func TestMiddleware(t *testing.T) {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
 }
+
+func TestRouteLabel(t *testing.T) {
+	mux := http.NewServeMux()
+	var got string
+	mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, r *http.Request) {})
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		mux.ServeHTTP(rw, r)
+		got = routeLabel(r, rw.statusCode)
+	})
+	for path, want := range map[string]string{
+		"/users/abc":    "/users/{id}",
+		"/wp-login.php": "unmatched",
+		"/.env":         "unmatched",
+	} {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+		if got != want {
+			t.Errorf("%s: got %q, want %q", path, got, want)
+		}
+	}
+}
