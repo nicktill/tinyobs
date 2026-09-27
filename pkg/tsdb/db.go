@@ -54,6 +54,10 @@ func IsStaleNaN(v float64) bool { return math.Float64bits(v) == staleNaNBits }
 // ErrTooManySeries is returned when a new series would exceed MaxSeries.
 var ErrTooManySeries = errors.New("series limit reached")
 
+// ErrTooManyMetricSeries is returned when a new series would exceed
+// MaxSeriesPerMetric.
+var ErrTooManyMetricSeries = errors.New("per-metric series limit reached")
+
 // Options configures a DB.
 type Options struct {
 	// Dir is the data directory. Ignored when InMemory is set.
@@ -65,6 +69,10 @@ type Options struct {
 	// MaxSeries caps the number of series. Samples for new series beyond it
 	// are rejected, which bounds memory and disk. Default 50,000.
 	MaxSeries int
+	// MaxSeriesPerMetric caps the series of one metric name, so a single
+	// label explosion (a user ID in a label, say) is rejected on its own
+	// instead of exhausting MaxSeries for every other metric. Default 10,000.
+	MaxSeriesPerMetric int
 	// MemoryMB bounds Badger's memtables and caches. Default 64.
 	MemoryMB int64
 	// Now returns the current time. Tests override it.
@@ -105,6 +113,12 @@ type DB struct {
 	// each series' newest sample always matches what is on disk.
 	commitMu sync.Mutex
 
+	disk struct {
+		sync.Mutex
+		at    time.Time
+		bytes int64
+	}
+
 	counters struct {
 		sync.Mutex
 		appended uint64
@@ -129,6 +143,9 @@ func Open(opts Options) (*DB, error) {
 	}
 	if opts.MaxSeries <= 0 {
 		opts.MaxSeries = 50_000
+	}
+	if opts.MaxSeriesPerMetric <= 0 {
+		opts.MaxSeriesPerMetric = 10_000
 	}
 	if opts.MemoryMB <= 0 {
 		opts.MemoryMB = 64
@@ -336,6 +353,7 @@ func (a *Appender) Append(lset labels.Labels, t int64, v float64) {
 const (
 	ReasonOutOfOrder = "out_of_order"
 	ReasonSeriesCap  = "series_limit"
+	ReasonMetricCap  = "metric_series_limit"
 	ReasonInvalid    = "invalid_labels"
 )
 
@@ -406,6 +424,9 @@ func (a *Appender) Commit() (CommitResult, error) {
 		switch {
 		case errors.Is(err, ErrTooManySeries):
 			res.reject(ReasonSeriesCap, fmt.Errorf("%s: %w (%d)", p.lset, err, db.opts.MaxSeries))
+			continue
+		case errors.Is(err, ErrTooManyMetricSeries):
+			res.reject(ReasonMetricCap, fmt.Errorf("%s: %w (%d)", p.lset, err, db.opts.MaxSeriesPerMetric))
 			continue
 		case err != nil:
 			res.reject(ReasonInvalid, err)
@@ -478,6 +499,9 @@ func (db *DB) getOrCreate(lset labels.Labels) (*memSeries, bool, error) {
 	}
 	if len(db.series) >= db.opts.MaxSeries {
 		return nil, false, ErrTooManySeries
+	}
+	if len(db.postings[labels.MetricName][lset.Get(labels.MetricName)]) >= db.opts.MaxSeriesPerMetric {
+		return nil, false, ErrTooManyMetricSeries
 	}
 	s = &memSeries{id: db.allocateID(lset), lset: lset, firstT: math.MaxInt64, lastT: math.MinInt64}
 	db.indexSeries(s)
@@ -661,19 +685,20 @@ func (db *DB) LabelValues(name string, mint, maxt int64, ms ...*labels.Matcher) 
 
 // Stats describes the database.
 type Stats struct {
-	NumSeries       int
-	MaxSeries       int
-	MinTime         int64 // ms; 0 when empty
-	MaxTime         int64
-	DiskBytes       int64
-	SamplesAppended uint64            // since start
-	SamplesRejected map[string]uint64 // since start, by reason
-	Retention       time.Duration
+	NumSeries          int
+	MaxSeries          int
+	MaxSeriesPerMetric int
+	MinTime            int64 // ms; 0 when empty
+	MaxTime            int64
+	DiskBytes          int64
+	SamplesAppended    uint64            // since start
+	SamplesRejected    map[string]uint64 // since start, by reason
+	Retention          time.Duration
 }
 
 // Stats returns current statistics.
 func (db *DB) Stats() Stats {
-	st := Stats{MaxSeries: db.opts.MaxSeries, Retention: db.opts.Retention}
+	st := Stats{MaxSeries: db.opts.MaxSeries, MaxSeriesPerMetric: db.opts.MaxSeriesPerMetric, Retention: db.opts.Retention}
 	minT, maxT := int64(math.MaxInt64), int64(math.MinInt64)
 	db.mu.RLock()
 	st.NumSeries = len(db.series)
@@ -700,8 +725,19 @@ func (db *DB) Stats() Stats {
 	return st
 }
 
-// diskUsage returns the space used by the data directory.
+// diskUsage returns the space used by the data directory. Walking the
+// directory costs a syscall per file, so the result is reused for 30s; disk
+// use does not move faster than that in a way anyone would alert on.
 func (db *DB) diskUsage() int64 {
+	db.disk.Lock()
+	defer db.disk.Unlock()
+	if now := time.Now(); now.Sub(db.disk.at) > 30*time.Second {
+		db.disk.bytes, db.disk.at = db.measureDisk(), now
+	}
+	return db.disk.bytes
+}
+
+func (db *DB) measureDisk() int64 {
 	if db.opts.InMemory {
 		lsm, vlog := db.kv.Size()
 		return lsm + vlog
@@ -770,6 +806,11 @@ func (db *DB) Cardinality(limit int) Cardinality {
 
 // ApplyRetention deletes samples older than the retention window, and series
 // left with no samples. Deletion is batched, so its memory use is bounded.
+//
+// The bulk of the work, deleting expired samples, runs without blocking
+// ingestion: appends only ever add samples newer than a series' last one, so
+// they never touch the keys being deleted. Only removing dead series takes
+// the commit lock, and only for the few series that went quiet.
 func (db *DB) ApplyRetention() error {
 	cutoff := db.opts.Now().Add(-db.opts.Retention).UnixMilli()
 
@@ -787,14 +828,10 @@ func (db *DB) ApplyRetention() error {
 		return nil
 	}
 
-	// Hold off appends so a series cannot receive new samples while it is
-	// being removed.
-	db.commitMu.Lock()
-	defer db.commitMu.Unlock()
-
+	// Phase 1: delete expired samples, concurrently with appends.
 	wb := db.kv.NewWriteBatch() // splits into multiple transactions as needed
 	defer wb.Cancel()
-	var dead []*memSeries
+	var empty []*memSeries
 	err := db.kv.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
@@ -815,10 +852,7 @@ func (db *DB) ApplyRetention() error {
 			}
 			it.Close()
 			if newFirst == math.MaxInt64 {
-				if err := wb.Delete(seriesKey(s.id)); err != nil {
-					return err
-				}
-				dead = append(dead, s)
+				empty = append(empty, s)
 				continue
 			}
 			s.mu.Lock()
@@ -834,16 +868,63 @@ func (db *DB) ApplyRetention() error {
 		return err
 	}
 
-	db.mu.Lock()
-	for _, s := range dead {
-		db.unindexSeries(s)
+	// Phase 2: drop series that are still empty. A series may have received
+	// samples since phase 1, so re-check under the commit lock.
+	// Chunked so a mass expiry stays within Badger's transaction size limit.
+	for len(empty) > 0 {
+		n := min(len(empty), 1000)
+		if err := db.dropEmptySeries(empty[:n]); err != nil {
+			return err
+		}
+		empty = empty[n:]
 	}
-	db.mu.Unlock()
 
 	if !db.opts.InMemory {
 		for db.kv.RunValueLogGC(0.5) == nil {
 		}
 	}
+	return nil
+}
+
+func (db *DB) dropEmptySeries(candidates []*memSeries) error {
+	db.commitMu.Lock()
+	defer db.commitMu.Unlock()
+	var dead []*memSeries
+	err := db.kv.Update(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		for _, s := range candidates {
+			opts.Prefix = dataPrefix(s.id)
+			it := txn.NewIterator(opts)
+			it.Rewind()
+			var remaining int64 = math.MaxInt64
+			if it.Valid() {
+				remaining = dataKeyTime(it.Item().Key())
+			}
+			it.Close()
+			if remaining != math.MaxInt64 {
+				// Samples arrived after phase 1. Leave the series; any that
+				// are older than the cutoff go on the next pass.
+				s.mu.Lock()
+				s.firstT = remaining
+				s.mu.Unlock()
+				continue
+			}
+			if err := txn.Delete(seriesKey(s.id)); err != nil {
+				return err
+			}
+			dead = append(dead, s)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	db.mu.Lock()
+	for _, s := range dead {
+		db.unindexSeries(s)
+	}
+	db.mu.Unlock()
 	return nil
 }
 

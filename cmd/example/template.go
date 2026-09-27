@@ -322,7 +322,7 @@ const statsPageTemplate = `<!DOCTYPE html>
                 </div>
             </div>
             <div class="dashboard-link">
-                <a href="http://localhost:8080/dashboard.html" target="_blank" class="btn primary" style="padding: 1rem 2rem; font-size: 1rem;">
+                <a href="http://localhost:8080/" target="_blank" class="btn primary" style="padding: 1rem 2rem; font-size: 1rem;">
                     📊 Open TinyObs Dashboard →
                 </a>
                 <p style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">

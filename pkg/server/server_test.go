@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -102,15 +103,14 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("gauge = %v", r)
 	}
 
-	// The legacy dashboard endpoints are served from the new storage.
+	// The V1 query endpoints are gone; the dashboard uses the Prometheus API.
 	resp, err := http.Get(base + "/v1/query/range?metric=e2e_requests_total")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(b), `"route":"/a"`) {
-		t.Fatalf("legacy range endpoint: %s", b)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("V1 range endpoint: status %d, want 404", resp.StatusCode)
 	}
 
 	stop()
@@ -127,9 +127,57 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ = io.ReadAll(resp.Body)
+	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if !strings.Contains(string(b), `"type":"counter"`) {
 		t.Fatalf("metadata after restart: %s", b)
+	}
+}
+
+func TestSelfMetrics(t *testing.T) {
+	base, cancel, done := startServer(t, t.TempDir())
+	defer func() { cancel(); <-done }()
+	resp, err := http.Get(base + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{"tinyobs_series 0", `tinyobs_samples_rejected_total{reason="series_limit"} 0`, "tinyobs_series_per_metric_limit 10000"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("missing %q in:\n%s", want, body)
+		}
+	}
+}
+
+func TestAuthToken(t *testing.T) {
+	srv, err := New(Config{DataDir: t.TempDir(), AuthToken: "s3cret", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.DB().Close()
+	h := srv.Handler()
+	do := func(method, path, token string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(`{"metrics":[]}`))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for _, path := range []string{"/v1/ingest", "/api/v1/write"} {
+		if c := do("POST", path, ""); c != http.StatusUnauthorized {
+			t.Errorf("%s without token: %d", path, c)
+		}
+		if c := do("POST", path, "wrong"); c != http.StatusUnauthorized {
+			t.Errorf("%s with wrong token: %d", path, c)
+		}
+	}
+	if c := do("POST", "/v1/ingest", "s3cret"); c != http.StatusOK {
+		t.Errorf("ingest with token: %d", c)
+	}
+	if c := do("GET", "/api/v1/query?query=up", ""); c != http.StatusOK {
+		t.Errorf("reads should stay open: %d", c)
 	}
 }

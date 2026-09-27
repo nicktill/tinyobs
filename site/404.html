@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 · TinyObs</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='5' y='2' width='6' height='12' fill='%23f5a524'/%3E%3C/svg%3E">
+<script>
+  // Served for any missing path, so resolve links from the site root: "/" on
+  // a custom domain, "/tinyobs/" on GitHub Pages.
+  document.write('<base href="' + (location.pathname.indexOf('/tinyobs/') === 0 ? '/tinyobs/' : '/') + '">');
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="./"><i></i>tinyobs</a>
+</div></header>
+<main class="lost"><pre><span class="p">$ </span>curl -s localhost:8080/api/v1/query --data-urlencode 'query=this_page'
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+<span class="p"># no series matched. it may have aged out of retention.</span>
+<span class="p">$ </span><a href="./">cd ~</a>  <a href="docs/">cat docs</a><span class="cursor" aria-hidden="true"></span></pre></main>
+</body>
+</html>

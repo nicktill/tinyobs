@@ -5,9 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: tinyobs-server
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080" # host-local; drop the prefix to expose it, and set TINYOBS_AUTH_TOKEN
     environment:
-      - PORT=8080
       - TINYOBS_RETENTION=72h
       - TINYOBS_MAX_MEMORY_MB=64
     volumes:
@@ -28,7 +27,7 @@ services:
     profiles:
       - example
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - TINYOBS_ENDPOINT=http://tinyobs:8080/v1/ingest
     depends_on:

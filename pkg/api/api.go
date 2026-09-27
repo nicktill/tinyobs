@@ -39,6 +39,8 @@ type API struct {
 	Engine    *promql.Engine
 	BuildInfo BuildInfo
 	Now       func() time.Time
+	// Auth wraps write handlers (remote write). Nil means no check.
+	Auth func(http.HandlerFunc) http.HandlerFunc
 }
 
 // Register adds the API routes to mux.
@@ -53,6 +55,11 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/metadata", a.metadata)
 	mux.HandleFunc("GET /api/v1/status/buildinfo", a.buildInfo)
 	mux.HandleFunc("GET /api/v1/status/tsdb", a.tsdbStatus)
+	write := http.HandlerFunc(a.remoteWrite)
+	if a.Auth != nil {
+		write = a.Auth(write)
+	}
+	mux.HandleFunc("POST /api/v1/write", write)
 }
 
 func (a *API) now() time.Time {

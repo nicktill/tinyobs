@@ -39,7 +39,9 @@ COPY --from=builder /build/web ./web
 # Create data directory
 RUN mkdir -p /app/data && chmod 755 /app/data
 
-# Expose port
+# Listen on all interfaces inside the container; publish the port on the host
+# loopback (see docker-compose.yml), or set TINYOBS_AUTH_TOKEN.
+ENV TINYOBS_LISTEN=0.0.0.0:8080
 EXPOSE 8080
 
 # Health check

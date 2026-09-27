@@ -1,6 +1,6 @@
 # TinyObs
 
-**A lightweight metrics platform you can actually understand.**
+**A lightweight metrics platform you can actually understand.** · [Website & docs](https://nicktill.github.io/tinyobs/)
 
 [![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -110,8 +110,17 @@ point Grafana's Prometheus data source at `http://localhost:8080`.
 | `GET/POST /api/v1/series`, `/api/v1/labels`, `GET /api/v1/label/<name>/values` | Series and label discovery |
 | `GET /api/v1/metadata` | Metric type and help text |
 | `GET /api/v1/status/tsdb`, `/api/v1/status/buildinfo` | Cardinality statistics, version |
-| `GET /-/healthy`, `/-/ready` | Health checks |
+| `POST /api/v1/write` | [Prometheus remote write](https://prometheus.io/docs/specs/prw/remote_write_spec/) 1.0 (Prometheus, Alloy, OTel Collector, vmagent) |
 | `POST /v1/ingest` | Ingest from the TinyObs Go SDK |
+| `GET /metrics` | TinyObs's own metrics: series vs. limits, rejected samples by reason, disk use |
+| `GET /-/healthy`, `/-/ready` | Health checks |
+
+Push from an existing Prometheus or Alloy agent:
+
+```yaml
+remote_write:
+  - url: http://localhost:8080/api/v1/write
+```
 
 ```bash
 curl -s localhost:8080/api/v1/query --data-urlencode 'query=sum by (path) (rate(http_requests_total[5m]))'
@@ -136,13 +145,34 @@ Environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Server port | `8080` |
+| `TINYOBS_LISTEN` | Listen address. Loopback by default; the Docker image uses `0.0.0.0:8080` | `127.0.0.1:$PORT` |
+| `PORT` | Port, when `TINYOBS_LISTEN` is unset | `8080` |
+| `TINYOBS_AUTH_TOKEN` | If set, required as `Authorization: Bearer <token>` on `/api/v1/write` and `/v1/ingest` | unset |
 | `TINYOBS_DATA_DIR` | Data directory | `./data/tinyobs-v2` |
 | `TINYOBS_RETENTION` | How long samples are kept | `72h` |
-| `TINYOBS_MAX_SERIES` | Series limit; protects against label explosions | `50000` |
+| `TINYOBS_MAX_SERIES` | Total series limit | `50000` |
+| `TINYOBS_MAX_SERIES_PER_METRIC` | Series limit per metric name, so one label explosion can't starve the rest | `10000` |
 | `TINYOBS_MAX_MEMORY_MB` | BadgerDB memory budget | `64` |
 
 Disk use is bounded by `max series × samples per series in the retention window × ~14 bytes`.
+
+Samples are never dropped silently: every rejection (out of order, series limit, per-metric limit,
+invalid labels) is counted in `tinyobs_samples_rejected_total{reason}` on `/metrics`, and
+`/api/v1/status/tsdb` lists the metrics and labels with the most series. The Go SDK's HTTP middleware
+labels requests by the matched `ServeMux` route pattern and collapses unmatched (404) paths into one
+value, so scanners can't mint series.
+
+### Security
+
+Reads are unauthenticated, so the dashboard and Grafana work without setup. TinyObs listens on
+loopback by default and warns at startup if it is exposed without `TINYOBS_AUTH_TOKEN`. To accept
+writes from other hosts, set a token (the Go SDK sends it via `ClientConfig.APIKey`, Prometheus via
+`remote_write.authorization`) and keep the port on a private network.
+
+### Staleness
+
+Pushed series have no scrape to fail, so when a service stops, its series keep their last value
+for the 5-minute lookback window and then disappear from instant queries.
 
 ## Project Structure
 
@@ -197,23 +227,7 @@ go build ./cmd/server
 PORT=3000 TINYOBS_RETENTION=168h go run ./cmd/server
 ```
 
-### Docker
-
-**Recommended (using Make):**
-```bash
-make docker-up      # Start server only
-make docker-demo    # Start server + example app
-make docker-down    # Stop all services
-make docker-logs    # View logs
-```
-
-**Alternative (direct docker-compose):**
-```bash
-docker-compose up -d --build                    # Server only
-docker-compose --profile example up -d --build  # Server + example app
-docker-compose --profile example down           # Stop all services
-docker-compose logs -f                          # View logs
-```
+Docker: `make docker-up`, `make docker-demo`, `make docker-down`, `make docker-logs`.
 
 See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 

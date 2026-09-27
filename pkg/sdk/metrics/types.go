@@ -47,3 +47,9 @@ type HistogramInterface interface {
 type MetricCollector interface {
 	Collect(ctx context.Context) []Metric
 }
+
+// ClientInterface receives individual samples, for collectors that read
+// values on their own schedule (see the runtime package).
+type ClientInterface interface {
+	SendMetric(metric Metric)
+}

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs · TinyObs</title>
+<meta name="description" content="Run TinyObs, instrument an app, push with remote write, query with PromQL, and size cardinality and retention.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='5' y='2' width='6' height='12' fill='%23f5a524'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body data-root="../">
+<header class="nav"><div class="wrap" style="max-width:1360px">
+  <a class="brand" href="../"><i></i>tinyobs</a>
+  <ul>
+    <li><a href="./" aria-current="page">docs</a></li>
+    <li><a href="https://github.com/nicktill/tinyobs">github ↗</a></li>
+    <li class="tag">v2.0</li>
+  </ul>
+</div></header>
+
+<div class="docs">
+<nav class="side" aria-label="Sections"><ol>
+  <li><a href="#quick-start"><span>01</span>quick start</a></li>
+  <li><a href="#instrument"><span>02</span>instrument an app</a></li>
+  <li><a href="#remote-write"><span>03</span>remote write</a></li>
+  <li><a href="#promql"><span>04</span>promql</a></li>
+  <li><a href="#api"><span>05</span>http api</a></li>
+  <li><a href="#config"><span>06</span>configuration</a></li>
+  <li><a href="#limits"><span>07</span>cardinality &amp; retention</a></li>
+  <li><a href="#grafana"><span>08</span>grafana</a></li>
+</ol></nav>
+
+<main class="content">
+<h1>Documentation</h1>
+<p class="muted">Everything needed to run TinyObs, get metrics into it, and query them back out.</p>
+
+<section id="quick-start">
+<h2><span class="n">01</span>Quick start</h2>
+<p>TinyObs is one Go binary with an embedded store. There is nothing else to run. The dashboard and API both listen on port <code>8080</code>.</p>
+<div class="code"><span class="lang">docker</span><pre>git clone https://github.com/nicktill/tinyobs && cd tinyobs
+docker compose up -d</pre></div>
+<div class="code"><span class="lang">go 1.23+</span><pre>go run ./cmd/server</pre></div>
+<p>To generate demo traffic, run the example app with <code>go run ./cmd/example</code> or <code>make docker-demo</code>, then open <code>http://localhost:8080</code>.</p>
+</section>
+
+<section id="instrument">
+<h2><span class="n">02</span>Instrument an app</h2>
+<p>The Go SDK batches samples and pushes them every few seconds. The HTTP middleware records <code>http_requests_total</code> and <code>http_request_duration_seconds</code>, labelled by the route pattern your <code>ServeMux</code> matched, so IDs in URLs never become new series.</p>
+<div class="code"><span class="lang">main.go</span><pre>client, _ := sdk.New(sdk.ClientConfig{
+    Service:  "my-app",
+    Endpoint: "http://localhost:8080/v1/ingest",
+})
+client.Start(ctx)
+defer client.Stop()
+
+mux := http.NewServeMux()
+mux.HandleFunc("GET /users/{id}", getUser)
+handler := httpx.Middleware(client)(mux)  <span class="c">// path="/users/{id}"</span>
+
+errors := client.Counter("errors_total")
+errors.Inc("type", "api_error")</pre></div>
+</section>
+
+<section id="remote-write">
+<h2><span class="n">03</span>Remote write</h2>
+<p>Anything that speaks Prometheus remote write 1.0 can push to TinyObs: Prometheus, Grafana Alloy, the OpenTelemetry Collector, vmagent.</p>
+<div class="code"><span class="lang">prometheus.yml</span><pre>remote_write:
+  - url: http://localhost:8080/api/v1/write</pre></div>
+<p>If <code>TINYOBS_AUTH_TOKEN</code> is set, add <code>authorization: { credentials: &lt;token&gt; }</code> to the entry. The Go SDK sends it from <code>ClientConfig.APIKey</code>.</p>
+<p>Samples that can never be stored (out of order, over a series limit, invalid labels) get a <code>400</code>, so senders drop them instead of retrying forever. Storage errors get a <code>5xx</code> and are retried.</p>
+</section>
+
+<section id="promql">
+<h2><span class="n">04</span>PromQL</h2>
+<p>The engine runs Prometheus's own <code>promqltest</code> suite (<code>make promql-compat</code>). A supported feature returns what Prometheus returns. Anything else is an explicit “not supported” error, never a guess.</p>
+<div class="two">
+<div><h3>supported</h3><ul>
+  <li>Selectors with <code>=</code> <code>!=</code> <code>=~</code> <code>!~</code>, range vectors, <code>offset</code>, subqueries</li>
+  <li>Arithmetic, comparison (with <code>bool</code>) and set operators with <code>on</code>, <code>ignoring</code>, <code>group_left</code>, <code>group_right</code></li>
+  <li><code>sum avg min max count group stddev stdvar topk bottomk quantile</code></li>
+  <li><code>rate irate increase delta idelta deriv predict_linear resets changes</code></li>
+  <li><code>*_over_time</code>, <code>histogram_quantile</code>, math, clamping, date and label functions</li>
+</ul></div>
+<div><h3>not supported</h3><ul>
+  <li>Native histograms</li>
+  <li>The <code>@</code> modifier and duration expressions</li>
+  <li><code>count_values</code>, <code>limitk</code></li>
+  <li><code>holt_winters</code>, <code>sort_by_label</code></li>
+</ul></div>
+</div>
+<div class="code"><span class="lang">shell</span><pre>curl -s localhost:8080/api/v1/query \
+  --data-urlencode 'query=histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))'</pre></div>
+</section>
+
+<section id="api">
+<h2><span class="n">05</span>HTTP API</h2>
+<p>Request parameters, response shapes and error types follow the <a href="https://prometheus.io/docs/prometheus/latest/querying/api/">Prometheus HTTP API</a>.</p>
+<table>
+<tr><th>endpoint</th><th>purpose</th></tr>
+<tr><td><code>/api/v1/query</code></td><td>Instant query</td></tr>
+<tr><td><code>/api/v1/query_range</code></td><td>Range query</td></tr>
+<tr><td><code>/api/v1/series</code></td><td>Series matching selectors</td></tr>
+<tr><td><code>/api/v1/labels</code></td><td>Label names</td></tr>
+<tr><td><code>/api/v1/label/&lt;name&gt;/values</code></td><td>Values of one label</td></tr>
+<tr><td><code>/api/v1/metadata</code></td><td>Metric type and help text</td></tr>
+<tr><td><code>/api/v1/status/tsdb</code></td><td>Series count and the heaviest metrics and labels</td></tr>
+<tr><td><code>POST /api/v1/write</code></td><td>Prometheus remote write 1.0</td></tr>
+<tr><td><code>POST /v1/ingest</code></td><td>Go SDK ingest</td></tr>
+<tr><td><code>/metrics</code></td><td>TinyObs's own metrics</td></tr>
+<tr><td><code>/-/healthy</code>, <code>/-/ready</code></td><td>Health checks</td></tr>
+</table>
+</section>
+
+<section id="config">
+<h2><span class="n">06</span>Configuration</h2>
+<p>Configured with environment variables. Invalid values stop the server at startup rather than falling back to a default.</p>
+<table>
+<tr><th>variable</th><th>default</th><th>description</th></tr>
+<tr><td><code>TINYOBS_LISTEN</code></td><td>127.0.0.1:8080</td><td>Listen address. Loopback by default; the Docker image uses 0.0.0.0:8080</td></tr>
+<tr><td><code>PORT</code></td><td>8080</td><td>Port, when <code>TINYOBS_LISTEN</code> is unset</td></tr>
+<tr><td><code>TINYOBS_AUTH_TOKEN</code></td><td>unset</td><td>Bearer token required on the write endpoints</td></tr>
+<tr><td><code>TINYOBS_DATA_DIR</code></td><td>./data/tinyobs-v2</td><td>Data directory</td></tr>
+<tr><td><code>TINYOBS_RETENTION</code></td><td>72h</td><td>How long samples are kept</td></tr>
+<tr><td><code>TINYOBS_MAX_SERIES</code></td><td>50000</td><td>Total series limit</td></tr>
+<tr><td><code>TINYOBS_MAX_SERIES_PER_METRIC</code></td><td>10000</td><td>Series limit per metric name</td></tr>
+<tr><td><code>TINYOBS_MAX_MEMORY_MB</code></td><td>64</td><td>Storage memory budget</td></tr>
+</table>
+</section>
+
+<section id="limits">
+<h2><span class="n">07</span>Cardinality &amp; retention</h2>
+<p>Every unique label set is a series, and series are what cost memory and disk. TinyObs caps them twice. The global limit bounds the whole server. The per-metric limit stops one runaway label, such as a user ID, from using up the global budget for every other metric.</p>
+<p>Pushed series have no scrape to fail. When a service stops, its series keep their last value for the 5-minute lookback window, then drop out of instant queries.</p>
+<p>Retention is time-based and runs hourly, without pausing ingestion. Disk use is predictable:</p>
+<div class="code"><span class="lang">sizing</span><pre>disk ≈ series × samples per series in the window × ~14 bytes
+
+<span class="c"># 5,000 series, 15s interval, 72h retention</span>
+5,000 × 17,280 × 14 B ≈ 1.2 GB</pre></div>
+<p>Rejected samples are never dropped silently. Alert on the counter, and use the status endpoint to find the metric responsible:</p>
+<div class="code"><span class="lang">shell</span><pre>curl -s localhost:8080/metrics | grep -E 'tinyobs_(series|samples_rejected)'
+curl -s localhost:8080/api/v1/status/tsdb | jq '.data.seriesCountByMetricName'</pre></div>
+</section>
+
+<section id="grafana">
+<h2><span class="n">08</span>Grafana</h2>
+<p>Add a <strong>Prometheus</strong> data source with the URL <code>http://localhost:8080</code> (from a container, <code>http://host.docker.internal:8080</code>). Existing dashboards work, as long as their queries stay within the supported PromQL above.</p>
+</section>
+</main>
+
+<aside class="toc"><p>on this page</p><ol>
+  <li><a href="#quick-start">Quick start</a></li>
+  <li><a href="#instrument">Instrument an app</a></li>
+  <li><a href="#remote-write">Remote write</a></li>
+  <li><a href="#promql">PromQL</a></li>
+  <li><a href="#api">HTTP API</a></li>
+  <li><a href="#config">Configuration</a></li>
+  <li><a href="#limits">Cardinality &amp; retention</a></li>
+  <li><a href="#grafana">Grafana</a></li>
+</ol></aside>
+</div>
+
+<footer class="status"><div class="wrap" style="max-width:1360px">
+  <div class="left"><span class="mode">NORMAL</span><span>~/tinyobs/site/docs/index.html</span><span class="keys"><kbd>d</kbd>docs <kbd>h</kbd>home <kbd>g</kbd>github</span></div>
+  <div class="right"><span>MIT</span><span>built by <a href="https://github.com/nicktill">@nicktill</a></span></div>
+</div></footer>
+
+<script>
+// Copy buttons on code blocks.
+document.querySelectorAll('.code').forEach(function (block) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', function () {
+    var text = block.querySelector('pre').innerText;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'copied';
+      btn.classList.add('done');
+      setTimeout(function () { btn.textContent = 'copy'; btn.classList.remove('done'); }, 1500);
+    });
+  });
+  block.appendChild(btn);
+});
+
+// Linkable headings.
+document.querySelectorAll('.content section').forEach(function (s) {
+  var a = document.createElement('a');
+  a.className = 'anchor'; a.href = '#' + s.id; a.textContent = '#'; a.setAttribute('aria-label', 'Link to this section');
+  s.querySelector('h2').appendChild(a);
+});
+
+// Highlight the section in view.
+var links = document.querySelectorAll('.side a');
+var observer = new IntersectionObserver(function (entries) {
+  entries.forEach(function (e) {
+    if (!e.isIntersecting) return;
+    links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id); });
+  });
+}, { rootMargin: '0px 0px -70% 0px' });
+document.querySelectorAll('.content section').forEach(function (s) { observer.observe(s); });
+</script>
+<script src="../site.js"></script>
+</body>
+</html>

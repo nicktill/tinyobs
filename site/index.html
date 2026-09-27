@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyObs · metrics you can read end to end</title>
+<meta name="description" content="A Prometheus-compatible metrics server in about 6,500 lines of Go: PromQL verified against Prometheus's test suite, a Grafana-ready API, remote write, and storage with real cardinality and retention limits.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='5' y='2' width='6' height='12' fill='%23f5a524'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-root="./">
+<header class="nav"><div class="wrap">
+  <a class="brand" href="./"><i></i>tinyobs</a>
+  <ul>
+    <li><a href="docs/">docs</a></li>
+    <li><a href="https://github.com/nicktill/tinyobs">github ↗</a></li>
+    <li class="tag">v2.0</li>
+  </ul>
+</div></header>
+
+<main>
+<section class="hero"><div class="wrap">
+  <div>
+    <p class="kicker">a prometheus-compatible metrics server in ~6,500 lines of go</p>
+    <h1>Metrics you can read end to end.<span class="cursor" aria-hidden="true"></span></h1>
+    <p class="lede">PromQL verified against Prometheus's own test suite, a Grafana-ready API, remote write, and a storage engine with real cardinality and retention limits. One binary. No cluster.</p>
+    <div class="actions">
+      <a class="primary" href="docs/">[ read the docs ]</a>
+      <a class="secondary" href="https://github.com/nicktill/tinyobs">github ↗</a>
+    </div>
+  </div>
+
+  <div class="term" aria-label="Example terminal session">
+    <div class="term-head"><span>~/tinyobs</span><span>zsh</span></div>
+<pre><span class="p">$ </span>go run ./cmd/server
+<span class="o">level=INFO msg="TinyObs started" retention=72h max_series=<span class="n">50000</span></span>
+<span class="p">$ </span>curl -s localhost:8080/api/v1/query \
+    --data-urlencode 'query=topk(3, sum by (path) (
+        rate(http_requests_total[5m])))' \
+    | jq -r '.data.result[] | "\(.metric.path)\t\(.value[1])"'
+<span class="o">/api/users/{id}    <span class="n">41.2</span>
+/api/orders        <span class="n">17.9</span>
+/healthz            <span class="n">4.0</span></span>
+<span class="p">$ </span>curl -s localhost:8080/metrics | grep rejected
+<span class="o">tinyobs_samples_rejected_total{reason="metric_series_limit"} <span class="n">1204</span></span>
+<span class="p">$ </span><span class="cursor" aria-hidden="true"></span></pre>
+    <div class="chart">
+      <div class="chart-label"><span>sum(rate(http_requests_total[5m]))</span><span>last 1h</span></div>
+      <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" x2="600" y1="18" y2="18" stroke="#2a2925" stroke-dasharray="2 4"/>
+        <line x1="0" x2="600" y1="54" y2="54" stroke="#2a2925" stroke-dasharray="2 4"/>
+        <polyline fill="none" stroke="#f5a524" stroke-width="1.25" vector-effect="non-scaling-stroke" points="0,39.1 5,37.9 10,32.9 15,34.4 20,29.9 25,29.5 30,30.3 35,26.8 40,29.3 45,26.8 50,29.3 55,29.7 60,28.4 65,26.9 70,32.1 75,32.6 80,31.1 85,30.0 90,32.9 95,34.4 100,31.1 105,36.6 110,31.4 115,34.3 120,34.4 125,33.6 130,31.5 135,27.4 140,30.2 145,26.9 150,25.9 155,27.1 160,25.9 165,29.0 170,29.6 175,29.7 180,28.1 185,31.1 190,33.6 195,34.0 200,36.9 205,40.0 210,39.1 215,41.7 220,46.3 225,45.9 230,47.4 235,46.3 240,47.8 245,50.7 250,46.4 255,51.2 260,48.8 265,45.9 270,48.6 275,45.6 280,47.3 285,42.6 290,41.3 295,41.9 300,39.8 305,43.1 310,41.0 315,42.1 320,42.9 325,44.5 330,43.2 335,43.6 340,47.5 345,47.3 350,51.7 355,48.4 360,49.1 365,47.0 370,47.6 375,50.1 380,48.5 385,45.4 390,47.6 395,25.0 400,24.7 405,22.9 410,21.1 415,14.8 420,16.7 425,14.2 430,29.9 435,25.9 440,29.9 445,27.2 450,26.5 455,24.7 460,25.6 465,26.0 470,30.4 475,30.6 480,31.9 485,29.7 490,30.0 495,35.5 500,35.8 505,35.6 510,35.5 515,33.7 520,32.4 525,33.6 530,34.2 535,30.7 540,29.9 545,27.7 550,24.5 555,25.3 560,25.9 565,25.1 570,25.0 575,29.2 580,25.0 585,27.0 590,27.9 595,30.1 600,34.6"/>
+      </svg>
+      <div class="ticks"><span>14:00</span><span>14:15</span><span>14:30</span><span>14:45</span><span>15:00</span></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <div class="num">01</div>
+  <div>
+    <h2>What's inside</h2>
+    <p class="intro">The whole system, by package. Lines of Go, not counting tests, comments or blank lines. Every piece is small enough to read in one sitting.</p>
+    <table class="sizes">
+      <tr><td>promql</td><td class="loc">2,820</td><td class="bar"><span style="width:100%"></span></td><td class="what">Lexer, parser and evaluator, checked against upstream promqltest</td></tr>
+      <tr><td>sdk</td><td class="loc">1,266</td><td class="bar"><span style="width:44.9%"></span></td><td class="what">Go client: counters, gauges, histograms, HTTP middleware</td></tr>
+      <tr><td>tsdb</td><td class="loc">920</td><td class="bar"><span style="width:32.6%"></span></td><td class="what">BadgerDB storage, label index, retention, cardinality limits</td></tr>
+      <tr><td>api</td><td class="loc">725</td><td class="bar"><span style="width:25.7%"></span></td><td class="what">Prometheus HTTP API and remote write</td></tr>
+      <tr><td>server</td><td class="loc">484</td><td class="bar"><span style="width:17.2%"></span></td><td class="what">Wiring, background retention, /metrics self-monitoring</td></tr>
+      <tr><td>labels</td><td class="loc">345</td><td class="bar"><span style="width:12.2%"></span></td><td class="what">Label sets, matchers, validation</td></tr>
+      <tr class="total"><td>total</td><td class="loc">6,560</td><td class="bar"></td><td class="what">Prometheus is roughly 50× larger.</td></tr>
+    </table>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <div class="num">02</div>
+  <div>
+    <h2>Guardrails, not surprises</h2>
+    <p class="intro">The failure modes that take down real metrics systems are handled up front, and every one of them is observable.</p>
+    <div class="cols">
+      <div>
+        <h3>Cardinality</h3>
+        <p>A global series cap plus a per-metric cap, so one label explosion is rejected on its own instead of starving every other metric. The SDK labels requests by route pattern and collapses 404s.</p>
+        <code>TINYOBS_MAX_SERIES_PER_METRIC=10000</code>
+      </div>
+      <div>
+        <h3>Retention</h3>
+        <p>Time-based, applied hourly, with disk that stays predictable. Samples compress to about 14 bytes each on BadgerDB with ZSTD.</p>
+        <code>disk ≈ series × samples × 14 B</code>
+      </div>
+      <div>
+        <h3>Nothing dropped silently</h3>
+        <p>Every rejected sample is counted by reason and exposed on /metrics. The heaviest metrics and labels are one request away.</p>
+        <code>tinyobs_samples_rejected_total{reason}</code>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <div class="num">03</div>
+  <div>
+    <h2>Where it fits</h2>
+    <p class="intro">TinyObs trades horizontal scale for something you can hold in your head.</p>
+    <div class="fit">
+      <div class="yes"><h3>use it for</h3><ul>
+        <li><b>+</b>Local development and staging</li>
+        <li><b>+</b>Side projects and single-host services</li>
+        <li><b>+</b>Learning how a TSDB and PromQL actually work</li>
+        <li><b>+</b>Performance checks in CI</li>
+      </ul></div>
+      <div class="no"><h3>not for</h3><ul>
+        <li><b>−</b>Highly available production monitoring</li>
+        <li><b>−</b>Multi-tenant workloads</li>
+        <li><b>−</b>Long-term storage</li>
+      </ul><p class="note">→ use Prometheus, Thanos or Mimir</p></div>
+    </div>
+  </div>
+</div></section>
+</main>
+
+<footer class="status"><div class="wrap">
+  <div class="left"><span class="mode">NORMAL</span><span>~/tinyobs/site/index.html</span><span class="keys"><kbd>d</kbd>docs <kbd>h</kbd>home <kbd>g</kbd>github</span></div>
+  <div class="right"><span>MIT</span><span>built by <a href="https://github.com/nicktill">@nicktill</a></span></div>
+</div></footer>
+<script src="./site.js"></script>
+</body>
+</html>

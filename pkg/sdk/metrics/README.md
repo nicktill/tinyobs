@@ -1,78 +1,45 @@
 # metrics
 
-Core metric types: Counter, Gauge, Histogram.
+Counter, Gauge and Histogram. Instruments only update memory; the client
+reports the current value of every series once per flush interval (default
+5s), stamped with one timestamp. Network traffic grows with the number of
+series, never with request rate.
 
-## Counter - Only Goes Up
-
-```go
-counter := client.Counter("requests_total")
-counter.Inc("endpoint", "/users")
-counter.Add(5, "endpoint", "/batch")
-```
-
-Use for: requests, errors, bytes transferred
-
-Rejects negative values (counters can't decrease).
-
-## Gauge - Goes Up and Down
+## Counter
 
 ```go
-gauge := client.Gauge("queue_size")
-gauge.Set(42)
-gauge.Inc() / gauge.Dec()
-gauge.Add(10) / gauge.Sub(5)
+requests := client.Counter("requests_total")
+requests.Inc("endpoint", "/users")
+requests.Add(5, "endpoint", "/batch")
 ```
 
-Use for: queue size, memory usage, active connections
+Cumulative. Negative values are ignored. Query with `rate()` or `increase()`.
 
-## Histogram - Distributions
+## Gauge
 
 ```go
-histogram := client.Histogram("request_duration_seconds")
-histogram.Observe(0.034, "endpoint", "/users")
-
-// Get stats
-count, sum, min, max, avg := histogram.GetStats()
-p95 := histogram.GetPercentile(0.95)
-p99 := histogram.GetPercentile(0.99)
+queue := client.Gauge("queue_size")
+queue.Set(42)
+queue.Inc()
+queue.Sub(5)
 ```
 
-Use for: latencies, response sizes, durations
+## Histogram
 
-**Warning:** Stores all observations. Can grow unbounded.
+```go
+latency := client.Histogram("request_duration_seconds")
+latency.Observe(0.034, "endpoint", "/users")
+```
+
+Exposed as a Prometheus classic histogram: cumulative `_bucket{le}` series
+(including `+Inf`), `_sum` and `_count`. Default buckets run from 1ms to 10s.
+
+```promql
+histogram_quantile(0.99, sum by (le) (rate(request_duration_seconds_bucket[5m])))
+```
 
 ## Labels
 
-```go
-counter.Inc("endpoint", "/users", "method", "GET", "status", "200")
-```
-
-Passed as alternating key-value pairs. Odd number of labels? Last one dropped.
-
-### Best Practices
-
-```go
-// ✅ GOOD - Low cardinality
-counter.Inc("status", "200")           // ~50 values
-counter.Inc("endpoint", "/users")      // ~100s of values
-
-// ❌ BAD - High cardinality
-counter.Inc("user_id", "12345")        // Millions of values!
-counter.Inc("timestamp", "2025-11...")  // Infinite!
-```
-
-Rule: If label has >1000 unique values, it's probably wrong.
-
-## Thread Safety
-
-All operations use `sync.RWMutex`. Safe for concurrent use.
-
-## Performance
-
-- Counter.Inc(): ~100ns
-- Gauge.Set(): ~100ns
-- Histogram.Observe(): ~200ns
-
-## Test Coverage: 0.0%
-
-Needs tests!
+Alternating name/value pairs: `Inc("method", "GET", "status", "200")`. A
+trailing name without a value is ignored. Every distinct combination is a
+series, so never use unbounded values (user IDs, raw URLs) as labels.
