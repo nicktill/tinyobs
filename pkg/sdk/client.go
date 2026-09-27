@@ -185,7 +185,10 @@ func (c *Client) collectLoop() {
 		case <-c.ctx.Done():
 			return
 		case <-ticker.C:
+			// Send right away, rather than on the batcher's own timer, so
+			// samples leave within one interval of being read.
 			c.collect()
+			c.batcher.Flush()
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 )
 
 // Version is the TinyObs version, set at build time with -ldflags.
-var Version = "2.0.0-dev"
+var Version = "2.0.0"
 
 // Config configures a Server.
 type Config struct {

@@ -19,6 +19,11 @@ import (
 // at most a few MB per request (max_samples_per_send defaults to 2000).
 const maxWriteBody = 32 << 20
 
+// maxDecodedBody bounds the decompressed request. Snappy's header declares
+// the decoded size, so without this check a small body could make the server
+// allocate gigabytes.
+const maxDecodedBody = 128 << 20
+
 // remoteWrite accepts Prometheus remote write 1.0 requests: a snappy-compressed
 // prometheus.WriteRequest protobuf. Prometheus, Grafana Alloy, the OTel
 // Collector and vmagent can all push to it.
@@ -37,6 +42,10 @@ func (a *API) remoteWrite(w http.ResponseWriter, r *http.Request) {
 	compressed, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWriteBody))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if n, err := snappy.DecodedLen(compressed); err != nil || n > maxDecodedBody {
+		http.Error(w, fmt.Sprintf("snappy: invalid or oversized body (limit %d bytes decoded)", maxDecodedBody), http.StatusBadRequest)
 		return
 	}
 	buf, err := snappy.Decode(nil, compressed)

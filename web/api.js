@@ -20,11 +20,13 @@
     const withoutName = (m) => { const l = { ...m }; delete l.__name__; return l; };
     const seconds = (iso, fallback) => (iso ? Date.parse(iso) : fallback) / 1000;
 
-    // Latest value of every series with data in [start, end].
+    // Latest value of every series with data in the last hour of [start, end].
+    // Capped at an hour so wide ranges don't load every stored sample just to
+    // keep the last one; charts still query the full range.
     async function latest(q) {
         const end = seconds(q.get('end'), Date.now());
         const start = seconds(q.get('start'), Date.now() - 3600e3);
-        const window = Math.max(1, Math.ceil(end - start));
+        const window = Math.max(1, Math.min(3600, Math.ceil(end - start)));
         const [data, meta] = await Promise.all([
             prom('query', { query: `last_over_time({__name__=~".+"}[${window}s])`, time: end }),
             prom('metadata', {}).catch(() => ({})),

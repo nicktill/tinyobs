@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 )
 
@@ -29,7 +30,7 @@ func (s *Server) selfMetrics(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(w, "# HELP tinyobs_samples_rejected_total Samples dropped since start, by reason.\n# TYPE tinyobs_samples_rejected_total counter\n")
 	reasons := []string{"out_of_order", "series_limit", "metric_series_limit", "invalid_labels"}
 	for r := range st.SamplesRejected {
-		if !contains(reasons, r) {
+		if !slices.Contains(reasons, r) {
 			reasons = append(reasons, r)
 		}
 	}
@@ -37,13 +38,4 @@ func (s *Server) selfMetrics(w http.ResponseWriter, _ *http.Request) {
 	for _, r := range reasons {
 		fmt.Fprintf(w, "tinyobs_samples_rejected_total{reason=%q} %d\n", r, st.SamplesRejected[r])
 	}
-}
-
-func contains(xs []string, x string) bool {
-	for _, y := range xs {
-		if y == x {
-			return true
-		}
-	}
-	return false
 }

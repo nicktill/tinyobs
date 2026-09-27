@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"net/http"
 	"net/url"
@@ -61,6 +62,12 @@ func TestRemoteWrite(t *testing.T) {
 	// An older sample for the same series is permanently rejected: 400, no retry.
 	if code := post(writeRequest("pushed_total", "batch", 1_000, 1)); code != http.StatusBadRequest {
 		t.Fatalf("out of order: status %d", code)
+	}
+	// A snappy header claiming a huge decoded size is refused before allocating.
+	bomb := binary.AppendUvarint(nil, 1<<40)
+	req, _ := http.NewRequest("POST", srv.URL+"/api/v1/write", bytes.NewReader(bomb))
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("decompression bomb: %v %v", resp.StatusCode, err)
 	}
 	if code := post([]byte("not snappy")); code != http.StatusBadRequest {
 		t.Fatalf("garbage: status %d", code)
