@@ -113,6 +113,12 @@ type DB struct {
 	// each series' newest sample always matches what is on disk.
 	commitMu sync.Mutex
 
+	disk struct {
+		sync.Mutex
+		at    time.Time
+		bytes int64
+	}
+
 	counters struct {
 		sync.Mutex
 		appended uint64
@@ -719,8 +725,19 @@ func (db *DB) Stats() Stats {
 	return st
 }
 
-// diskUsage returns the space used by the data directory.
+// diskUsage returns the space used by the data directory. Walking the
+// directory costs a syscall per file, so the result is reused for 30s; disk
+// use does not move faster than that in a way anyone would alert on.
 func (db *DB) diskUsage() int64 {
+	db.disk.Lock()
+	defer db.disk.Unlock()
+	if now := time.Now(); now.Sub(db.disk.at) > 30*time.Second {
+		db.disk.bytes, db.disk.at = db.measureDisk(), now
+	}
+	return db.disk.bytes
+}
+
+func (db *DB) measureDisk() int64 {
 	if db.opts.InMemory {
 		lsm, vlog := db.kv.Size()
 		return lsm + vlog

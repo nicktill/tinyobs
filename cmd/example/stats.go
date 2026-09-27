@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -29,65 +29,32 @@ func handleStats() http.HandlerFunc {
 	}
 }
 
-// queryTinyObs queries TinyObs for metrics and returns the sum of all latest values
-// Uses the simple /v1/query endpoint to get the latest counter values
+// queryTinyObs runs an instant PromQL query and returns the sum of the
+// result values, or 0 if the query fails or matches nothing.
 func queryTinyObs(query string) int64 {
-	// Use /v1/query/execute with a small time window to get latest values
-	// For counters, we need the most recent value, not the value at exactly "now"
-	now := time.Now()
-	start := now.Add(-5 * time.Minute) // Look back 5 minutes to ensure we get data
-
-	reqBody := fmt.Sprintf(`{"query":"%s","start":"%s","end":"%s"}`,
-		query,
-		start.Format(time.RFC3339),
-		now.Format(time.RFC3339))
-
-	resp, err := http.Post(tinyObsURL+"/v1/query/execute", "application/json", strings.NewReader(reqBody))
+	resp, err := http.Get(tinyObsURL + "/api/v1/query?" + url.Values{"query": {query}}.Encode())
 	if err != nil {
 		return 0
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return 0
-	}
-
-	var queryResp struct {
-		Status string `json:"status"`
-		Data   struct {
-			ResultType string `json:"resultType"`
-			Result     []struct {
-				Values [][]interface{} `json:"values"` // [[timestamp, value], ...]
+	var body struct {
+		Data struct {
+			Result []struct {
+				Value [2]any `json:"value"` // [timestamp, "value"]
 			} `json:"result"`
 		} `json:"data"`
-		Error string `json:"error,omitempty"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&queryResp); err != nil {
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&body) != nil {
 		return 0
 	}
-
-	// If query returned an error, return 0
-	if queryResp.Error != "" {
-		return 0
-	}
-
 	var total int64
-	for _, series := range queryResp.Data.Result {
-		// For range queries, Values contains multiple entries: [[timestamp, value], ...]
-		// Take the last value (most recent) for each series
-		if len(series.Values) > 0 {
-			// Get the last value in the array (most recent)
-			lastValue := series.Values[len(series.Values)-1]
-			if len(lastValue) >= 2 {
-				if val, ok := lastValue[1].(string); ok {
-					if parsed, err := strconv.ParseFloat(val, 64); err == nil {
-						total += int64(parsed)
-					}
-				}
+	for _, r := range body.Data.Result {
+		if s, ok := r.Value[1].(string); ok {
+			if v, err := strconv.ParseFloat(s, 64); err == nil {
+				total += int64(v)
 			}
 		}
 	}
-
 	return total
 }

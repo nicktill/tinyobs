@@ -145,7 +145,9 @@ Environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Server port | `8080` |
+| `TINYOBS_LISTEN` | Listen address. Loopback by default; the Docker image uses `0.0.0.0:8080` | `127.0.0.1:$PORT` |
+| `PORT` | Port, when `TINYOBS_LISTEN` is unset | `8080` |
+| `TINYOBS_AUTH_TOKEN` | If set, required as `Authorization: Bearer <token>` on `/api/v1/write` and `/v1/ingest` | unset |
 | `TINYOBS_DATA_DIR` | Data directory | `./data/tinyobs-v2` |
 | `TINYOBS_RETENTION` | How long samples are kept | `72h` |
 | `TINYOBS_MAX_SERIES` | Total series limit | `50000` |
@@ -159,6 +161,18 @@ invalid labels) is counted in `tinyobs_samples_rejected_total{reason}` on `/metr
 `/api/v1/status/tsdb` lists the metrics and labels with the most series. The Go SDK's HTTP middleware
 labels requests by the matched `ServeMux` route pattern and collapses unmatched (404) paths into one
 value, so scanners can't mint series.
+
+### Security
+
+Reads are unauthenticated, so the dashboard and Grafana work without setup. TinyObs listens on
+loopback by default and warns at startup if it is exposed without `TINYOBS_AUTH_TOKEN`. To accept
+writes from other hosts, set a token (the Go SDK sends it via `ClientConfig.APIKey`, Prometheus via
+`remote_write.authorization`) and keep the port on a private network.
+
+### Staleness
+
+Pushed series have no scrape to fail, so when a service stops, its series keep their last value
+for the 5-minute lookback window and then disappear from instant queries.
 
 ## Project Structure
 

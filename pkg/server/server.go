@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,7 +31,11 @@ type Config struct {
 	MaxSeriesPerMetric int
 	MemoryMB           int64
 	WebDir             string // static UI files
-	Logger             *slog.Logger
+	// AuthToken, when set, is required as "Authorization: Bearer <token>"
+	// on the write endpoints. Reads stay open so the dashboard and Grafana
+	// work unchanged; bind to localhost or a private network to protect them.
+	AuthToken string
+	Logger    *slog.Logger
 }
 
 // Server is a running TinyObs instance.
@@ -81,7 +86,7 @@ func (s *Server) Handler() http.Handler { return s.http.Handler }
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	(&api.API{DB: s.db, Engine: s.engine, BuildInfo: api.BuildInfo{Version: Version}}).Register(mux)
+	(&api.API{DB: s.db, Engine: s.engine, BuildInfo: api.BuildInfo{Version: Version}, Auth: s.requireToken}).Register(mux)
 	mux.HandleFunc("GET /-/healthy", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "TinyObs is Healthy.")
 	})
@@ -89,7 +94,7 @@ func (s *Server) routes() http.Handler {
 		fmt.Fprintln(w, "TinyObs is Ready.")
 	})
 	mux.HandleFunc("GET /metrics", s.selfMetrics)
-	s.registerLegacy(mux)
+	mux.HandleFunc("POST /v1/ingest", s.requireToken(s.ingest))
 	if s.cfg.WebDir != "" {
 		files := http.FileServer(http.Dir(s.cfg.WebDir))
 		mux.Handle("GET /web/", http.StripPrefix("/web/", files))
@@ -98,6 +103,23 @@ func (s *Server) routes() http.Handler {
 		})
 	}
 	return mux
+}
+
+// requireToken wraps a write handler with the bearer token check, when a
+// token is configured.
+func (s *Server) requireToken(h http.HandlerFunc) http.HandlerFunc {
+	if s.cfg.AuthToken == "" {
+		return h
+	}
+	want := []byte("Bearer " + s.cfg.AuthToken)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="tinyobs"`)
+			http.Error(w, "missing or invalid bearer token", http.StatusUnauthorized)
+			return
+		}
+		h(w, r)
+	}
 }
 
 // Run serves HTTP and runs background work until ctx is cancelled, then shuts

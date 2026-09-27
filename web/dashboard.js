@@ -239,8 +239,8 @@
         async function loadStats() {
             try {
                 const [statsRes, storageRes] = await Promise.all([
-                    fetch('/v1/stats'),
-                    fetch('/v1/storage')
+                    v1Fetch('/v1/stats'),
+                    v1Fetch('/v1/storage')
                 ]);
 
                 if (statsRes.ok) {
@@ -272,7 +272,7 @@
                 const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
                 const end = new Date(now).toISOString();
 
-                const response = await fetch(`/v1/query?start=${start}&end=${end}`);
+                const response = await v1Fetch(`/v1/query?start=${start}&end=${end}`);
                 if (!response.ok) throw new Error(`Query failed: ${response.status} ${response.statusText}`);
 
                 const data = await response.json();
@@ -529,7 +529,7 @@
                 const end = new Date(now).toISOString();
 
                 // Fetch current data
-                const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=200`);
+                const response = await v1Fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=200`);
                 if (!response.ok) return;
 
                 const result = await response.json();
@@ -567,7 +567,7 @@
                     const compareStart = new Date(now - (hours + 24) * 60 * 60 * 1000).toISOString();
                     const compareEnd = new Date(now - 24 * 60 * 60 * 1000).toISOString();
 
-                    const compareResponse = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${compareStart}&end=${compareEnd}&maxPoints=200`);
+                    const compareResponse = await v1Fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${compareStart}&end=${compareEnd}&maxPoints=200`);
                     if (compareResponse.ok) {
                         const compareResult = await compareResponse.json();
                         if (compareResult.data && compareResult.data.length > 0) {
@@ -750,7 +750,7 @@
                 const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
                 const end = new Date(now).toISOString();
 
-                const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=500`);
+                const response = await v1Fetch(`/v1/query/range?metric=${encodeURIComponent(metricName)}&start=${start}&end=${end}&maxPoints=500`);
                 if (!response.ok) throw new Error('Failed to fetch data');
 
                 const result = await response.json();
@@ -942,7 +942,7 @@
 
             try {
                 // Use TinyQuery API
-                const response = await fetch('/v1/query/execute', {
+                const response = await v1Fetch('/v1/query/execute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query })
@@ -1075,7 +1075,7 @@
                 const start = new Date(now - hours * 60 * 60 * 1000).toISOString();
                 const end = new Date(now).toISOString();
 
-                const response = await fetch(`/v1/query?start=${start}&end=${end}`);
+                const response = await v1Fetch(`/v1/query?start=${start}&end=${end}`);
                 if (!response.ok) throw new Error('Query failed');
 
                 const data = await response.json();
@@ -1211,7 +1211,7 @@
 
             try {
                 const promises = Array.from(metricNames).map(async name => {
-                    const response = await fetch(`/v1/query/range?metric=${encodeURIComponent(name)}&start=${start}&end=${end}&maxPoints=500`);
+                    const response = await v1Fetch(`/v1/query/range?metric=${encodeURIComponent(name)}&start=${start}&end=${end}&maxPoints=500`);
                     if (!response.ok) throw new Error('Range query failed');
                     return response.json();
                 });

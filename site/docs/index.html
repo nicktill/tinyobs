@@ -66,6 +66,7 @@ errors.Inc("type", "api_error")</pre></div>
 <p>Anything that speaks Prometheus remote write 1.0 can push to TinyObs: Prometheus, Grafana Alloy, the OpenTelemetry Collector, vmagent.</p>
 <div class="code"><span class="lang">prometheus.yml</span><pre>remote_write:
   - url: http://localhost:8080/api/v1/write</pre></div>
+<p>If <code>TINYOBS_AUTH_TOKEN</code> is set, add <code>authorization: { credentials: &lt;token&gt; }</code> to the entry. The Go SDK sends it from <code>ClientConfig.APIKey</code>.</p>
 <p>Samples that can never be stored (out of order, over a series limit, invalid labels) get a <code>400</code>, so senders drop them instead of retrying forever. Storage errors get a <code>5xx</code> and are retried.</p>
 </section>
 
@@ -115,7 +116,9 @@ errors.Inc("type", "api_error")</pre></div>
 <p>Configured with environment variables. Invalid values stop the server at startup rather than falling back to a default.</p>
 <table>
 <tr><th>variable</th><th>default</th><th>description</th></tr>
-<tr><td><code>PORT</code></td><td>8080</td><td>Listen port</td></tr>
+<tr><td><code>TINYOBS_LISTEN</code></td><td>127.0.0.1:8080</td><td>Listen address. Loopback by default; the Docker image uses 0.0.0.0:8080</td></tr>
+<tr><td><code>PORT</code></td><td>8080</td><td>Port, when <code>TINYOBS_LISTEN</code> is unset</td></tr>
+<tr><td><code>TINYOBS_AUTH_TOKEN</code></td><td>unset</td><td>Bearer token required on the write endpoints</td></tr>
 <tr><td><code>TINYOBS_DATA_DIR</code></td><td>./data/tinyobs-v2</td><td>Data directory</td></tr>
 <tr><td><code>TINYOBS_RETENTION</code></td><td>72h</td><td>How long samples are kept</td></tr>
 <tr><td><code>TINYOBS_MAX_SERIES</code></td><td>50000</td><td>Total series limit</td></tr>
@@ -127,7 +130,8 @@ errors.Inc("type", "api_error")</pre></div>
 <section id="limits">
 <h2><span class="n">07</span>Cardinality &amp; retention</h2>
 <p>Every unique label set is a series, and series are what cost memory and disk. TinyObs caps them twice. The global limit bounds the whole server. The per-metric limit stops one runaway label, such as a user ID, from using up the global budget for every other metric.</p>
-<p>Retention is time-based and runs hourly. Disk use is predictable:</p>
+<p>Pushed series have no scrape to fail. When a service stops, its series keep their last value for the 5-minute lookback window, then drop out of instant queries.</p>
+<p>Retention is time-based and runs hourly, without pausing ingestion. Disk use is predictable:</p>
 <div class="code"><span class="lang">sizing</span><pre>disk ≈ series × samples per series in the window × ~14 bytes
 
 <span class="c"># 5,000 series, 15s interval, 72h retention</span>
