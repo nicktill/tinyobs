@@ -17,6 +17,11 @@
         return body.data;
     }
 
+    // Counters are charted as their per-second rate: a cumulative total only
+    // ever climbs and hides what is happening now.
+    const isCounter = (name) => /(_total|_count|_sum|_bucket)$/.test(name);
+    window.isCounter = isCounter;
+
     const withoutName = (m) => { const l = { ...m }; delete l.__name__; return l; };
     const seconds = (iso, fallback) => (iso ? Date.parse(iso) : fallback) / 1000;
 
@@ -48,7 +53,9 @@
         const start = seconds(q.get('start'), Date.now() - 3600e3);
         const maxPoints = parseInt(q.get('maxPoints') || '1000', 10);
         const step = Math.max(15, Math.ceil((end - start) / maxPoints));
-        const data = await prom('query_range', { query: `{__name__=${JSON.stringify(name)}}`, start, end, step });
+        const selector = `{__name__=${JSON.stringify(name)}}`;
+        const query = isCounter(name) ? `rate(${selector}[${Math.max(300, 4 * step)}s])` : selector;
+        const data = await prom('query_range', { query, start, end, step });
         return {
             data: data.result.map((s) => ({
                 metric: name,
